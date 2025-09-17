@@ -1041,10 +1041,14 @@ def find_element_at_click():
         )
         print(f"Actual coordinates: ({actual_x:.3f}, {actual_y:.3f})")
 
-        # Find closest element
+        # Find best element with priority system
         closest_element_id = None
         closest_distance = float("inf")
         checked_elements = []
+
+        # Separate candidates by type
+        line_candidates = []
+        circle_candidates = []
 
         for element_id, element_info in unique_elements.items():
             if element_id in session_data["removed_elements"]:
@@ -1066,12 +1070,8 @@ def find_element_at_click():
                 checked_elements.append(
                     f"Circle {element_id}: center=({center_x:.1f},{center_y:.1f}), radius={radius:.1f}, distance_to_circumference={distance_to_circumference:.1f}, tolerance={tolerance:.1f}"
                 )
-                if (
-                    distance_to_circumference <= tolerance
-                    and distance_to_circumference < closest_distance
-                ):
-                    closest_distance = distance_to_circumference
-                    closest_element_id = element_id
+                if distance_to_circumference <= tolerance:
+                    circle_candidates.append((element_id, distance_to_circumference))
 
             elif geom_type in ["LINE", "LWPOLYLINE"] and len(points) >= 2:
                 # Check distance to line segments
@@ -1083,9 +1083,32 @@ def find_element_at_click():
                     checked_elements.append(
                         f"Line {element_id}: p1=({p1[0]:.1f},{p1[1]:.1f}), p2=({p2[0]:.1f},{p2[1]:.1f}), distance={distance:.1f}, tolerance={tolerance:.1f}"
                     )
-                    if distance <= tolerance and distance < closest_distance:
-                        closest_distance = distance
-                        closest_element_id = element_id
+                    if distance <= tolerance:
+                        line_candidates.append((element_id, distance))
+                        break  # Only add once per line element
+
+        # Priority selection: prefer lines over circles if both are selectable
+        # This gives better user experience when clicking on overlapping elements
+        if line_candidates:
+            # Select the closest line
+            closest_element_id, closest_distance = min(
+                line_candidates, key=lambda x: x[1]
+            )
+            print(
+                f"Selected LINE (priority): {closest_element_id}, distance: {closest_distance:.3f}"
+            )
+        elif circle_candidates:
+            # Select the closest circle only if no lines are selectable
+            closest_element_id, closest_distance = min(
+                circle_candidates, key=lambda x: x[1]
+            )
+            print(
+                f"Selected CIRCLE (fallback): {closest_element_id}, distance: {closest_distance:.3f}"
+            )
+        else:
+            closest_element_id = None
+            closest_distance = float("inf")
+            print("No elements within tolerance")
 
         print(f"Checked {len(checked_elements)} elements:")
         for elem in checked_elements:  # Show all elements for debugging
@@ -1105,27 +1128,33 @@ def find_element_at_click():
         for element_id, element_info in unique_elements.items():
             if element_id in session_data["removed_elements"]:
                 continue
-                
+
             geom_type = element_info["geom_type"]
             radius = element_info["radius"]
             points = element_info["points"]
-            
+
             if geom_type == "CIRCLE" and len(points) >= 1:
                 center_x, center_y = points[0]
-                distance_to_center = math.sqrt((actual_x - center_x) ** 2 + (actual_y - center_y) ** 2)
+                distance_to_center = math.sqrt(
+                    (actual_x - center_x) ** 2 + (actual_y - center_y) ** 2
+                )
                 distance_to_circumference = abs(distance_to_center - radius)
                 if distance_to_circumference <= 50.0:
-                    selectable_elements.append(f"SELECTABLE Circle {element_id}: distance={distance_to_circumference:.1f}")
-                    
+                    selectable_elements.append(
+                        f"SELECTABLE Circle {element_id}: distance={distance_to_circumference:.1f}"
+                    )
+
             elif geom_type in ["LINE", "LWPOLYLINE"] and len(points) >= 2:
                 for i in range(len(points) - 1):
                     p1 = points[i]
                     p2 = points[i + 1]
                     distance = point_to_line_distance((actual_x, actual_y), p1, p2)
                     if distance <= 50.0:
-                        selectable_elements.append(f"SELECTABLE Line {element_id}: distance={distance:.1f}")
+                        selectable_elements.append(
+                            f"SELECTABLE Line {element_id}: distance={distance:.1f}"
+                        )
                         break  # Only check first segment for each line
-        
+
         print(f"Elements within tolerance: {len(selectable_elements)}")
         for elem in selectable_elements:
             print(f"  {elem}")
