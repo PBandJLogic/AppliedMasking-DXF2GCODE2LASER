@@ -495,7 +495,7 @@ G0 X0 Y0 ; Return to origin</textarea>
             }
         });
 
-        // Plot click handling for element selection - attach when image is loaded
+        // Plot click handling for element selection
         function attachPlotClickListener() {
             const plotImage = document.getElementById('plotImage');
             if (plotImage) {
@@ -513,6 +513,73 @@ G0 X0 Y0 ; Return to origin</textarea>
             console.log('Plot click handler called');
             selectElementAtClick(e);
         }
+
+        function selectElementAtClick(e) {
+            console.log('Click detected on plot image');
+
+            // Get click coordinates relative to the image
+            const rect = e.target.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            console.log('Click coordinates:', x, y);
+            console.log('Image dimensions:', rect.width, rect.height);
+
+            // Convert to normalized coordinates (0-1)
+            const normalizedX = x / rect.width;
+            const normalizedY = y / rect.height;
+
+            console.log('Normalized coordinates:', normalizedX, normalizedY);
+
+            // Send click coordinates to server to find closest element
+            fetch('/find_element_at_click', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    x: normalizedX,
+                    y: normalizedY
+                })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Server response:', data);
+                    if (data.success && data.element_id) {
+                        console.log('Element found:', data.element_id, 'Selected:', data.selected);
+                        // Update local selection to match server
+                        if (data.selected) {
+                            selectedElements.add(data.element_id);
+                        } else {
+                            selectedElements.delete(data.element_id);
+                        }
+                        updateSelectedInfo();
+                        // Refresh the plot to show selection
+                        refreshPlot();
+                    } else if (!data.success) {
+                        console.log('No element found at click position:', data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error selecting element:', error);
+                });
+        }
+
+        function refreshPlot() {
+            if (!currentPlotImage) return;
+
+            fetch('/get_plot')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        updatePlot(data.plot_image);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error refreshing plot:', error);
+                });
+        }
+
 
         function uploadFile(file) {
             console.log('uploadFile called with:', file.name, file.size, 'bytes');
