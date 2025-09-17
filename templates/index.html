@@ -691,11 +691,11 @@
 </body>
 
 </html>
-`);
+);
 previewWindow.document.close();
 }
 
-function exportGcode() {
+        function exportGcode() {
 hideMessages();
 
 fetch('/export_gcode')
@@ -724,7 +724,7 @@ showError('Error exporting G-code: ' + error.message);
 });
 }
 
-function selectElementAtClick(e) {
+        function selectElementAtClick(e) {
 console.log('Click detected on plot image`);
 
 // Get click coordinates relative to the image
@@ -775,7 +775,7 @@ console.error('Error selecting element:', error);
 });
 }
 
-function refreshPlot() {
+        function refreshPlot() {
 if (!currentPlotImage) return;
 
 fetch('/get_plot')
@@ -790,7 +790,7 @@ console.error('Error refreshing plot:', error);
 });
 }
 
-function updatePlot(imageData) {
+        function updatePlot(imageData) {
 const plotImage = document.getElementById('plotImage`);
 const noFile = document.getElementById('noFile`);
 
@@ -808,7 +808,7 @@ noFile.style.display = 'block';
 }
 }
 
-function updateStatistics(stats) {
+        function updateStatistics(stats) {
 document.getElementById('totalElements').textContent = stats.total_elements;
 document.getElementById('removedCount').textContent = stats.removed;
 document.getElementById('engravedCount').textContent = stats.engraved;
@@ -816,7 +816,7 @@ document.getElementById('remainingCount').textContent = stats.remaining;
 document.getElementById('originOffset').textContent = `(${stats.origin_offset[0]}, ${stats.origin_offset[1]})`;
 }
 
-function updateSelectedInfo() {
+        function updateSelectedInfo() {
 const selectedInfo = document.getElementById('selectedInfo`);
 if (selectedElements.size === 0) {
 selectedInfo.textContent = 'No elements selected';
@@ -825,11 +825,11 @@ selectedInfo.textContent = `${selectedElements.size} element(s) selected`;
 }
 }
 
-function showLoading(show) {
+        function showLoading(show) {
 document.getElementById('loading').style.display = show ? 'block' : 'none';
 }
 
-function showError(message) {
+        function showError(message) {
 const errorDiv = document.getElementById('errorMessage`);
 errorDiv.textContent = message;
 errorDiv.style.display = 'block';
@@ -838,7 +838,7 @@ errorDiv.style.display = 'none';
 }, 5000);
 }
 
-function showSuccess(message) {
+        function showSuccess(message) {
 const successDiv = document.getElementById('successMessage`);
 successDiv.textContent = message;
 successDiv.style.display = 'block';
@@ -847,7 +847,7 @@ successDiv.style.display = 'none';
 }, 3000);
 }
 
-function hideMessages() {
+        function hideMessages() {
 document.getElementById('errorMessage').style.display = 'none';
 document.getElementById('successMessage').style.display = 'none';
 }
