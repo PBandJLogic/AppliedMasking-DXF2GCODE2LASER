@@ -111,6 +111,15 @@
             min-height: 60px;
         }
 
+        /* Right-justify G-code settings inputs */
+        #laserPower,
+        #cuttingZ,
+        #feedrate,
+        #maxWorkspaceX,
+        #maxWorkspaceY {
+            text-align: right;
+        }
+
         .btn {
             background-color: #3498db;
             color: white;
@@ -378,16 +387,34 @@
             <div class="section">
                 <h3>G-code Settings</h3>
                 <div class="form-group">
-                    <label for="laserPower">Laser Power:</label>
-                    <input type="number" id="laserPower" value="1000" min="0" max="5000" />
+                    <div class="form-row">
+                        <label for="laserPower">Laser Power:</label>
+                        <input type="number" id="laserPower" value="1000" min="0" max="5000" />
+                    </div>
                 </div>
                 <div class="form-group">
-                    <label for="cuttingZ">Cutting Z Height (mm):</label>
-                    <input type="number" id="cuttingZ" value="-100.1" step="0.1" />00.1
+                    <div class="form-row">
+                        <label for="cuttingZ">Cutting Z Height (mm):</label>
+                        <input type="number" id="cuttingZ" value="-100.1" step="0.1" />
+                    </div>
                 </div>
                 <div class="form-group">
-                    <label for="feedrate">Feedrate (mm/min):</label>
-                    <input type="number" id="feedrate" value="1500" min="1" />
+                    <div class="form-row">
+                        <label for="feedrate">Feedrate (mm/min):</label>
+                        <input type="number" id="feedrate" value="1500" min="1" />
+                    </div>
+                </div>
+                <div class="form-group">
+                    <div class="form-row">
+                        <label for="maxWorkspaceX">Max X (mm):</label>
+                        <input type="number" id="maxWorkspaceX" value="790" min="1" step="0.1" />
+                    </div>
+                </div>
+                <div class="form-group">
+                    <div class="form-row">
+                        <label for="maxWorkspaceY">Max Y (mm):</label>
+                        <input type="number" id="maxWorkspaceY" value="390" min="1" step="0.1" />
+                    </div>
                 </div>
                 <div class="form-group">
                     <label for="preamble">Preamble:</label>
@@ -462,8 +489,9 @@ G0 X0 Y0 ; Return to origin</textarea>
                     <p>Please select a DXF file to begin</p>
                 </div>
                 <div id="dxfPlotContainer"
-                    style="overflow: hidden; max-height: 600px; border: 1px solid #ddd; display: none; position: relative; cursor: grab;">
-                    <img id="plotImage" class="plot-image" style="position: absolute; top: 0; left: 0; transform-origin: 0 0;" />
+                    style="overflow: auto; max-height: 600px; border: 1px solid #ddd; display: none;">
+                    <img id="plotImage" class="plot-image"
+                        style="display: block; transform-origin: center center; transition: transform 0.2s;" />
                 </div>
             </div>
         </div>
@@ -790,7 +818,9 @@ G0 X0 Y0 ; Return to origin</textarea>
                 postscript: document.getElementById('postscript').value,
                 laser_power: parseInt(document.getElementById('laserPower').value),
                 cutting_z: parseFloat(document.getElementById('cuttingZ').value),
-                feedrate: parseInt(document.getElementById('feedrate').value)
+                feedrate: parseInt(document.getElementById('feedrate').value),
+                max_workspace_x: parseFloat(document.getElementById('maxWorkspaceX').value),
+                max_workspace_y: parseFloat(document.getElementById('maxWorkspaceY').value)
             };
 
             console.log('Updating G-code settings:', settings);
@@ -1068,7 +1098,7 @@ G0 X0 Y0 ; Return to origin</textarea>
         function zoomDxfPlot(factor) {
             const plotImage = document.getElementById('plotImage');
             const zoomLevel = document.getElementById('zoomLevel');
-            
+
             if (factor === 1.0) {
                 // Reset zoom and pan
                 currentDxfZoom = 1.0;
@@ -1080,7 +1110,7 @@ G0 X0 Y0 ; Return to origin</textarea>
                 // Limit zoom range
                 currentDxfZoom = Math.max(0.1, Math.min(currentDxfZoom, 5.0));
             }
-            
+
             updatePlotTransform();
             zoomLevel.textContent = Math.round(currentDxfZoom * 100) + '%';
         }
@@ -1093,8 +1123,8 @@ G0 X0 Y0 ; Return to origin</textarea>
         function initializePlotPanning() {
             const plotContainer = document.getElementById('dxfPlotContainer');
             const plotImage = document.getElementById('plotImage');
-            
-            plotContainer.addEventListener('mousedown', function(e) {
+
+            plotContainer.addEventListener('mousedown', function (e) {
                 if (e.button === 0) { // Left mouse button
                     isDragging = true;
                     lastMouseX = e.clientX;
@@ -1103,37 +1133,37 @@ G0 X0 Y0 ; Return to origin</textarea>
                     e.preventDefault();
                 }
             });
-            
-            plotContainer.addEventListener('mousemove', function(e) {
+
+            plotContainer.addEventListener('mousemove', function (e) {
                 if (isDragging) {
                     const deltaX = e.clientX - lastMouseX;
                     const deltaY = e.clientY - lastMouseY;
-                    
+
                     panX += deltaX;
                     panY += deltaY;
-                    
+
                     updatePlotTransform();
-                    
+
                     lastMouseX = e.clientX;
                     lastMouseY = e.clientY;
                     e.preventDefault();
                 }
             });
-            
-            plotContainer.addEventListener('mouseup', function(e) {
+
+            plotContainer.addEventListener('mouseup', function (e) {
                 if (e.button === 0) {
                     isDragging = false;
                     plotContainer.style.cursor = 'grab';
                 }
             });
-            
-            plotContainer.addEventListener('mouseleave', function(e) {
+
+            plotContainer.addEventListener('mouseleave', function (e) {
                 isDragging = false;
                 plotContainer.style.cursor = 'grab';
             });
-            
+
             // Handle wheel zoom
-            plotContainer.addEventListener('wheel', function(e) {
+            plotContainer.addEventListener('wheel', function (e) {
                 e.preventDefault();
                 const factor = e.deltaY > 0 ? 0.9 : 1.1;
                 zoomDxfPlot(factor);
