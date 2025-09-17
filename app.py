@@ -364,7 +364,9 @@ def create_plot_image(selected_elements=None):
 def index():
     """Main page"""
     # Debug: Show current session state
-    print(f"Session state: {len(session_data['original_points'])} original points, {len(session_data['current_points'])} current points")
+    print(
+        f"Session state: {len(session_data['original_points'])} original points, {len(session_data['current_points'])} current points"
+    )
     return render_template("index.html")
 
 
@@ -961,7 +963,12 @@ def find_element_at_click():
             print(
                 f"ERROR: No current points. Session data: {len(session_data['original_points'])} original points"
             )
-            return jsonify({"error": "No DXF file loaded. Please upload a DXF file first."}), 400
+            return (
+                jsonify(
+                    {"error": "No DXF file loaded. Please upload a DXF file first."}
+                ),
+                400,
+            )
 
         # Convert normalized coordinates to actual plot coordinates
         # We need to get the plot bounds to convert properly
@@ -1034,7 +1041,7 @@ def find_element_at_click():
 
         # Simple direct mapping - this should work if the image displays the full data range
         actual_x = min_x + click_x * data_width
-        actual_y = max_y - click_y * data_height  # Flip Y and use max_y as origin
+        actual_y = min_y + click_y * data_height  # Use min_y as origin for consistent mapping
 
         # Debug logging
         print(f"Click coordinates: normalized=({click_x:.3f}, {click_y:.3f})")
@@ -1047,7 +1054,7 @@ def find_element_at_click():
             f"Coordinate conversion: x = {min_x:.3f} + {click_x:.3f} * {data_width:.3f} = {actual_x:.3f}"
         )
         print(
-            f"Coordinate conversion: y = {max_y:.3f} - {click_y:.3f} * {data_height:.3f} = {actual_y:.3f}"
+            f"Coordinate conversion: y = {min_y:.3f} + {click_y:.3f} * {data_height:.3f} = {actual_y:.3f}"
         )
 
         # Find best element with priority system
