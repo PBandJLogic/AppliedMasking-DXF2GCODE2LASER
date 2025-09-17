@@ -948,50 +948,16 @@ def find_element_at_click():
         min_y -= padding_y
         max_y += padding_y
 
-        # The issue is that matplotlib's bbox_inches="tight" changes the actual plot area
-        # We need to account for the aspect ratio and tight bounding box
-
-        # Calculate the aspect ratio of the data
-        data_width = max_x - min_x
-        data_height = max_y - min_y
-        data_aspect = data_width / data_height if data_height > 0 else 1.0
-
-        # Matplotlib figure is 12x8 inches, so aspect ratio is 1.5
-        figure_aspect = 12.0 / 8.0
-
-        if data_aspect > figure_aspect:
-            # Data is wider than figure - Y will have padding
-            plot_width = data_width
-            plot_height = data_width / figure_aspect
-            y_padding = (plot_height - data_height) / 2
-            x_padding = 0
-        else:
-            # Data is taller than figure - X will have padding
-            plot_height = data_height
-            plot_width = data_height * figure_aspect
-            x_padding = (plot_width - data_width) / 2
-            y_padding = 0
-
-        # Adjust bounds to account for matplotlib's actual plot area
-        plot_min_x = min_x - x_padding
-        plot_max_x = max_x + x_padding
-        plot_min_y = min_y - y_padding
-        plot_max_y = max_y + y_padding
-
+        # Simple coordinate conversion - use the data bounds directly
         # Convert normalized coordinates to actual coordinates
         # Note: Y coordinate is flipped because web coordinates have origin at top-left
         # while matplotlib has origin at bottom-left
-        actual_x = plot_min_x + click_x * (plot_max_x - plot_min_x)
-        actual_y = plot_min_y + (1 - click_y) * (plot_max_y - plot_min_y)
+        actual_x = min_x + click_x * (max_x - min_x)
+        actual_y = min_y + (1 - click_y) * (max_y - min_y)
 
         # Debug logging
         print(f"Click coordinates: normalized=({click_x:.3f}, {click_y:.3f})")
-        print(
-            f"Data bounds: x=({min_x:.3f}, {max_x:.3f}), y=({min_y:.3f}, {max_y:.3f})"
-        )
-        print(
-            f"Plot bounds: x=({plot_min_x:.3f}, {plot_max_x:.3f}), y=({plot_min_y:.3f}, {plot_max_y:.3f})"
-        )
+        print(f"Data bounds: x=({min_x:.3f}, {max_x:.3f}), y=({min_y:.3f}, {max_y:.3f})")
         print(f"Actual coordinates: ({actual_x:.3f}, {actual_y:.3f})")
 
         # Find closest element
@@ -1019,7 +985,10 @@ def find_element_at_click():
                 checked_elements.append(
                     f"Circle {element_id}: center=({center_x:.1f},{center_y:.1f}), radius={radius:.1f}, distance_to_circumference={distance_to_circumference:.1f}, tolerance={tolerance:.1f}"
                 )
-                if distance_to_circumference <= tolerance and distance_to_circumference < closest_distance:
+                if (
+                    distance_to_circumference <= tolerance
+                    and distance_to_circumference < closest_distance
+                ):
                     closest_distance = distance_to_circumference
                     closest_element_id = element_id
 
