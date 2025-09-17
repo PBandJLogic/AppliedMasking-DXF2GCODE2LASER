@@ -143,6 +143,18 @@
             background-color: #2980b9;
         }
 
+        .btn-small {
+            padding: 5px 10px;
+            font-size: 11px;
+            margin: 2px;
+        }
+
+        .zoom-controls {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
         .btn-danger {
             background-color: #e74c3c;
         }
@@ -371,7 +383,7 @@
                 </div>
                 <div class="form-group">
                     <label for="cuttingZ">Cutting Z Height (mm):</label>
-                    <input type="number" id="cuttingZ" value="-30" step="0.1" />
+                    <input type="number" id="cuttingZ" value="-100.1" step="0.1" />00.1
                 </div>
                 <div class="form-group">
                     <label for="feedrate">Feedrate (mm/min):</label>
@@ -381,7 +393,8 @@
                     <label for="preamble">Preamble:</label>
                     <textarea id="preamble" rows="3">G21 ; Set units to millimeters
 G90 ; Absolute positioning
-G0 X0, Y0, Z-5 ; Go to zero position</textarea>
+G0 X0, Y0, Z-5 ; Go to zero position
+M0 ; Wait for operator</textarea>
                 </div>
                 <div class="form-group">
                     <label for="postscript">Postscript:</label>
@@ -437,12 +450,20 @@ G0 X0 Y0 ; Return to origin</textarea>
 
         <div class="main-content">
             <div class="plot-container">
+                <div class="zoom-controls" id="zoomControls" style="display: none; margin-bottom: 10px;">
+                    <button class="btn btn-small" onclick="zoomDxfPlot(1.2)">🔍+</button>
+                    <button class="btn btn-small" onclick="zoomDxfPlot(1.0)">Reset</button>
+                    <button class="btn btn-small" onclick="zoomDxfPlot(0.8)">🔍-</button>
+                    <span style="margin-left: 10px; color: #666;">Zoom: <span id="zoomLevel">100%</span></span>
+                </div>
                 <div id="loading" class="loading">Processing DXF file...</div>
                 <div id="noFile" class="no-file">
                     <h2>No DXF file loaded</h2>
                     <p>Please select a DXF file to begin</p>
                 </div>
-                <img id="plotImage" class="plot-image" style="display: none;" />
+                <div id="dxfPlotContainer" style="overflow: auto; max-height: 600px; border: 1px solid #ddd; display: none;">
+                    <img id="plotImage" class="plot-image" style="transition: transform 0.2s; cursor: grab;" />
+                </div>
             </div>
         </div>
     </div>
@@ -453,6 +474,7 @@ G0 X0 Y0 ; Return to origin</textarea>
     <script>
         let selectedElements = new Set();
         let currentPlotImage = null;
+        let currentDxfZoom = 1.0;
 
         // File upload handling
         document.getElementById('fileInput').addEventListener('change', function (e) {
@@ -765,6 +787,8 @@ G0 X0 Y0 ; Return to origin</textarea>
                 feedrate: parseInt(document.getElementById('feedrate').value)
             };
 
+            console.log('Updating G-code settings:', settings);
+
             fetch('/update_gcode_settings', {
                 method: 'POST',
                 headers: {
@@ -812,8 +836,10 @@ G0 X0 Y0 ; Return to origin</textarea>
         }
 
         function showToolpathWindow(plotImage, elementCount) {
+            console.log('showToolpathWindow called with elementCount:', elementCount);
             // Create toolpath window
             const toolpathWindow = window.open('', 'toolpathPreview', 'width=1000,height=700,scrollbars=yes,resizable=yes');
+            console.log('Toolpath window object:', toolpathWindow);
 
             toolpathWindow.document.write(`
                 <!DOCTYPE html>
@@ -843,15 +869,42 @@ G0 X0 Y0 ; Return to origin</textarea>
                             <span style="color: red;">● Red lines = Engraving moves (G1) - laser on</span><br>
                             <span style="color: green;">● Green dot = Start position</span>
                         </div>
-                        <div class="plot-container">
-                            <img src="data:image/png;base64,${plotImage}" alt="G-code Toolpath" />
+                        <div style="margin: 10px 0;">
+                            <button class="btn" onclick="zoomToolpath(1.2)">🔍+</button>
+                            <button class="btn" onclick="zoomToolpath(1.0)">Reset</button>
+                            <button class="btn" onclick="zoomToolpath(0.8)">🔍-</button>
+                            <span style="margin-left: 10px;">Zoom: <span id="toolpathZoomLevel">100%</span></span>
+                        </div>
+                        <div class="plot-container" style="overflow: auto; max-height: 500px;">
+                            <img id="toolpathImage" src="data:image/png;base64,${plotImage}" alt="G-code Toolpath" style="transition: transform 0.2s; cursor: grab;" />
                         </div>
                         <button class="btn" onclick="window.close()">Close Toolpath</button>
+                        
+                        <script>
+                            let currentToolpathZoom = 1.0;
+                            
+                            function zoomToolpath(factor) {
+                                const toolpathImage = document.getElementById('toolpathImage');
+                                const zoomLevel = document.getElementById('toolpathZoomLevel');
+                                
+                                if (factor === 1.0) {
+                                    currentToolpathZoom = 1.0;
+                                } else {
+                                    currentToolpathZoom *= factor;
+                                    currentToolpathZoom = Math.max(0.1, Math.min(currentToolpathZoom, 5.0));
+                                }
+                                
+                                toolpathImage.style.transform = 'scale(' + currentToolpathZoom + ')';
+                                zoomLevel.textContent = Math.round(currentToolpathZoom * 100) + '%';
+                            }
+                        </script>
                     </div>
                 </body>
                 </html>
             `);
+            console.log('Toolpath window content written');
             toolpathWindow.document.close();
+            console.log('Toolpath window document closed');
         }
 
         function exportGcode() {
@@ -951,18 +1004,26 @@ G0 X0 Y0 ; Return to origin</textarea>
 
         function updatePlot(imageData) {
             const plotImage = document.getElementById('plotImage');
+            const plotContainer = document.getElementById('dxfPlotContainer');
             const noFile = document.getElementById('noFile');
+            const zoomControls = document.getElementById('zoomControls');
 
             if (imageData) {
                 currentPlotImage = imageData; // Update currentPlotImage
                 plotImage.src = 'data:image/png;base64,' + imageData;
-                plotImage.style.display = 'block';
+                plotContainer.style.display = 'block';
+                zoomControls.style.display = 'flex';
                 noFile.style.display = 'none';
+                // Reset zoom
+                currentDxfZoom = 1.0;
+                plotImage.style.transform = 'scale(1.0)';
+                document.getElementById('zoomLevel').textContent = '100%';
                 // Attach click listener when image is displayed
                 attachPlotClickListener();
             } else {
                 currentPlotImage = null; // Clear currentPlotImage
-                plotImage.style.display = 'none';
+                plotContainer.style.display = 'none';
+                zoomControls.style.display = 'none';
                 noFile.style.display = 'block';
             }
         }
@@ -1009,6 +1070,24 @@ G0 X0 Y0 ; Return to origin</textarea>
         function hideMessages() {
             document.getElementById('errorMessage').style.display = 'none';
             document.getElementById('successMessage').style.display = 'none';
+        }
+
+        function zoomDxfPlot(factor) {
+            const plotImage = document.getElementById('plotImage');
+            const zoomLevel = document.getElementById('zoomLevel');
+            
+            if (factor === 1.0) {
+                // Reset zoom
+                currentDxfZoom = 1.0;
+            } else {
+                // Apply zoom factor
+                currentDxfZoom *= factor;
+                // Limit zoom range
+                currentDxfZoom = Math.max(0.1, Math.min(currentDxfZoom, 5.0));
+            }
+            
+            plotImage.style.transform = `scale(${currentDxfZoom})`;
+            zoomLevel.textContent = Math.round(currentDxfZoom * 100) + '%';
         }
     </script>
 </body>
