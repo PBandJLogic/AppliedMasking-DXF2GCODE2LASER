@@ -1066,9 +1066,7 @@ def find_element_at_click():
                 # Calculate distance to circumference (not center)
                 distance_to_circumference = abs(distance_to_center - radius)
                 # Use tolerance for circumference selection
-                tolerance = (
-                    50.0  # 50mm tolerance for circle circumference - temporary for debugging
-                )
+                tolerance = 20.0  # 20mm tolerance for circle circumference - reasonable precision
                 checked_elements.append(
                     f"Circle {element_id}: center=({center_x:.1f},{center_y:.1f}), radius={radius:.1f}, distance_to_circumference={distance_to_circumference:.1f}, tolerance={tolerance:.1f}"
                 )
@@ -1081,7 +1079,7 @@ def find_element_at_click():
                     p1 = points[i]
                     p2 = points[i + 1]
                     distance = point_to_line_distance((actual_x, actual_y), p1, p2)
-                    tolerance = 50.0  # 50mm tolerance for lines - temporary for debugging
+                    tolerance = 20.0  # 20mm tolerance for lines - reasonable precision
                     checked_elements.append(
                         f"Line {element_id}: p1=({p1[0]:.1f},{p1[1]:.1f}), p2=({p2[0]:.1f},{p2[1]:.1f}), distance={distance:.1f}, tolerance={tolerance:.1f}"
                     )
