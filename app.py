@@ -783,7 +783,8 @@ def create_gcode_toolpath_plot(gcode):
             last_x = current_x
             last_y = current_y
 
-    # Plot positioning moves in green
+    # Plot positioning moves in green with arrows
+    positioning_labeled = False
     for line_segment in positioning_lines:
         start, end = line_segment
         if start != end:  # Only plot if there's actual movement
@@ -793,12 +794,43 @@ def create_gcode_toolpath_plot(gcode):
                 "g-",
                 linewidth=2,
                 alpha=0.8,
-                label=(
-                    "Positioning (G0)" if not ax.get_legend_handles_labels()[0] else ""
-                ),
+                label="Positioning (G0)" if not positioning_labeled else "",
             )
+            positioning_labeled = True
+            
+            # Add arrow in the middle of the line segment
+            mid_x = (start[0] + end[0]) / 2
+            mid_y = (start[1] + end[1]) / 2
+            
+            # Calculate arrow direction
+            dx = end[0] - start[0]
+            dy = end[1] - start[1]
+            length = (dx**2 + dy**2) ** 0.5
+            
+            if length > 0:
+                # Normalize direction vector
+                dx_norm = dx / length
+                dy_norm = dy / length
+                
+                # Arrow length (proportional to line length)
+                arrow_length = max(0.3, length * 0.15)
+                
+                # Draw arrow
+                ax.annotate(
+                    "",
+                    xy=(
+                        mid_x + dx_norm * arrow_length / 2,
+                        mid_y + dy_norm * arrow_length / 2,
+                    ),
+                    xytext=(
+                        mid_x - dx_norm * arrow_length / 2,
+                        mid_y - dy_norm * arrow_length / 2,
+                    ),
+                    arrowprops=dict(arrowstyle="->", color="green", lw=1.5, alpha=0.8),
+                )
 
-    # Plot engraving moves in red
+    # Plot engraving moves in red with arrows
+    engraving_labeled = False
     for line_segment in engraving_lines:
         start, end = line_segment
         if start != end:  # Only plot if there's actual movement
@@ -808,19 +840,40 @@ def create_gcode_toolpath_plot(gcode):
                 "r-",
                 linewidth=2,
                 alpha=0.8,
-                label=(
-                    "Engraving (G1)"
-                    if len(
-                        [
-                            l
-                            for l in ax.get_legend_handles_labels()[1]
-                            if "Engraving" in l
-                        ]
-                    )
-                    == 0
-                    else ""
-                ),
+                label="Engraving (G1)" if not engraving_labeled else "",
             )
+            engraving_labeled = True
+            
+            # Add arrow in the middle of the line segment
+            mid_x = (start[0] + end[0]) / 2
+            mid_y = (start[1] + end[1]) / 2
+            
+            # Calculate arrow direction
+            dx = end[0] - start[0]
+            dy = end[1] - start[1]
+            length = (dx**2 + dy**2) ** 0.5
+            
+            if length > 0:
+                # Normalize direction vector
+                dx_norm = dx / length
+                dy_norm = dy / length
+                
+                # Arrow length (proportional to line length)
+                arrow_length = max(0.3, length * 0.15)
+                
+                # Draw arrow
+                ax.annotate(
+                    "",
+                    xy=(
+                        mid_x + dx_norm * arrow_length / 2,
+                        mid_y + dy_norm * arrow_length / 2,
+                    ),
+                    xytext=(
+                        mid_x - dx_norm * arrow_length / 2,
+                        mid_y - dy_norm * arrow_length / 2,
+                    ),
+                    arrowprops=dict(arrowstyle="->", color="red", lw=1.5, alpha=0.8),
+                )
 
     # Add start point marker
     ax.plot(0, 0, "go", markersize=8, label="Start")
