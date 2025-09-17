@@ -421,9 +421,13 @@
 
         // File upload handling
         document.getElementById('fileInput').addEventListener('change', function (e) {
+            console.log('File input changed, files:', e.target.files);
             const file = e.target.files[0];
             if (file) {
+                console.log('File selected:', file.name, file.type, file.size);
                 uploadFile(file);
+            } else {
+                console.log('No file selected');
             }
         });
 
@@ -447,29 +451,38 @@
         }
 
         function uploadFile(file) {
+            console.log('uploadFile called with:', file.name, file.size, 'bytes');
             const formData = new FormData();
             formData.append('file', file);
 
             showLoading(true);
             hideMessages();
 
+            console.log('Sending upload request to /upload');
             fetch('/upload', {
                 method: 'POST',
                 body: formData
             })
-                .then(response => response.json())
+                .then(response => {
+                    console.log('Upload response status:', response.status);
+                    return response.json();
+                })
                 .then(data => {
+                    console.log('Upload response data:', data);
                     showLoading(false);
                     if (data.success) {
+                        console.log('Upload successful, updating plot');
                         currentPlotImage = data.plot_image;
                         updatePlot(data.plot_image);
                         updateStatistics(data.statistics);
                         showSuccess('DXF file loaded successfully!');
                     } else {
+                        console.log('Upload failed:', data.error);
                         showError(data.error || 'Failed to load DXF file'); // Fixed
                     }
                 })
                 .catch(error => {
+                    console.log('Upload error:', error);
                     showLoading(false);
                     showError('Error uploading file: ' + error.message);
                 });
