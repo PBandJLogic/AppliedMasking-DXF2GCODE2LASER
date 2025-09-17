@@ -316,35 +316,35 @@ def create_plot_image(selected_elements=None):
     if unique_elements:
         all_x = []
         all_y = []
-        
+
         for element_id, element_info in unique_elements.items():
             if element_id in session_data["removed_elements"]:
                 continue
-                
+
             points = element_info["points"]
             radius = element_info["radius"]
             geom_type = element_info["geom_type"]
-            
+
             for point in points:
                 all_x.append(point[0])
                 all_y.append(point[1])
-                
+
             # For circles, extend bounds to include the full circle
             if geom_type == "CIRCLE" and len(points) >= 1:
                 center_x, center_y = points[0]
                 all_x.extend([center_x - radius, center_x + radius])
                 all_y.extend([center_y - radius, center_y + radius])
-        
+
         if all_x and all_y:
             min_x, max_x = min(all_x), max(all_x)
             min_y, max_y = min(all_y), max(all_y)
-            
+
             # Add some padding (10% of range)
             x_range = max_x - min_x
             y_range = max_y - min_y
             padding_x = max(x_range * 0.1, 10)  # At least 10mm padding
             padding_y = max(y_range * 0.1, 10)  # At least 10mm padding
-            
+
             ax.set_xlim(min_x - padding_x, max_x + padding_x)
             ax.set_ylim(min_y - padding_y, max_y + padding_y)
 
@@ -965,10 +965,24 @@ def find_element_at_click():
         # Calculate plot bounds (same as in create_plot_image)
         all_x = []
         all_y = []
-        for element_info in unique_elements.values():
-            for point in element_info["points"]:
+        
+        for element_id, element_info in unique_elements.items():
+            if element_id in session_data["removed_elements"]:
+                continue
+                
+            points = element_info["points"]
+            radius = element_info["radius"]
+            geom_type = element_info["geom_type"]
+            
+            for point in points:
                 all_x.append(point[0])
                 all_y.append(point[1])
+                
+            # For circles, extend bounds to include the full circle
+            if geom_type == "CIRCLE" and len(points) >= 1:
+                center_x, center_y = points[0]
+                all_x.extend([center_x - radius, center_x + radius])
+                all_y.extend([center_y - radius, center_y + radius])
 
         if not all_x or not all_y:
             return jsonify({"error": "No valid points found"}), 400
@@ -976,9 +990,12 @@ def find_element_at_click():
         min_x, max_x = min(all_x), max(all_x)
         min_y, max_y = min(all_y), max(all_y)
 
-        # Add some padding (same as matplotlib's tight layout)
-        padding_x = (max_x - min_x) * 0.1
-        padding_y = (max_y - min_y) * 0.1
+        # Add same padding as in create_plot_image
+        x_range = max_x - min_x
+        y_range = max_y - min_y
+        padding_x = max(x_range * 0.1, 10)  # At least 10mm padding
+        padding_y = max(y_range * 0.1, 10)  # At least 10mm padding
+        
         min_x -= padding_x
         max_x += padding_x
         min_y -= padding_y
