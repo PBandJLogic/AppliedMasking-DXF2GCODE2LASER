@@ -1017,19 +1017,19 @@ def find_element_at_click():
 
         # The problem is that the web image might be scaled differently than the matplotlib figure
         # We need to account for the actual plot area that matplotlib creates
-        
+
         # Matplotlib creates a figure with aspect ratio enforcement
         # When we use bbox_inches="tight", it crops to the actual data
         # But we need to account for equal aspect ratio
-        
+
         data_width = max_x - min_x
         data_height = max_y - min_y
-        
+
         if data_width == 0:
             data_width = 1
         if data_height == 0:
             data_height = 1
-            
+
         # Simple direct mapping - this should work if the image displays the full data range
         actual_x = min_x + click_x * data_width
         actual_y = max_y - click_y * data_height  # Flip Y and use max_y as origin
@@ -1099,6 +1099,36 @@ def find_element_at_click():
             [e for e in unique_elements.values() if e["geom_type"] == "LWPOLYLINE"]
         )
         print(f"  Circles: {circles}, Lines: {lines}, Polylines: {polylines}")
+
+        # Show all elements within tolerance
+        selectable_elements = []
+        for element_id, element_info in unique_elements.items():
+            if element_id in session_data["removed_elements"]:
+                continue
+                
+            geom_type = element_info["geom_type"]
+            radius = element_info["radius"]
+            points = element_info["points"]
+            
+            if geom_type == "CIRCLE" and len(points) >= 1:
+                center_x, center_y = points[0]
+                distance_to_center = math.sqrt((actual_x - center_x) ** 2 + (actual_y - center_y) ** 2)
+                distance_to_circumference = abs(distance_to_center - radius)
+                if distance_to_circumference <= 50.0:
+                    selectable_elements.append(f"SELECTABLE Circle {element_id}: distance={distance_to_circumference:.1f}")
+                    
+            elif geom_type in ["LINE", "LWPOLYLINE"] and len(points) >= 2:
+                for i in range(len(points) - 1):
+                    p1 = points[i]
+                    p2 = points[i + 1]
+                    distance = point_to_line_distance((actual_x, actual_y), p1, p2)
+                    if distance <= 50.0:
+                        selectable_elements.append(f"SELECTABLE Line {element_id}: distance={distance:.1f}")
+                        break  # Only check first segment for each line
+        
+        print(f"Elements within tolerance: {len(selectable_elements)}")
+        for elem in selectable_elements:
+            print(f"  {elem}")
 
         print(
             f"Closest element: {closest_element_id}, distance: {closest_distance:.3f}"
