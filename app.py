@@ -363,6 +363,8 @@ def create_plot_image(selected_elements=None):
 @app.route("/")
 def index():
     """Main page"""
+    # Debug: Show current session state
+    print(f"Session state: {len(session_data['original_points'])} original points, {len(session_data['current_points'])} current points")
     return render_template("index.html")
 
 
@@ -959,7 +961,7 @@ def find_element_at_click():
             print(
                 f"ERROR: No current points. Session data: {len(session_data['original_points'])} original points"
             )
-            return jsonify({"error": "No DXF file loaded"}), 400
+            return jsonify({"error": "No DXF file loaded. Please upload a DXF file first."}), 400
 
         # Convert normalized coordinates to actual plot coordinates
         # We need to get the plot bounds to convert properly
@@ -1041,8 +1043,12 @@ def find_element_at_click():
         )
         print(f"Data width: {data_width:.3f}, Data height: {data_height:.3f}")
         print(f"Actual coordinates: ({actual_x:.3f}, {actual_y:.3f})")
-        print(f"Coordinate conversion: x = {min_x:.3f} + {click_x:.3f} * {data_width:.3f} = {actual_x:.3f}")
-        print(f"Coordinate conversion: y = {max_y:.3f} - {click_y:.3f} * {data_height:.3f} = {actual_y:.3f}")
+        print(
+            f"Coordinate conversion: x = {min_x:.3f} + {click_x:.3f} * {data_width:.3f} = {actual_x:.3f}"
+        )
+        print(
+            f"Coordinate conversion: y = {max_y:.3f} - {click_y:.3f} * {data_height:.3f} = {actual_y:.3f}"
+        )
 
         # Find best element with priority system
         closest_element_id = None
@@ -1069,7 +1075,9 @@ def find_element_at_click():
                 # Calculate distance to circumference (not center)
                 distance_to_circumference = abs(distance_to_center - radius)
                 # Use tolerance for circumference selection
-                tolerance = 5.0  # 5mm tolerance for circle circumference - precise selection
+                tolerance = (
+                    5.0  # 5mm tolerance for circle circumference - precise selection
+                )
                 checked_elements.append(
                     f"Circle {element_id}: center=({center_x:.1f},{center_y:.1f}), radius={radius:.1f}, distance_to_circumference={distance_to_circumference:.1f}, tolerance={tolerance:.1f}"
                 )
