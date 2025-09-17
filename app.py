@@ -642,6 +642,207 @@ def export_gcode():
     )
 
 
+@app.route("/update_gcode_settings", methods=["POST"])
+def update_gcode_settings():
+    """Update G-code generation settings"""
+    try:
+        data = request.get_json()
+
+        # Update the session data with new settings
+        if "preamble" in data:
+            session_data["gcode_settings"]["preamble"] = data["preamble"]
+        if "postscript" in data:
+            session_data["gcode_settings"]["postscript"] = data["postscript"]
+        if "laser_power" in data:
+            session_data["gcode_settings"]["laser_power"] = data["laser_power"]
+        if "cutting_z" in data:
+            session_data["gcode_settings"]["cutting_z"] = data["cutting_z"]
+        if "feedrate" in data:
+            session_data["gcode_settings"]["feedrate"] = data["feedrate"]
+
+        return jsonify({"success": True, "message": "Settings updated successfully"})
+
+    except Exception as e:
+        return jsonify({"error": f"Failed to update settings: {str(e)}"}), 500
+
+
+@app.route("/preview_gcode_plot", methods=["GET"])
+def preview_gcode_plot():
+    """Generate G-code toolpath plot"""
+    if not session_data["current_points"]:
+        return jsonify({"error": "No DXF file loaded"}), 400
+
+    # Filter points for engraving only
+    engraving_elements = {}
+    for x, y, radius, geom_type, element_id in session_data["current_points"]:
+        if (
+            element_id in session_data["engraved_elements"]
+            and element_id not in session_data["removed_elements"]
+        ):
+            if element_id not in engraving_elements:
+                engraving_elements[element_id] = {
+                    "geom_type": geom_type,
+                    "radius": radius,
+                    "points": [],
+                }
+            engraving_elements[element_id]["points"].append((x, y))
+
+    if not engraving_elements:
+        return jsonify({"error": "No elements marked for engraving"}), 400
+
+    # Generate G-code
+    gcode = generate_gcode(engraving_elements)
+
+    # Create toolpath plot
+    plot_image = create_gcode_toolpath_plot(gcode)
+
+    return jsonify(
+        {
+            "success": True,
+            "plot_image": plot_image,
+            "element_count": len(engraving_elements),
+        }
+    )
+
+
+def create_gcode_toolpath_plot(gcode):
+    """Create matplotlib plot of G-code toolpath and return as base64 image"""
+    fig, ax = plt.subplots(figsize=(10, 8), dpi=100)
+
+    lines = gcode.split("\n")
+    current_x = 0.0
+    current_y = 0.0
+    last_x = 0.0
+    last_y = 0.0
+
+    positioning_lines = []
+    engraving_lines = []
+
+    for line in lines:
+        line_upper = line.upper().strip()
+
+        # Skip comments and empty lines
+        if not line_upper or line_upper.startswith(";"):
+            continue
+
+        # Parse G0 (positioning) moves
+        if line_upper.startswith("G0"):
+            x_pos = None
+            y_pos = None
+
+            # Extract X and Y coordinates (handle commas)
+            parts = line_upper.replace(",", " ").split()
+            for part in parts:
+                if part.startswith("X"):
+                    try:
+                        x_pos = float(part[1:])
+                    except ValueError:
+                        continue
+                elif part.startswith("Y"):
+                    try:
+                        y_pos = float(part[1:])
+                    except ValueError:
+                        continue
+
+            if x_pos is not None:
+                current_x = x_pos
+            if y_pos is not None:
+                current_y = y_pos
+
+            # Draw positioning move
+            positioning_lines.append([(last_x, last_y), (current_x, current_y)])
+            last_x = current_x
+            last_y = current_y
+
+        # Parse G1 (engraving) moves
+        elif line_upper.startswith("G1"):
+            x_pos = None
+            y_pos = None
+
+            # Extract X and Y coordinates (handle commas)
+            parts = line_upper.replace(",", " ").split()
+            for part in parts:
+                if part.startswith("X"):
+                    try:
+                        x_pos = float(part[1:])
+                    except ValueError:
+                        continue
+                elif part.startswith("Y"):
+                    try:
+                        y_pos = float(part[1:])
+                    except ValueError:
+                        continue
+
+            if x_pos is not None:
+                current_x = x_pos
+            if y_pos is not None:
+                current_y = y_pos
+
+            # Draw engraving move
+            engraving_lines.append([(last_x, last_y), (current_x, current_y)])
+            last_x = current_x
+            last_y = current_y
+
+    # Plot positioning moves in green
+    for line_segment in positioning_lines:
+        start, end = line_segment
+        if start != end:  # Only plot if there's actual movement
+            ax.plot(
+                [start[0], end[0]],
+                [start[1], end[1]],
+                "g-",
+                linewidth=2,
+                alpha=0.8,
+                label=(
+                    "Positioning (G0)" if not ax.get_legend_handles_labels()[0] else ""
+                ),
+            )
+
+    # Plot engraving moves in red
+    for line_segment in engraving_lines:
+        start, end = line_segment
+        if start != end:  # Only plot if there's actual movement
+            ax.plot(
+                [start[0], end[0]],
+                [start[1], end[1]],
+                "r-",
+                linewidth=2,
+                alpha=0.8,
+                label=(
+                    "Engraving (G1)"
+                    if len(
+                        [
+                            l
+                            for l in ax.get_legend_handles_labels()[1]
+                            if "Engraving" in l
+                        ]
+                    )
+                    == 0
+                    else ""
+                ),
+            )
+
+    # Add start point marker
+    ax.plot(0, 0, "go", markersize=8, label="Start")
+
+    # Set up the plot
+    ax.set_xlabel("X (mm)")
+    ax.set_ylabel("Y (mm)")
+    ax.set_title("G-code Toolpath Preview")
+    ax.grid(True, alpha=0.3)
+    ax.set_aspect("equal")
+    ax.legend()
+
+    # Convert plot to base64 image
+    img_buffer = io.BytesIO()
+    plt.savefig(img_buffer, format="png", bbox_inches="tight", dpi=100)
+    img_buffer.seek(0)
+    img_base64 = base64.b64encode(img_buffer.getvalue()).decode()
+    plt.close(fig)
+
+    return img_base64
+
+
 @app.route("/find_element_at_click", methods=["POST"])
 def find_element_at_click():
     """Find the closest element to a click position"""
@@ -695,10 +896,12 @@ def find_element_at_click():
         # while matplotlib has origin at bottom-left
         actual_x = min_x + click_x * (max_x - min_x)
         actual_y = min_y + (1 - click_y) * (max_y - min_y)
-        
+
         # Debug logging
         print(f"Click coordinates: normalized=({click_x:.3f}, {click_y:.3f})")
-        print(f"Plot bounds: x=({min_x:.3f}, {max_x:.3f}), y=({min_y:.3f}, {max_y:.3f})")
+        print(
+            f"Plot bounds: x=({min_x:.3f}, {max_x:.3f}), y=({min_y:.3f}, {max_y:.3f})"
+        )
         print(f"Actual coordinates: ({actual_x:.3f}, {actual_y:.3f})")
 
         # Find closest element
@@ -721,7 +924,9 @@ def find_element_at_click():
                 )
                 # Use circle radius as tolerance - increased for easier selection
                 tolerance = max(radius * 0.8, 8.0)
-                checked_elements.append(f"Circle {element_id}: center=({center_x:.1f},{center_y:.1f}), distance={distance:.1f}, tolerance={tolerance:.1f}")
+                checked_elements.append(
+                    f"Circle {element_id}: center=({center_x:.1f},{center_y:.1f}), distance={distance:.1f}, tolerance={tolerance:.1f}"
+                )
                 if distance <= tolerance and distance < closest_distance:
                     closest_distance = distance
                     closest_element_id = element_id
@@ -735,19 +940,23 @@ def find_element_at_click():
                     tolerance = (
                         6.0  # 6mm tolerance for lines - increased for easier selection
                     )
-                    checked_elements.append(f"Line {element_id}: p1=({p1[0]:.1f},{p1[1]:.1f}), p2=({p2[0]:.1f},{p2[1]:.1f}), distance={distance:.1f}, tolerance={tolerance:.1f}")
+                    checked_elements.append(
+                        f"Line {element_id}: p1=({p1[0]:.1f},{p1[1]:.1f}), p2=({p2[0]:.1f},{p2[1]:.1f}), distance={distance:.1f}, tolerance={tolerance:.1f}"
+                    )
                     if distance <= tolerance and distance < closest_distance:
                         closest_distance = distance
                         closest_element_id = element_id
-        
+
         print(f"Checked {len(checked_elements)} elements:")
         for elem in checked_elements[:5]:  # Show first 5 for debugging
             print(f"  {elem}")
         if len(checked_elements) > 5:
             print(f"  ... and {len(checked_elements) - 5} more")
 
-        print(f"Closest element: {closest_element_id}, distance: {closest_distance:.3f}")
-        
+        print(
+            f"Closest element: {closest_element_id}, distance: {closest_distance:.3f}"
+        )
+
         if closest_element_id:
             # Toggle element selection
             if closest_element_id in session_data["selected_elements"]:

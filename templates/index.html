@@ -94,7 +94,8 @@
             font-size: 12px;
         }
 
-        .form-group input {
+        .form-group input,
+        .form-group textarea {
             width: 100%;
             padding: 6px;
             border: 1px solid #7f8c8d;
@@ -102,6 +103,12 @@
             background-color: #ecf0f1;
             color: #2c3e50;
             font-size: 12px;
+            font-family: monospace;
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 60px;
         }
 
         .btn {
@@ -323,7 +330,6 @@
                     <button class="btn btn-success btn-half btn-multiline"
                         onclick="previewGcode()">Preview<br>G-code</button>
                 </div>
-                <button class="btn btn-success" onclick="exportGcode()" style="margin-top: 5px;">Export G-code</button>
             </div>
 
             <div class="section">
@@ -355,6 +361,35 @@
                 <button class="btn btn-danger" onclick="removeElements()">Remove Elements</button>
                 <button class="btn btn-success" onclick="selectAllForEngraving()">Engrave All</button>
                 <button class="btn" onclick="resetAll()">Reset All</button>
+            </div>
+
+            <div class="section">
+                <h3>G-code Settings</h3>
+                <div class="form-group">
+                    <label for="laserPower">Laser Power:</label>
+                    <input type="number" id="laserPower" value="1000" min="0" max="5000" />
+                </div>
+                <div class="form-group">
+                    <label for="cuttingZ">Cutting Z Height (mm):</label>
+                    <input type="number" id="cuttingZ" value="-30" step="0.1" />
+                </div>
+                <div class="form-group">
+                    <label for="feedrate">Feedrate (mm/min):</label>
+                    <input type="number" id="feedrate" value="1500" min="1" />
+                </div>
+                <div class="form-group">
+                    <label for="preamble">Preamble:</label>
+                    <textarea id="preamble" rows="3">G21 ; Set units to millimeters
+G90 ; Absolute positioning
+G0 X0, Y0, Z-5 ; Go to zero position</textarea>
+                </div>
+                <div class="form-group">
+                    <label for="postscript">Postscript:</label>
+                    <textarea id="postscript" rows="3">G0 Z-5 ; Raise Z
+M5 ; Turn off laser
+G0 X0 Y0 ; Return to origin</textarea>
+                </div>
+                <button class="btn btn-primary" onclick="updateGcodeSettings()">Update Settings</button>
             </div>
 
             <div class="statistics">
@@ -694,188 +729,288 @@
                             Total lines: ${gcode.split('\n').length}<br>
                             Elements to engrave: ${elementCount}
                         </div>
-                        <button class="btn" onclick="downloadGcodeFile('${gcode}')">Download G-code File</button>
+                        <button class="btn" onclick="window.opener.downloadGcodeFromPreview(\`${gcode.replace(/`/g, '\\`').replace(/\$/g, '\\$')}\`)">Download G-code File</button>
+                        <button class="btn" onclick="console.log('View Toolpath clicked'); if(window.opener && window.opener.showGcodeToolpath) { window.opener.showGcodeToolpath(); } else { alert('Function not available'); }">View Toolpath</button>
                         <button class="btn" onclick="window.close()">Close Preview</button>
                         <hr>
                         <pre>${gcode}</pre>
                     </div>
-                    <script>
-                        function downloadGcodeFile(gcodeContent) {
-                            const blob = new Blob([gcodeContent], { type: 'text/plain' });
-                            const url = window.URL.createObjectURL(blob);
-                            const a = document.createElement('a');
-                            a.href = url;
-                            a.download = 'dxf_gcode_' + new Date().toISOString().slice(0, 19).replace(/:/g, '-') + '.nc';
-                            document.body.appendChild(a);
-                            a.click();
-                            window.URL.revokeObjectURL(url);
-                            document.body.removeChild(a);
-                        }
-                    </script>
 </body>
 
 </html>
-`);
-previewWindow.document.close();
-}
+        `);
+            previewWindow.document.close();
+        }
 
-function exportGcode() {
-hideMessages();
+        function downloadGcodeFromPreview(gcodeContent) {
+            const blob = new Blob([gcodeContent], { type: 'text/plain' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'dxf_gcode_' + new Date().toISOString().slice(0, 19).replace(/:/g, '-') + '.nc';
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+        }
 
-fetch('/export_gcode')
-.then(response => {
-if (response.ok) {
-return response.blob();
-} else {
-return response.json().then(data => {
-throw new Error(data.error || 'Failed to export G-code'); // Fixed
-});
-}
-})
-.then(blob => {
-const url = window.URL.createObjectURL(blob);
-const a = document.createElement('a');
-a.href = url;
-a.download = `dxf_gcode_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.nc`;
-document.body.appendChild(a);
-a.click();
-window.URL.revokeObjectURL(url);
-document.body.removeChild(a);
-showSuccess('G-code exported successfully!');
-})
-.catch(error => {
-showError('Error exporting G-code: ' + error.message);
-});
-}
+        function updateGcodeSettings() {
+            hideMessages();
 
-function selectElementAtClick(e) {
-console.log('Click detected on plot image');
+            const settings = {
+                preamble: document.getElementById('preamble').value,
+                postscript: document.getElementById('postscript').value,
+                laser_power: parseInt(document.getElementById('laserPower').value),
+                cutting_z: parseFloat(document.getElementById('cuttingZ').value),
+                feedrate: parseInt(document.getElementById('feedrate').value)
+            };
 
-// Get click coordinates relative to the image
-const rect = e.target.getBoundingClientRect();
-const x = e.clientX - rect.left;
-const y = e.clientY - rect.top;
+            fetch('/update_gcode_settings', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(settings)
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        showSuccess('G-code settings updated successfully!');
+                    } else {
+                        showError(data.error || 'Failed to update settings');
+                    }
+                })
+                .catch(error => {
+                    showError('Error updating settings: ' + error.message);
+                });
+        }
 
-console.log('Click coordinates:', x, y);
-console.log('Image dimensions:', rect.width, rect.height);
+        function showGcodeToolpath() {
+            console.log('showGcodeToolpath called');
+            hideMessages();
 
-// Convert to normalized coordinates (0-1)
-const normalizedX = x / rect.width;
-const normalizedY = y / rect.height;
+            console.log('Fetching toolpath plot from /preview_gcode_plot');
+            fetch('/preview_gcode_plot')
+                .then(response => {
+                    console.log('Toolpath response status:', response.status);
+                    return response.json();
+                })
+                .then(data => {
+                    console.log('Toolpath response data:', data);
+                    if (data.success) {
+                        console.log('Showing toolpath window');
+                        showToolpathWindow(data.plot_image, data.element_count);
+                    } else {
+                        console.log('Toolpath generation failed:', data.error);
+                        showError(data.error || 'Failed to generate toolpath preview');
+                    }
+                })
+                .catch(error => {
+                    console.log('Toolpath error:', error);
+                    showError('Error generating toolpath: ' + error.message);
+                });
+        }
 
-console.log('Normalized coordinates:', normalizedX, normalizedY);
+        function showToolpathWindow(plotImage, elementCount) {
+            // Create toolpath window
+            const toolpathWindow = window.open('', 'toolpathPreview', 'width=1000,height=700,scrollbars=yes,resizable=yes');
 
-// Send click coordinates to server to find closest element
-fetch('/find_element_at_click', {
-method: 'POST',
-headers: {
-'Content-Type': 'application/json',
-},
-body: JSON.stringify({
-x: normalizedX,
-y: normalizedY
-})
-})
-.then(response => response.json())
-.then(data => {
-console.log('Server response:', data);
-if (data.success && data.element_id) {
-console.log('Element found:', data.element_id, 'Selected:', data.selected);
-// Update local selection to match server
-if (data.selected) {
-selectedElements.add(data.element_id);
-} else {
-selectedElements.delete(data.element_id);
-}
-updateSelectedInfo();
-// Refresh the plot to show selection
-refreshPlot();
-} else if (!data.success) {
-console.log('No element found at click position:', data.message);
-}
-})
-.catch(error => {
-console.error('Error selecting element:', error);
-});
-}
+            toolpathWindow.document.write(`
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>G-code Toolpath Preview</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+                        .header { background: #2c3e50; color: white; padding: 15px; margin: -20px -20px 20px -20px; }
+                        .content { background: white; padding: 20px; border-radius: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); text-align: center; }
+                        .plot-container { margin: 20px 0; }
+                        .legend { background: #ecf0f1; padding: 10px; border-radius: 3px; margin-bottom: 15px; text-align: left; }
+                        .btn { background: #3498db; color: white; border: none; padding: 10px 20px; border-radius: 3px; cursor: pointer; margin: 5px; }
+                        .btn:hover { background: #2980b9; }
+                        img { max-width: 100%; height: auto; border: 1px solid #ddd; }
+                    </style>
+                </head>
+                <body>
+                    <div class="header">
+                        <h2>G-code Toolpath Preview</h2>
+                        <p>Elements marked for engraving: ${elementCount}</p>
+                    </div>
+                    <div class="content">
+                        <div class="legend">
+                            <strong>Legend:</strong><br>
+                            <span style="color: green;">● Green lines = Positioning moves (G0) - laser off</span><br>
+                            <span style="color: red;">● Red lines = Engraving moves (G1) - laser on</span><br>
+                            <span style="color: green;">● Green dot = Start position</span>
+                        </div>
+                        <div class="plot-container">
+                            <img src="data:image/png;base64,${plotImage}" alt="G-code Toolpath" />
+                        </div>
+                        <button class="btn" onclick="window.close()">Close Toolpath</button>
+                    </div>
+                </body>
+                </html>
+            `);
+            toolpathWindow.document.close();
+        }
 
-function refreshPlot() {
-if (!currentPlotImage) return;
+        function exportGcode() {
+            hideMessages();
 
-fetch('/get_plot')
-.then(response => response.json())
-.then(data => {
-if (data.success) {
-updatePlot(data.plot_image);
-}
-})
-.catch(error => {
-console.error('Error refreshing plot:', error);
-});
-}
+            fetch('/export_gcode')
+                .then(response => {
+                    if (response.ok) {
+                        return response.blob();
+                    } else {
+                        return response.json().then(data => {
+                            throw new Error(data.error || 'Failed to export G-code'); // Fixed
+                        });
+                    }
+                })
+                .then(blob => {
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `dxf_gcode_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.nc`;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                    showSuccess('G-code exported successfully!');
+                })
+                .catch(error => {
+                    showError('Error exporting G-code: ' + error.message);
+                });
+        }
 
-function updatePlot(imageData) {
-const plotImage = document.getElementById('plotImage');
-const noFile = document.getElementById('noFile');
+        function selectElementAtClick(e) {
+            console.log('Click detected on plot image');
 
-if (imageData) {
-currentPlotImage = imageData; // Update currentPlotImage
-plotImage.src = 'data:image/png;base64,' + imageData;
-plotImage.style.display = 'block';
-noFile.style.display = 'none';
-// Attach click listener when image is displayed
-attachPlotClickListener();
-} else {
-currentPlotImage = null; // Clear currentPlotImage
-plotImage.style.display = 'none';
-noFile.style.display = 'block';
-}
-}
+            // Get click coordinates relative to the image
+            const rect = e.target.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
 
-function updateStatistics(stats) {
-document.getElementById('totalElements').textContent = stats.total_elements;
-document.getElementById('removedCount').textContent = stats.removed;
-document.getElementById('engravedCount').textContent = stats.engraved;
-document.getElementById('remainingCount').textContent = stats.remaining;
-document.getElementById('originOffset').textContent = `(${stats.origin_offset[0]}, ${stats.origin_offset[1]})`;
-}
+            console.log('Click coordinates:', x, y);
+            console.log('Image dimensions:', rect.width, rect.height);
 
-function updateSelectedInfo() {
-const selectedInfo = document.getElementById('selectedInfo');
-if (selectedElements.size === 0) {
-selectedInfo.textContent = 'No elements selected';
-} else {
-selectedInfo.textContent = `${selectedElements.size} element(s) selected`;
-}
-}
+            // Convert to normalized coordinates (0-1)
+            const normalizedX = x / rect.width;
+            const normalizedY = y / rect.height;
 
-function showLoading(show) {
-document.getElementById('loading').style.display = show ? 'block' : 'none';
-}
+            console.log('Normalized coordinates:', normalizedX, normalizedY);
 
-function showError(message) {
-const errorDiv = document.getElementById('errorMessage');
-errorDiv.textContent = message;
-errorDiv.style.display = 'block';
-setTimeout(() => {
-errorDiv.style.display = 'none';
-}, 5000);
-}
+            // Send click coordinates to server to find closest element
+            fetch('/find_element_at_click', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    x: normalizedX,
+                    y: normalizedY
+                })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Server response:', data);
+                    if (data.success && data.element_id) {
+                        console.log('Element found:', data.element_id, 'Selected:', data.selected);
+                        // Update local selection to match server
+                        if (data.selected) {
+                            selectedElements.add(data.element_id);
+                        } else {
+                            selectedElements.delete(data.element_id);
+                        }
+                        updateSelectedInfo();
+                        // Refresh the plot to show selection
+                        refreshPlot();
+                    } else if (!data.success) {
+                        console.log('No element found at click position:', data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error selecting element:', error);
+                });
+        }
 
-function showSuccess(message) {
-const successDiv = document.getElementById('successMessage');
-successDiv.textContent = message;
-successDiv.style.display = 'block';
-setTimeout(() => {
-successDiv.style.display = 'none';
-}, 3000);
-}
+        function refreshPlot() {
+            if (!currentPlotImage) return;
 
-function hideMessages() {
-document.getElementById('errorMessage').style.display = 'none';
-document.getElementById('successMessage').style.display = 'none';
-}
-</script>
+            fetch('/get_plot')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        updatePlot(data.plot_image);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error refreshing plot:', error);
+                });
+        }
+
+        function updatePlot(imageData) {
+            const plotImage = document.getElementById('plotImage');
+            const noFile = document.getElementById('noFile');
+
+            if (imageData) {
+                currentPlotImage = imageData; // Update currentPlotImage
+                plotImage.src = 'data:image/png;base64,' + imageData;
+                plotImage.style.display = 'block';
+                noFile.style.display = 'none';
+                // Attach click listener when image is displayed
+                attachPlotClickListener();
+            } else {
+                currentPlotImage = null; // Clear currentPlotImage
+                plotImage.style.display = 'none';
+                noFile.style.display = 'block';
+            }
+        }
+
+        function updateStatistics(stats) {
+            document.getElementById('totalElements').textContent = stats.total_elements;
+            document.getElementById('removedCount').textContent = stats.removed;
+            document.getElementById('engravedCount').textContent = stats.engraved;
+            document.getElementById('remainingCount').textContent = stats.remaining;
+            document.getElementById('originOffset').textContent = `(${stats.origin_offset[0]}, ${stats.origin_offset[1]})`;
+        }
+
+        function updateSelectedInfo() {
+            const selectedInfo = document.getElementById('selectedInfo');
+            if (selectedElements.size === 0) {
+                selectedInfo.textContent = 'No elements selected';
+            } else {
+                selectedInfo.textContent = `${selectedElements.size} element(s) selected`;
+            }
+        }
+
+        function showLoading(show) {
+            document.getElementById('loading').style.display = show ? 'block' : 'none';
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('errorMessage');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            setTimeout(() => {
+                errorDiv.style.display = 'none';
+            }, 5000);
+        }
+
+        function showSuccess(message) {
+            const successDiv = document.getElementById('successMessage');
+            successDiv.textContent = message;
+            successDiv.style.display = 'block';
+            setTimeout(() => {
+                successDiv.style.display = 'none';
+            }, 3000);
+        }
+
+        function hideMessages() {
+            document.getElementById('errorMessage').style.display = 'none';
+            document.getElementById('successMessage').style.display = 'none';
+        }
+    </script>
 </body>
 
 </html>
