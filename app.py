@@ -596,12 +596,10 @@ def preview_gcode():
 
     # Generate G-code
     gcode = generate_gcode(engraving_elements)
-    
-    return jsonify({
-        "success": True,
-        "gcode": gcode,
-        "element_count": len(engraving_elements)
-    })
+
+    return jsonify(
+        {"success": True, "gcode": gcode, "element_count": len(engraving_elements)}
+    )
 
 
 @app.route("/export_gcode", methods=["GET"])
@@ -670,7 +668,7 @@ def find_element_at_click():
         if not unique_elements:
             return jsonify({"error": "No elements to select"}), 400
 
-        # Calculate plot bounds
+        # Calculate plot bounds (same as in create_plot_image)
         all_x = []
         all_y = []
         for element_info in unique_elements.values():
@@ -684,7 +682,7 @@ def find_element_at_click():
         min_x, max_x = min(all_x), max(all_x)
         min_y, max_y = min(all_y), max(all_y)
 
-        # Add some padding
+        # Add some padding (same as matplotlib's tight layout)
         padding_x = (max_x - min_x) * 0.1
         padding_y = (max_y - min_y) * 0.1
         min_x -= padding_x
@@ -693,12 +691,20 @@ def find_element_at_click():
         max_y += padding_y
 
         # Convert normalized coordinates to actual coordinates
+        # Note: Y coordinate is flipped because web coordinates have origin at top-left
+        # while matplotlib has origin at bottom-left
         actual_x = min_x + click_x * (max_x - min_x)
-        actual_y = min_y + (1 - click_y) * (max_y - min_y)  # Flip Y coordinate
+        actual_y = min_y + (1 - click_y) * (max_y - min_y)
+        
+        # Debug logging
+        print(f"Click coordinates: normalized=({click_x:.3f}, {click_y:.3f})")
+        print(f"Plot bounds: x=({min_x:.3f}, {max_x:.3f}), y=({min_y:.3f}, {max_y:.3f})")
+        print(f"Actual coordinates: ({actual_x:.3f}, {actual_y:.3f})")
 
         # Find closest element
         closest_element_id = None
         closest_distance = float("inf")
+        checked_elements = []
 
         for element_id, element_info in unique_elements.items():
             if element_id in session_data["removed_elements"]:
@@ -715,6 +721,7 @@ def find_element_at_click():
                 )
                 # Use circle radius as tolerance - increased for easier selection
                 tolerance = max(radius * 0.8, 8.0)
+                checked_elements.append(f"Circle {element_id}: center=({center_x:.1f},{center_y:.1f}), distance={distance:.1f}, tolerance={tolerance:.1f}")
                 if distance <= tolerance and distance < closest_distance:
                     closest_distance = distance
                     closest_element_id = element_id
@@ -725,17 +732,30 @@ def find_element_at_click():
                     p1 = points[i]
                     p2 = points[i + 1]
                     distance = point_to_line_distance((actual_x, actual_y), p1, p2)
-                    tolerance = 6.0  # 6mm tolerance for lines - increased for easier selection
+                    tolerance = (
+                        6.0  # 6mm tolerance for lines - increased for easier selection
+                    )
+                    checked_elements.append(f"Line {element_id}: p1=({p1[0]:.1f},{p1[1]:.1f}), p2=({p2[0]:.1f},{p2[1]:.1f}), distance={distance:.1f}, tolerance={tolerance:.1f}")
                     if distance <= tolerance and distance < closest_distance:
                         closest_distance = distance
                         closest_element_id = element_id
+        
+        print(f"Checked {len(checked_elements)} elements:")
+        for elem in checked_elements[:5]:  # Show first 5 for debugging
+            print(f"  {elem}")
+        if len(checked_elements) > 5:
+            print(f"  ... and {len(checked_elements) - 5} more")
 
+        print(f"Closest element: {closest_element_id}, distance: {closest_distance:.3f}")
+        
         if closest_element_id:
             # Toggle element selection
             if closest_element_id in session_data["selected_elements"]:
                 session_data["selected_elements"].remove(closest_element_id)
+                print(f"Removed element {closest_element_id} from selection")
             else:
                 session_data["selected_elements"].add(closest_element_id)
+                print(f"Added element {closest_element_id} to selection")
 
             return jsonify(
                 {
@@ -746,6 +766,7 @@ def find_element_at_click():
                 }
             )
         else:
+            print("No element found within tolerance")
             return jsonify(
                 {"success": False, "message": "No element found at click position"}
             )
