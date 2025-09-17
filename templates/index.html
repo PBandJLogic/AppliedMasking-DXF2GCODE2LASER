@@ -351,7 +351,7 @@
                 </div>
                 <button class="btn btn-warning" onclick="markEngraving()">Mark for Engraving</button>
                 <button class="btn btn-danger" onclick="removeElements()">Remove Elements</button>
-                <button class="btn" onclick="selectAllForEngraving()">Engrave All</button>
+                <button class="btn btn-success" onclick="selectAllForEngraving()">Engrave All</button>
                 <button class="btn" onclick="resetAll()">Reset All</button>
             </div>
 
@@ -680,24 +680,24 @@
                     y: normalizedY
                 })
             })
-            .then(response => response.json())
-            .then(data => {
-                console.log('Server response:', data);
-                if (data.success && data.element_id) {
-                    console.log('Element found:', data.element_id, 'Selected:', data.selected);
-                    // Update local selection to match server
-                    if (data.selected) {
-                        selectedElements.add(data.element_id);
-                    } else {
-                        selectedElements.delete(data.element_id);
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Server response:', data);
+                    if (data.success && data.element_id) {
+                        console.log('Element found:', data.element_id, 'Selected:', data.selected);
+                        // Update local selection to match server
+                        if (data.selected) {
+                            selectedElements.add(data.element_id);
+                        } else {
+                            selectedElements.delete(data.element_id);
+                        }
+                        updateSelectedInfo();
+                        // Refresh the plot to show selection
+                        refreshPlot();
+                    } else if (!data.success) {
+                        console.log('No element found at click position:', data.message);
                     }
-                    updateSelectedInfo();
-                    // Refresh the plot to show selection
-                    refreshPlot();
-                } else if (!data.success) {
-                    console.log('No element found at click position:', data.message);
-                }
-            })
+                })
                 .catch(error => {
                     console.error('Error selecting element:', error);
                 });
