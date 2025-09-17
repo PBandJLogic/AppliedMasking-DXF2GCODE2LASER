@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DXF Viewer & Editor</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+
+        .container {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        .sidebar {
+            width: 350px;
+            background-color: #2c3e50;
+            color: white;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .main-content {
+            flex: 1;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            background-color: #34495e;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .header h1 {
+            color: #ecf0f1;
+            font-size: 24px;
+            margin-bottom: 5px;
+        }
+
+        .section {
+            background-color: #34495e;
+            margin-bottom: 15px;
+            padding: 15px;
+            border-radius: 8px;
+        }
+
+        .section h3 {
+            color: #ecf0f1;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+
+        .form-group {
+            margin-bottom: 10px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #bdc3c7;
+            font-size: 14px;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #7f8c8d;
+            border-radius: 4px;
+            background-color: #ecf0f1;
+            color: #2c3e50;
+        }
+
+        .btn {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 5px 0;
+            width: 100%;
+            transition: background-color 0.3s;
+        }
+
+        .btn:hover {
+            background-color: #2980b9;
+        }
+
+        .btn-danger {
+            background-color: #e74c3c;
+        }
+
+        .btn-danger:hover {
+            background-color: #c0392b;
+        }
+
+        .btn-success {
+            background-color: #27ae60;
+        }
+
+        .btn-success:hover {
+            background-color: #229954;
+        }
+
+        .btn-warning {
+            background-color: #f39c12;
+        }
+
+        .btn-warning:hover {
+            background-color: #e67e22;
+        }
+
+        .plot-container {
+            flex: 1;
+            background-color: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .plot-image {
+            max-width: 100%;
+            max-height: 100%;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .no-file {
+            color: #7f8c8d;
+            font-size: 18px;
+            text-align: center;
+        }
+
+        .statistics {
+            background-color: #34495e;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+
+        .statistics h3 {
+            color: #ecf0f1;
+            margin-bottom: 10px;
+        }
+
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+            color: #bdc3c7;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            color: #3498db;
+            font-size: 16px;
+        }
+
+        .error {
+            background-color: #e74c3c;
+            color: white;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            display: none;
+        }
+
+        .success {
+            background-color: #27ae60;
+            color: white;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            display: none;
+        }
+
+        .file-input-wrapper {
+            position: relative;
+            overflow: hidden;
+            display: inline-block;
+            width: 100%;
+        }
+
+        .file-input-wrapper input[type=file] {
+            position: absolute;
+            left: -9999px;
+        }
+
+        .file-input-label {
+            display: block;
+            padding: 10px 15px;
+            background-color: #3498db;
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+            text-align: center;
+            transition: background-color 0.3s;
+        }
+
+        .file-input-label:hover {
+            background-color: #2980b9;
+        }
+
+        .instructions {
+            background-color: #34495e;
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+
+        .instructions h3 {
+            color: #ecf0f1;
+            margin-bottom: 10px;
+        }
+
+        .instructions ul {
+            list-style-type: none;
+            padding-left: 0;
+        }
+
+        .instructions li {
+            margin-bottom: 5px;
+            color: #bdc3c7;
+        }
+
+        .instructions .color-info {
+            margin-top: 10px;
+        }
+
+        .instructions .color-info div {
+            margin-bottom: 3px;
+        }
+
+        .blue {
+            color: #3498db;
+        }
+
+        .red {
+            color: #e74c3c;
+        }
+
+        .green {
+            color: #27ae60;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="sidebar">
+            <div class="header">
+                <h1>DXF Viewer & Editor</h1>
+                <p>Interactive DXF Processing</p>
+            </div>
+
+            <div class="section">
+                <h3>File Operations</h3>
+                <div class="file-input-wrapper">
+                    <input type="file" id="fileInput" accept=".dxf" />
+                    <label for="fileInput" class="file-input-label">Load DXF File</label>
+                </div>
+                <button class="btn btn-success" onclick="exportGcode()">Export G-code</button>
+            </div>
+
+            <div class="section">
+                <h3>Origin Adjustment</h3>
+                <div class="form-group">
+                    <label for="xOffset">X Offset (mm):</label>
+                    <input type="number" id="xOffset" value="0.0" step="0.1" />
+                </div>
+                <div class="form-group">
+                    <label for="yOffset">Y Offset (mm):</label>
+                    <input type="number" id="yOffset" value="0.0" step="0.1" />
+                </div>
+                <button class="btn" onclick="applyOffset()">Apply Offset</button>
+            </div>
+
+            <div class="section">
+                <h3>Element Selection</h3>
+                <p style="color: #bdc3c7; font-size: 12px; margin-bottom: 10px;">
+                    Click on elements in the plot to select them.
+                </p>
+                <div id="selectedInfo" style="color: #ecf0f1; font-weight: bold; margin-bottom: 10px;">
+                    No elements selected
+                </div>
+                <button class="btn btn-warning" onclick="markEngraving()">Mark for Engraving</button>
+                <button class="btn btn-danger" onclick="removeElements()">Remove Elements</button>
+                <button class="btn" onclick="selectAllForEngraving()">Engrave All</button>
+                <button class="btn" onclick="resetAll()">Reset All</button>
+            </div>
+
+            <div class="statistics">
+                <h3>Statistics</h3>
+                <div id="statistics">
+                    <div class="stat-item">
+                        <span>Total elements:</span>
+                        <span id="totalElements">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span>Removed:</span>
+                        <span id="removedCount">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span>Engraved:</span>
+                        <span id="engravedCount">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span>Remaining:</span>
+                        <span id="remainingCount">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span>Origin offset:</span>
+                        <span id="originOffset">(0.0, 0.0)</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="instructions">
+                <h3>Instructions</h3>
+                <ul>
+                    <li>1. Load a DXF file using the button above</li>
+                    <li>2. Adjust the origin by entering X,Y offsets</li>
+                    <li>3. Click on elements in the plot to select them</li>
+                    <li>4. Mark elements for engraving (red) or removal</li>
+                    <li>5. Export G-code for the final design</li>
+                </ul>
+                <div class="color-info">
+                    <div><span class="blue">• Blue:</span> Original elements</div>
+                    <div><span class="red">• Red:</span> Marked for engraving</div>
+                    <div><span class="green">• Green:</span> Selected elements</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="plot-container">
+                <div id="loading" class="loading">Processing DXF file...</div>
+                <div id="noFile" class="no-file">
+                    <h2>No DXF file loaded</h2>
+                    <p>Please select a DXF file to begin</p>
+                </div>
+                <img id="plotImage" class="plot-image" style="display: none;" />
+            </div>
+        </div>
+    </div>
+
+    <div id="errorMessage" class="error"></div>
+    <div id="successMessage" class="success"></div>
+
+    <script>
+        let selectedElements = new Set();
+        let currentPlotImage = null;
+
+        // File upload handling
+        document.getElementById('fileInput').addEventListener('change', function (e) {
+            const file = e.target.files[0];
+            if (file) {
+                uploadFile(file);
+            }
+        });
+
+        // Plot click handling for element selection
+        document.getElementById('plotImage').addEventListener('click', function (e) {
+            if (currentPlotImage) {
+                // For now, we'll implement a simple click-to-select system
+                // In a full implementation, you'd need to map click coordinates to elements
+                selectElement();
+            }
+        });
+
+        function uploadFile(file) {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            showLoading(true);
+            hideMessages();
+
+            fetch('/upload', {
+                method: 'POST',
+                body: formData
+            })
+                .then(response => response.json())
+                .then(data => {
+                    showLoading(false);
+                    if (data.success) {
+                        currentPlotImage = data.plot_image;
+                        updatePlot(data.plot_image);
+                        updateStatistics(data.statistics);
+                        showSuccess('DXF file loaded successfully!');
+                    } else {
+                        showError(data.error || 'Failed to load DXF file');
+                    }
+                })
+                .catch(error => {
+                    showLoading(false);
+                    showError('Error uploading file: ' + error.message);
+                });
+        }
+
+        function applyOffset() {
+            const xOffset = parseFloat(document.getElementById('xOffset').value) || 0;
+            const yOffset = parseFloat(document.getElementById('yOffset').value) || 0;
+
+            hideMessages();
+
+            fetch('/apply_offset', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    x_offset: xOffset,
+                    y_offset: yOffset
+                })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        updatePlot(data.plot_image);
+                        updateStatistics(data.statistics);
+                        showSuccess('Offset applied successfully!');
+                    } else {
+                        showError(data.error || 'Failed to apply offset');
+                    }
+                })
+                .catch(error => {
+                    showError('Error applying offset: ' + error.message);
+                });
+        }
+
+        function markEngraving() {
+            if (selectedElements.size === 0) {
+                showError('Please select elements first');
+                return;
+            }
+
+            hideMessages();
+
+            fetch('/mark_engraving', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    element_ids: Array.from(selectedElements)
+                })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        updatePlot(data.plot_image);
+                        updateStatistics(data.statistics);
+                        selectedElements.clear();
+                        updateSelectedInfo();
+                        showSuccess('Elements marked for engraving!');
+                    } else {
+                        showError(data.error || 'Failed to mark for engraving');
+                    }
+                })
+                .catch(error => {
+                    showError('Error marking for engraving: ' + error.message);
+                });
+        }
+
+        function removeElements() {
+            if (selectedElements.size === 0) {
+                showError('Please select elements first');
+                return;
+            }
+
+            hideMessages();
+
+            fetch('/remove_elements', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    element_ids: Array.from(selectedElements)
+                })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        updatePlot(data.plot_image);
+                        updateStatistics(data.statistics);
+                        selectedElements.clear();
+                        updateSelectedInfo();
+                        showSuccess('Elements removed!');
+                    } else {
+                        showError(data.error || 'Failed to remove elements');
+                    }
+                })
+                .catch(error => {
+                    showError('Error removing elements: ' + error.message);
+                });
+        }
+
+        function selectAllForEngraving() {
+            hideMessages();
+
+            fetch('/mark_engraving', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    element_ids: [] // Empty array means select all
+                })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        updatePlot(data.plot_image);
+                        updateStatistics(data.statistics);
+                        selectedElements.clear();
+                        updateSelectedInfo();
+                        showSuccess('All elements marked for engraving!');
+                    } else {
+                        showError(data.error || 'Failed to mark all for engraving');
+                    }
+                })
+                .catch(error => {
+                    showError('Error marking all for engraving: ' + error.message);
+                });
+        }
+
+        function resetAll() {
+            hideMessages();
+
+            fetch('/reset', {
+                method: 'POST'
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        updatePlot(data.plot_image);
+                        updateStatistics(data.statistics);
+                        selectedElements.clear();
+                        updateSelectedInfo();
+                        document.getElementById('xOffset').value = '0.0';
+                        document.getElementById('yOffset').value = '0.0';
+                        showSuccess('All selections and modifications reset!');
+                    } else {
+                        showError(data.error || 'Failed to reset');
+                    }
+                })
+                .catch(error => {
+                    showError('Error resetting: ' + error.message);
+                });
+        }
+
+        function exportGcode() {
+            hideMessages();
+
+            fetch('/export_gcode')
+                .then(response => {
+                    if (response.ok) {
+                        return response.blob();
+                    } else {
+                        return response.json().then(data => {
+                            throw new Error(data.error || 'Failed to export G-code');
+                        });
+                    }
+                })
+                .then(blob => {
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `dxf_gcode_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.nc`;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                    showSuccess('G-code exported successfully!');
+                })
+                .catch(error => {
+                    showError('Error exporting G-code: ' + error.message);
+                });
+        }
+
+        function selectElement() {
+            // Simple element selection - in a full implementation,
+            // you'd map click coordinates to actual element IDs
+            const elementId = Math.floor(Math.random() * 100) + 1; // Mock element ID
+            selectedElements.add(elementId);
+            updateSelectedInfo();
+        }
+
+        function updatePlot(imageData) {
+            const plotImage = document.getElementById('plotImage');
+            const noFile = document.getElementById('noFile');
+
+            if (imageData) {
+                plotImage.src = 'data:image/png;base64,' + imageData;
+                plotImage.style.display = 'block';
+                noFile.style.display = 'none';
+            } else {
+                plotImage.style.display = 'none';
+                noFile.style.display = 'block';
+            }
+        }
+
+        function updateStatistics(stats) {
+            document.getElementById('totalElements').textContent = stats.total_elements;
+            document.getElementById('removedCount').textContent = stats.removed;
+            document.getElementById('engravedCount').textContent = stats.engraved;
+            document.getElementById('remainingCount').textContent = stats.remaining;
+            document.getElementById('originOffset').textContent = `(${stats.origin_offset[0]}, ${stats.origin_offset[1]})`;
+        }
+
+        function updateSelectedInfo() {
+            const selectedInfo = document.getElementById('selectedInfo');
+            if (selectedElements.size === 0) {
+                selectedInfo.textContent = 'No elements selected';
+            } else {
+                selectedInfo.textContent = `${selectedElements.size} element(s) selected`;
+            }
+        }
+
+        function showLoading(show) {
+            document.getElementById('loading').style.display = show ? 'block' : 'none';
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('errorMessage');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            setTimeout(() => {
+                errorDiv.style.display = 'none';
+            }, 5000);
+        }
+
+        function showSuccess(message) {
+            const successDiv = document.getElementById('successMessage');
+            successDiv.textContent = message;
+            successDiv.style.display = 'block';
+            setTimeout(() => {
+                successDiv.style.display = 'none';
+            }, 3000);
+        }
+
+        function hideMessages() {
+            document.getElementById('errorMessage').style.display = 'none';
+            document.getElementById('successMessage').style.display = 'none';
+        }
+    </script>
+</body>
+
+</html>
