@@ -942,21 +942,23 @@ def find_element_at_click():
     try:
         data = request.get_json()
         print(f"Click request data: {data}")
-        
+
         if not data:
             print("ERROR: No JSON data received")
             return jsonify({"error": "No data received"}), 400
-            
+
         if "x" not in data or "y" not in data:
             print(f"ERROR: Missing x or y coordinates in data: {data}")
             return jsonify({"error": "Missing x or y coordinates"}), 400
-            
+
         click_x = data["x"]
         click_y = data["y"]
         print(f"Processing click at: ({click_x}, {click_y})")
 
         if not session_data["current_points"]:
-            print(f"ERROR: No current points. Session data: {len(session_data['original_points'])} original points")
+            print(
+                f"ERROR: No current points. Session data: {len(session_data['original_points'])} original points"
+            )
             return jsonify({"error": "No DXF file loaded"}), 400
 
         # Convert normalized coordinates to actual plot coordinates
@@ -1013,12 +1015,24 @@ def find_element_at_click():
         min_y -= padding_y
         max_y += padding_y
 
-        # Simple coordinate conversion - use the data bounds directly
-        # Convert normalized coordinates to actual coordinates
-        # Note: Y coordinate is flipped because web coordinates have origin at top-left
-        # while matplotlib has origin at bottom-left
-        actual_x = min_x + click_x * (max_x - min_x)
-        actual_y = min_y + (1 - click_y) * (max_y - min_y)
+        # The problem is that the web image might be scaled differently than the matplotlib figure
+        # We need to account for the actual plot area that matplotlib creates
+        
+        # Matplotlib creates a figure with aspect ratio enforcement
+        # When we use bbox_inches="tight", it crops to the actual data
+        # But we need to account for equal aspect ratio
+        
+        data_width = max_x - min_x
+        data_height = max_y - min_y
+        
+        if data_width == 0:
+            data_width = 1
+        if data_height == 0:
+            data_height = 1
+            
+        # Simple direct mapping - this should work if the image displays the full data range
+        actual_x = min_x + click_x * data_width
+        actual_y = max_y - click_y * data_height  # Flip Y and use max_y as origin
 
         # Debug logging
         print(f"Click coordinates: normalized=({click_x:.3f}, {click_y:.3f})")
