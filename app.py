@@ -1066,7 +1066,9 @@ def find_element_at_click():
                 # Calculate distance to circumference (not center)
                 distance_to_circumference = abs(distance_to_center - radius)
                 # Use tolerance for circumference selection
-                tolerance = 5.0  # 5mm tolerance for circle circumference - precise selection
+                tolerance = (
+                    5.0  # 5mm tolerance for circle circumference - precise selection
+                )
                 checked_elements.append(
                     f"Circle {element_id}: center=({center_x:.1f},{center_y:.1f}), radius={radius:.1f}, distance_to_circumference={distance_to_circumference:.1f}, tolerance={tolerance:.1f}"
                 )
@@ -1164,13 +1166,16 @@ def find_element_at_click():
         )
 
         if closest_element_id:
-            # Toggle element selection
+            # Single selection mode - clear all previous selections
             if closest_element_id in session_data["selected_elements"]:
-                session_data["selected_elements"].remove(closest_element_id)
-                print(f"Removed element {closest_element_id} from selection")
+                # If clicking the same element, deselect it
+                session_data["selected_elements"].clear()
+                print(f"Deselected element {closest_element_id}")
             else:
+                # Clear all selections and select only this element
+                session_data["selected_elements"].clear()
                 session_data["selected_elements"].add(closest_element_id)
-                print(f"Added element {closest_element_id} to selection")
+                print(f"Selected element {closest_element_id} (cleared previous selections)")
 
             return jsonify(
                 {
