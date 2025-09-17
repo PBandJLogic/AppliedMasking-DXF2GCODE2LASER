@@ -320,8 +320,9 @@
                         <label for="fileInput" class="file-input-label">Load DXF File</label>
                     </div>
                     <button class="btn btn-success btn-half btn-multiline"
-                        onclick="exportGcode()">Export<br>G-code</button>
+                        onclick="previewGcode()">Preview<br>G-code</button>
                 </div>
+                <button class="btn btn-success" onclick="exportGcode()" style="margin-top: 5px;">Export G-code</button>
             </div>
 
             <div class="section">
@@ -625,6 +626,77 @@
                 .catch(error => {
                     showError('Error resetting: ' + error.message);
                 });
+        }
+
+        function previewGcode() {
+            hideMessages();
+
+            fetch('/preview_gcode')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        showGcodePreview(data.gcode, data.element_count);
+                    } else {
+                        showError(data.error || 'Failed to preview G-code');
+                    }
+                })
+                .catch(error => {
+                    showError('Error previewing G-code: ' + error.message);
+                });
+        }
+
+        function showGcodePreview(gcode, elementCount) {
+            // Create preview window
+            const previewWindow = window.open('', 'gcodePreview', 'width=800,height=600,scrollbars=yes,resizable=yes');
+            
+            previewWindow.document.write(`
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>G-code Preview</title>
+                    <style>
+                        body { font-family: monospace; margin: 20px; background: #f5f5f5; }
+                        .header { background: #2c3e50; color: white; padding: 15px; margin: -20px -20px 20px -20px; }
+                        .content { background: white; padding: 20px; border-radius: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+                        pre { white-space: pre-wrap; word-wrap: break-word; }
+                        .stats { background: #ecf0f1; padding: 10px; border-radius: 3px; margin-bottom: 15px; }
+                        .btn { background: #3498db; color: white; border: none; padding: 10px 20px; border-radius: 3px; cursor: pointer; margin: 5px; }
+                        .btn:hover { background: #2980b9; }
+                    </style>
+                </head>
+                <body>
+                    <div class="header">
+                        <h2>G-code Preview</h2>
+                        <p>Elements marked for engraving: ${elementCount}</p>
+                    </div>
+                    <div class="content">
+                        <div class="stats">
+                            <strong>G-code Statistics:</strong><br>
+                            Total lines: ${gcode.split('\\n').length}<br>
+                            Elements to engrave: ${elementCount}
+                        </div>
+                        <button class="btn" onclick="downloadGcode()">Download G-code File</button>
+                        <button class="btn" onclick="window.close()">Close Preview</button>
+                        <hr>
+                        <pre>${gcode}</pre>
+                    </div>
+                    <script>
+                        function downloadGcode() {
+                            const blob = new Blob([\`${gcode}\`], { type: 'text/plain' });
+                            const url = window.URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = 'dxf_gcode_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.nc';
+                            document.body.appendChild(a);
+                            a.click();
+                            window.URL.revokeObjectURL(url);
+                            document.body.removeChild(a);
+                        }
+                    </script>
+                </body>
+                </html>
+            `);
+            previewWindow.document.close();
         }
 
         function exportGcode() {

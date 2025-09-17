@@ -444,7 +444,9 @@ def mark_engraving():
             if data.get("element_ids") == []:
                 # Mark all non-removed elements for engraving
                 all_element_ids = set()
-                for x, y, radius, geom_type, element_id in session_data["current_points"]:
+                for x, y, radius, geom_type, element_id in session_data[
+                    "current_points"
+                ]:
                     if element_id not in session_data["removed_elements"]:
                         all_element_ids.add(element_id)
                 element_ids = list(all_element_ids)
@@ -568,6 +570,40 @@ def reset():
     )
 
 
+@app.route("/preview_gcode", methods=["GET"])
+def preview_gcode():
+    """Preview G-code for the current design"""
+    if not session_data["current_points"]:
+        return jsonify({"error": "No DXF file loaded"}), 400
+
+    # Filter points for engraving only
+    engraving_elements = {}
+    for x, y, radius, geom_type, element_id in session_data["current_points"]:
+        if (
+            element_id in session_data["engraved_elements"]
+            and element_id not in session_data["removed_elements"]
+        ):
+            if element_id not in engraving_elements:
+                engraving_elements[element_id] = {
+                    "geom_type": geom_type,
+                    "radius": radius,
+                    "points": [],
+                }
+            engraving_elements[element_id]["points"].append((x, y))
+
+    if not engraving_elements:
+        return jsonify({"error": "No elements marked for engraving"}), 400
+
+    # Generate G-code
+    gcode = generate_gcode(engraving_elements)
+    
+    return jsonify({
+        "success": True,
+        "gcode": gcode,
+        "element_count": len(engraving_elements)
+    })
+
+
 @app.route("/export_gcode", methods=["GET"])
 def export_gcode():
     """Export G-code for the current design"""
@@ -677,8 +713,8 @@ def find_element_at_click():
                 distance = math.sqrt(
                     (actual_x - center_x) ** 2 + (actual_y - center_y) ** 2
                 )
-                # Use circle radius as tolerance
-                tolerance = max(radius * 0.5, 3.0)
+                # Use circle radius as tolerance - increased for easier selection
+                tolerance = max(radius * 0.8, 8.0)
                 if distance <= tolerance and distance < closest_distance:
                     closest_distance = distance
                     closest_element_id = element_id
@@ -689,7 +725,7 @@ def find_element_at_click():
                     p1 = points[i]
                     p2 = points[i + 1]
                     distance = point_to_line_distance((actual_x, actual_y), p1, p2)
-                    tolerance = 2.0  # 2mm tolerance for lines
+                    tolerance = 6.0  # 6mm tolerance for lines - increased for easier selection
                     if distance <= tolerance and distance < closest_distance:
                         closest_distance = distance
                         closest_element_id = element_id
