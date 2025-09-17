@@ -394,6 +394,8 @@ def upload_file():
             session_data["removed_elements"] = set()
             session_data["engraved_elements"] = set()
             session_data["origin_offset"] = (0.0, 0.0)
+            
+            print(f"DXF loaded: {len(session_data['original_points'])} original points, {len(session_data['current_points'])} current points")
 
             # Clean up temp file
             os.unlink(tmp_file.name)
@@ -963,6 +965,8 @@ def find_element_at_click():
             print(
                 f"ERROR: No current points. Session data: {len(session_data['original_points'])} original points"
             )
+            print(f"Session data keys: {list(session_data.keys())}")
+            print(f"Session data: {session_data}")
             return (
                 jsonify(
                     {"error": "No DXF file loaded. Please upload a DXF file first."}
@@ -1044,12 +1048,12 @@ def find_element_at_click():
         # This matches what's actually displayed in the image
         data_width = plot_max_x - plot_min_x
         data_height = plot_max_y - plot_min_y
-        
+
         if data_width == 0:
             data_width = 1
         if data_height == 0:
             data_height = 1
-        
+
         # Map click coordinates to plot bounds
         actual_x = plot_min_x + click_x * data_width
         actual_y = plot_min_y + click_y * data_height
