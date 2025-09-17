@@ -498,14 +498,18 @@ G0 X0 Y0 ; Return to origin</textarea>
         // Plot click handling for element selection
         function attachPlotClickListener() {
             const plotImage = document.getElementById('plotImage');
+            console.log('attachPlotClickListener called');
+            console.log('plotImage element:', plotImage);
             if (plotImage) {
-                console.log('Attaching click listener to plot image');
+                console.log('Plot image found, attaching click listener');
+                console.log('Image dimensions:', plotImage.width, plotImage.height);
+                console.log('Image display style:', plotImage.style.display);
                 // Remove any existing listener first
                 plotImage.removeEventListener('click', handlePlotClick);
                 plotImage.addEventListener('click', handlePlotClick);
                 console.log('Click listener attached successfully');
             } else {
-                console.log('Plot image element not found');
+                console.log('ERROR: Plot image element not found');
             }
         }
 
@@ -530,7 +534,7 @@ G0 X0 Y0 ; Return to origin</textarea>
             // The image should display the full plot area
             const normalizedX = x / rect.width;
             const normalizedY = y / rect.height;
-            
+
             console.log('Direct mapping - no scaling');
             console.log('Normalized coordinates:', normalizedX, normalizedY);
 
@@ -1018,7 +1022,7 @@ G0 X0 Y0 ; Return to origin</textarea>
             // The image should display the full plot area
             const normalizedX = x / rect.width;
             const normalizedY = y / rect.height;
-            
+
             console.log('Direct mapping - no scaling');
             console.log('Normalized coordinates:', normalizedX, normalizedY);
 
@@ -1090,8 +1094,11 @@ G0 X0 Y0 ; Return to origin</textarea>
                 plotImage.src = 'data:image/png;base64,' + imageData;
                 plotImage.style.display = 'block';
                 noFile.style.display = 'none';
-                // Attach click listener when image is displayed
-                attachPlotClickListener();
+                // Attach click listener after image loads
+                plotImage.onload = function() {
+                    console.log('Image loaded, attaching click listener');
+                    attachPlotClickListener();
+                };
             } else {
                 currentPlotImage = null; // Clear currentPlotImage
                 plotImage.style.display = 'none';
