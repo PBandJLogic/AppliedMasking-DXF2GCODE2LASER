@@ -523,11 +523,23 @@ G0 X0 Y0 ; Return to origin</textarea>
             const y = e.clientY - rect.top;
 
             console.log('Click coordinates:', x, y);
-            console.log('Image dimensions:', rect.width, rect.height);
+            console.log('Image dimensions (displayed):', rect.width, rect.height);
+            console.log('Image dimensions (natural):', e.target.naturalWidth, e.target.naturalHeight);
 
-            // Convert to normalized coordinates (0-1)
-            const normalizedX = x / rect.width;
-            const normalizedY = y / rect.height;
+            // Account for image scaling - use natural dimensions for accurate coordinate mapping
+            const scaleX = e.target.naturalWidth / rect.width;
+            const scaleY = e.target.naturalHeight / rect.height;
+            
+            // Scale the click coordinates to match the natural image dimensions
+            const scaledX = x * scaleX;
+            const scaledY = y * scaleY;
+            
+            console.log('Scale factors:', scaleX, scaleY);
+            console.log('Scaled coordinates:', scaledX, scaledY);
+
+            // Convert to normalized coordinates (0-1) using natural dimensions
+            const normalizedX = scaledX / e.target.naturalWidth;
+            const normalizedY = scaledY / e.target.naturalHeight;
 
             console.log('Normalized coordinates:', normalizedX, normalizedY);
 
@@ -998,11 +1010,23 @@ G0 X0 Y0 ; Return to origin</textarea>
             const y = e.clientY - rect.top;
 
             console.log('Click coordinates:', x, y);
-            console.log('Image dimensions:', rect.width, rect.height);
+            console.log('Image dimensions (displayed):', rect.width, rect.height);
+            console.log('Image dimensions (natural):', e.target.naturalWidth, e.target.naturalHeight);
 
-            // Convert to normalized coordinates (0-1)
-            const normalizedX = x / rect.width;
-            const normalizedY = y / rect.height;
+            // Account for image scaling - use natural dimensions for accurate coordinate mapping
+            const scaleX = e.target.naturalWidth / rect.width;
+            const scaleY = e.target.naturalHeight / rect.height;
+            
+            // Scale the click coordinates to match the natural image dimensions
+            const scaledX = x * scaleX;
+            const scaledY = y * scaleY;
+            
+            console.log('Scale factors:', scaleX, scaleY);
+            console.log('Scaled coordinates:', scaledX, scaledY);
+
+            // Convert to normalized coordinates (0-1) using natural dimensions
+            const normalizedX = scaledX / e.target.naturalWidth;
+            const normalizedY = scaledY / e.target.naturalHeight;
 
             console.log('Normalized coordinates:', normalizedX, normalizedY);
 
