@@ -533,7 +533,7 @@ G0 X0 Y0 ; Return to origin</textarea>
             // Direct mapping - the image should display the full plot area
             const normalizedX = x / rect.width;
             const normalizedY = y / rect.height;
-            
+
             console.log('Direct mapping - no scaling');
             console.log('Image dimensions:', rect.width, rect.height);
             console.log('Natural dimensions:', e.target.naturalWidth, e.target.naturalHeight);
@@ -546,8 +546,6 @@ G0 X0 Y0 ; Return to origin</textarea>
             console.log('  - Raw click:', x, y);
             console.log('  - Displayed size:', rect.width, rect.height);
             console.log('  - Natural size:', e.target.naturalWidth, e.target.naturalHeight);
-            console.log('  - Scale factors:', scaleX.toFixed(3), scaleY.toFixed(3));
-            console.log('  - Scaled click:', scaledX.toFixed(3), scaledY.toFixed(3));
             console.log('  - Normalized:', normalizedX.toFixed(3), normalizedY.toFixed(3));
 
             // Send click coordinates to server to find closest element
@@ -1023,7 +1021,7 @@ G0 X0 Y0 ; Return to origin</textarea>
             // Direct mapping - the image should display the full plot area
             const normalizedX = x / rect.width;
             const normalizedY = y / rect.height;
-            
+
             console.log('Direct mapping - no scaling');
             console.log('Image dimensions:', rect.width, rect.height);
             console.log('Natural dimensions:', e.target.naturalWidth, e.target.naturalHeight);
@@ -1036,8 +1034,6 @@ G0 X0 Y0 ; Return to origin</textarea>
             console.log('  - Raw click:', x, y);
             console.log('  - Displayed size:', rect.width, rect.height);
             console.log('  - Natural size:', e.target.naturalWidth, e.target.naturalHeight);
-            console.log('  - Scale factors:', scaleX.toFixed(3), scaleY.toFixed(3));
-            console.log('  - Scaled click:', scaledX.toFixed(3), scaledY.toFixed(3));
             console.log('  - Normalized:', normalizedX.toFixed(3), normalizedY.toFixed(3));
 
             // Send click coordinates to server to find closest element
