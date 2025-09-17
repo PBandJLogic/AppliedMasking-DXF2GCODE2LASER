@@ -941,10 +941,22 @@ def find_element_at_click():
     """Find the closest element to a click position"""
     try:
         data = request.get_json()
+        print(f"Click request data: {data}")
+        
+        if not data:
+            print("ERROR: No JSON data received")
+            return jsonify({"error": "No data received"}), 400
+            
+        if "x" not in data or "y" not in data:
+            print(f"ERROR: Missing x or y coordinates in data: {data}")
+            return jsonify({"error": "Missing x or y coordinates"}), 400
+            
         click_x = data["x"]
         click_y = data["y"]
+        print(f"Processing click at: ({click_x}, {click_y})")
 
         if not session_data["current_points"]:
+            print(f"ERROR: No current points. Session data: {len(session_data['original_points'])} original points")
             return jsonify({"error": "No DXF file loaded"}), 400
 
         # Convert normalized coordinates to actual plot coordinates
