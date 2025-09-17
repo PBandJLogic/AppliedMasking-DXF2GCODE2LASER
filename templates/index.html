@@ -429,15 +429,23 @@
         function attachPlotClickListener() {
             const plotImage = document.getElementById('plotImage');
             if (plotImage) {
+                console.log('Attaching click listener to plot image');
                 // Remove any existing listener first
                 plotImage.removeEventListener('click', handlePlotClick);
                 plotImage.addEventListener('click', handlePlotClick);
+                console.log('Click listener attached successfully');
+            } else {
+                console.log('Plot image element not found');
             }
         }
 
         function handlePlotClick(e) {
+            console.log('Plot click handler called');
             if (currentPlotImage) {
+                console.log('Current plot image exists, calling selectElementAtClick');
                 selectElementAtClick(e);
+            } else {
+                console.log('No current plot image available');
             }
         }
 

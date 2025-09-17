@@ -440,7 +440,17 @@ def mark_engraving():
 
         # If no specific elements provided, use selected elements
         if not element_ids:
-            element_ids = list(session_data["selected_elements"])
+            # Check if this is a "select all" request (empty array from frontend)
+            if data.get("element_ids") == []:
+                # Mark all non-removed elements for engraving
+                all_element_ids = set()
+                for x, y, radius, geom_type, element_id in session_data["current_points"]:
+                    if element_id not in session_data["removed_elements"]:
+                        all_element_ids.add(element_id)
+                element_ids = list(all_element_ids)
+            else:
+                # Use currently selected elements
+                element_ids = list(session_data["selected_elements"])
 
         # Mark elements for engraving
         for element_id in element_ids:
