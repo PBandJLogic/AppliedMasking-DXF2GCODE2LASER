@@ -125,6 +125,11 @@
             flex: 1;
             width: calc(50% - 4px);
         }
+        
+        .btn-multiline {
+            font-size: 14px;
+            line-height: 1.2;
+        }
 
         .btn:hover {
             background-color: #2980b9;
@@ -246,6 +251,7 @@
             cursor: pointer;
             text-align: center;
             transition: background-color 0.3s;
+            font-size: 14px;
         }
 
         .file-input-label:hover {
@@ -311,9 +317,9 @@
                 <div class="btn-row">
                     <div class="file-input-wrapper btn-half">
                         <input type="file" id="fileInput" accept=".dxf" />
-                        <label for="fileInput" class="file-input-label">Load DXF</label>
+                        <label for="fileInput" class="file-input-label">Load DXF File</label>
                     </div>
-                    <button class="btn btn-success btn-half" onclick="exportGcode()">Export<br>G-code</button>
+                    <button class="btn btn-success btn-half btn-multiline" onclick="exportGcode()">Export<br>G-code</button>
                 </div>
             </div>
 
