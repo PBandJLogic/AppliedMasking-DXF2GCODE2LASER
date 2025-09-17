@@ -872,227 +872,233 @@ G0 X0 Y0 ; Return to origin</textarea>
                             <span style="color: #666;">→ Arrows show toolpath direction</span>
                         </div>
                         <div style="margin: 10px 0;">
-                            <button class="btn" onclick="zoomToolpath(1.2)">🔍+</button>
-                            <button class="btn" onclick="zoomToolpath(1.0)">Reset</button>
-                            <button class="btn" onclick="zoomToolpath(0.8)">🔍-</button>
+                            <button class="btn" onclick="window.opener.zoomToolpathFromPreview(this, 1.2)">🔍+</button>
+                            <button class="btn" onclick="window.opener.zoomToolpathFromPreview(this, 1.0)">Reset</button>
+                            <button class="btn" onclick="window.opener.zoomToolpathFromPreview(this, 0.8)">🔍-</button>
                             <span style="margin-left: 10px;">Zoom: <span id="toolpathZoomLevel">100%</span></span>
                         </div>
                         <div class="plot-container" style="overflow: auto; max-height: 500px;">
                             <img id="toolpathImage" src="data:image/png;base64,${plotImage}" alt="G-code Toolpath" style="transition: transform 0.2s; cursor: grab;" />
                         </div>
                         <button class="btn" onclick="window.close()">Close Toolpath</button>
-                        
-                        <script>
-                            let currentToolpathZoom = 1.0;
-                            
-                            function zoomToolpath(factor) {
-                                const toolpathImage = document.getElementById('toolpathImage');
-                                const zoomLevel = document.getElementById('toolpathZoomLevel');
-                                
-                                if (factor === 1.0) {
-                                    currentToolpathZoom = 1.0;
-                                } else {
-                                    currentToolpathZoom *= factor;
-                                    currentToolpathZoom = Math.max(0.1, Math.min(currentToolpathZoom, 5.0));
-                                }
-                                
-                                toolpathImage.style.transform = 'scale(' + currentToolpathZoom + ')';
-                                zoomLevel.textContent = Math.round(currentToolpathZoom * 100) + '%';
-                            }
-    </script>
     </div>
 </body>
 
 </html>
 `);
-console.log('Toolpath window content written');
-toolpathWindow.document.close();
-console.log('Toolpath window document closed');
-}
+            console.log('Toolpath window content written');
+            toolpathWindow.document.close();
+            console.log('Toolpath window document closed');
+        }
 
-function exportGcode() {
-hideMessages();
+        function exportGcode() {
+            hideMessages();
 
-fetch('/export_gcode')
-.then(response => {
-if (response.ok) {
-return response.blob();
-} else {
-return response.json().then(data => {
-throw new Error(data.error || 'Failed to export G-code'); // Fixed
-});
-}
-})
-.then(blob => {
-const url = window.URL.createObjectURL(blob);
-const a = document.createElement('a');
-a.href = url;
-a.download = `dxf_gcode_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.nc`;
-document.body.appendChild(a);
-a.click();
-window.URL.revokeObjectURL(url);
-document.body.removeChild(a);
-showSuccess('G-code exported successfully!');
-})
-.catch(error => {
-showError('Error exporting G-code: ' + error.message);
-});
-}
+            fetch('/export_gcode')
+                .then(response => {
+                    if (response.ok) {
+                        return response.blob();
+                    } else {
+                        return response.json().then(data => {
+                            throw new Error(data.error || 'Failed to export G-code'); // Fixed
+                        });
+                    }
+                })
+                .then(blob => {
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `dxf_gcode_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.nc`;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                    showSuccess('G-code exported successfully!');
+                })
+                .catch(error => {
+                    showError('Error exporting G-code: ' + error.message);
+                });
+        }
 
-function selectElementAtClick(e) {
-console.log('Click detected on plot image');
+        function selectElementAtClick(e) {
+            console.log('Click detected on plot image');
 
-// Get click coordinates relative to the image
-const rect = e.target.getBoundingClientRect();
-const x = e.clientX - rect.left;
-const y = e.clientY - rect.top;
+            // Get click coordinates relative to the image
+            const rect = e.target.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
 
-console.log('Click coordinates:', x, y);
-console.log('Image dimensions:', rect.width, rect.height);
+            console.log('Click coordinates:', x, y);
+            console.log('Image dimensions:', rect.width, rect.height);
 
-// Convert to normalized coordinates (0-1)
-const normalizedX = x / rect.width;
-const normalizedY = y / rect.height;
+            // Convert to normalized coordinates (0-1)
+            const normalizedX = x / rect.width;
+            const normalizedY = y / rect.height;
 
-console.log('Normalized coordinates:', normalizedX, normalizedY);
+            console.log('Normalized coordinates:', normalizedX, normalizedY);
 
-// Send click coordinates to server to find closest element
-fetch('/find_element_at_click', {
-method: 'POST',
-headers: {
-'Content-Type': 'application/json',
-},
-body: JSON.stringify({
-x: normalizedX,
-y: normalizedY
-})
-})
-.then(response => response.json())
-.then(data => {
-console.log('Server response:', data);
-if (data.success && data.element_id) {
-console.log('Element found:', data.element_id, 'Selected:', data.selected);
-// Update local selection to match server
-if (data.selected) {
-selectedElements.add(data.element_id);
-} else {
-selectedElements.delete(data.element_id);
-}
-updateSelectedInfo();
-// Refresh the plot to show selection
-refreshPlot();
-} else if (!data.success) {
-console.log('No element found at click position:', data.message);
-}
-})
-.catch(error => {
-console.error('Error selecting element:', error);
-});
-}
+            // Send click coordinates to server to find closest element
+            fetch('/find_element_at_click', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    x: normalizedX,
+                    y: normalizedY
+                })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Server response:', data);
+                    if (data.success && data.element_id) {
+                        console.log('Element found:', data.element_id, 'Selected:', data.selected);
+                        // Update local selection to match server
+                        if (data.selected) {
+                            selectedElements.add(data.element_id);
+                        } else {
+                            selectedElements.delete(data.element_id);
+                        }
+                        updateSelectedInfo();
+                        // Refresh the plot to show selection
+                        refreshPlot();
+                    } else if (!data.success) {
+                        console.log('No element found at click position:', data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error selecting element:', error);
+                });
+        }
 
-function refreshPlot() {
-if (!currentPlotImage) return;
+        function refreshPlot() {
+            if (!currentPlotImage) return;
 
-fetch('/get_plot')
-.then(response => response.json())
-.then(data => {
-if (data.success) {
-updatePlot(data.plot_image);
-}
-})
-.catch(error => {
-console.error('Error refreshing plot:', error);
-});
-}
+            fetch('/get_plot')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        updatePlot(data.plot_image);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error refreshing plot:', error);
+                });
+        }
 
-function updatePlot(imageData) {
-const plotImage = document.getElementById('plotImage');
-const plotContainer = document.getElementById('dxfPlotContainer');
-const noFile = document.getElementById('noFile');
-const zoomControls = document.getElementById('zoomControls');
+        function updatePlot(imageData) {
+            const plotImage = document.getElementById('plotImage');
+            const plotContainer = document.getElementById('dxfPlotContainer');
+            const noFile = document.getElementById('noFile');
+            const zoomControls = document.getElementById('zoomControls');
 
-if (imageData) {
-currentPlotImage = imageData; // Update currentPlotImage
-plotImage.src = 'data:image/png;base64,' + imageData;
-plotContainer.style.display = 'block';
-zoomControls.style.display = 'flex';
-noFile.style.display = 'none';
-// Reset zoom
-currentDxfZoom = 1.0;
-plotImage.style.transform = 'scale(1.0)';
-document.getElementById('zoomLevel').textContent = '100%';
-// Attach click listener when image is displayed
-attachPlotClickListener();
-} else {
-currentPlotImage = null; // Clear currentPlotImage
-plotContainer.style.display = 'none';
-zoomControls.style.display = 'none';
-noFile.style.display = 'block';
-}
-}
+            if (imageData) {
+                currentPlotImage = imageData; // Update currentPlotImage
+                plotImage.src = 'data:image/png;base64,' + imageData;
+                plotContainer.style.display = 'block';
+                zoomControls.style.display = 'flex';
+                noFile.style.display = 'none';
+                // Reset zoom
+                currentDxfZoom = 1.0;
+                plotImage.style.transform = 'scale(1.0)';
+                document.getElementById('zoomLevel').textContent = '100%';
+                // Attach click listener when image is displayed
+                attachPlotClickListener();
+            } else {
+                currentPlotImage = null; // Clear currentPlotImage
+                plotContainer.style.display = 'none';
+                zoomControls.style.display = 'none';
+                noFile.style.display = 'block';
+            }
+        }
 
-function updateStatistics(stats) {
-document.getElementById('totalElements').textContent = stats.total_elements;
-document.getElementById('removedCount').textContent = stats.removed;
-document.getElementById('engravedCount').textContent = stats.engraved;
-document.getElementById('remainingCount').textContent = stats.remaining;
-document.getElementById('originOffset').textContent = `(${stats.origin_offset[0]}, ${stats.origin_offset[1]})`;
-}
+        function updateStatistics(stats) {
+            document.getElementById('totalElements').textContent = stats.total_elements;
+            document.getElementById('removedCount').textContent = stats.removed;
+            document.getElementById('engravedCount').textContent = stats.engraved;
+            document.getElementById('remainingCount').textContent = stats.remaining;
+            document.getElementById('originOffset').textContent = `(${stats.origin_offset[0]}, ${stats.origin_offset[1]})`;
+        }
 
-function updateSelectedInfo() {
-const selectedInfo = document.getElementById('selectedInfo');
-if (selectedElements.size === 0) {
-selectedInfo.textContent = 'No elements selected';
-} else {
-selectedInfo.textContent = `${selectedElements.size} element(s) selected`;
-}
-}
+        function updateSelectedInfo() {
+            const selectedInfo = document.getElementById('selectedInfo');
+            if (selectedElements.size === 0) {
+                selectedInfo.textContent = 'No elements selected';
+            } else {
+                selectedInfo.textContent = `${selectedElements.size} element(s) selected`;
+            }
+        }
 
-function showLoading(show) {
-document.getElementById('loading').style.display = show ? 'block' : 'none';
-}
+        function showLoading(show) {
+            document.getElementById('loading').style.display = show ? 'block' : 'none';
+        }
 
-function showError(message) {
-const errorDiv = document.getElementById('errorMessage');
-errorDiv.textContent = message;
-errorDiv.style.display = 'block';
-setTimeout(() => {
-errorDiv.style.display = 'none';
-}, 5000);
-}
+        function showError(message) {
+            const errorDiv = document.getElementById('errorMessage');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            setTimeout(() => {
+                errorDiv.style.display = 'none';
+            }, 5000);
+        }
 
-function showSuccess(message) {
-const successDiv = document.getElementById('successMessage');
-successDiv.textContent = message;
-successDiv.style.display = 'block';
-setTimeout(() => {
-successDiv.style.display = 'none';
-}, 3000);
-}
+        function showSuccess(message) {
+            const successDiv = document.getElementById('successMessage');
+            successDiv.textContent = message;
+            successDiv.style.display = 'block';
+            setTimeout(() => {
+                successDiv.style.display = 'none';
+            }, 3000);
+        }
 
-function hideMessages() {
-document.getElementById('errorMessage').style.display = 'none';
-document.getElementById('successMessage').style.display = 'none';
-}
+        function hideMessages() {
+            document.getElementById('errorMessage').style.display = 'none';
+            document.getElementById('successMessage').style.display = 'none';
+        }
 
-function zoomDxfPlot(factor) {
-const plotImage = document.getElementById('plotImage');
-const zoomLevel = document.getElementById('zoomLevel');
+        function zoomDxfPlot(factor) {
+            const plotImage = document.getElementById('plotImage');
+            const zoomLevel = document.getElementById('zoomLevel');
+            
+            if (factor === 1.0) {
+                // Reset zoom
+                currentDxfZoom = 1.0;
+            } else {
+                // Apply zoom factor
+                currentDxfZoom *= factor;
+                // Limit zoom range
+                currentDxfZoom = Math.max(0.1, Math.min(currentDxfZoom, 5.0));
+            }
+            
+            plotImage.style.transform = `scale(${currentDxfZoom})`;
+            zoomLevel.textContent = Math.round(currentDxfZoom * 100) + '%';
+        }
 
-if (factor === 1.0) {
-// Reset zoom
-currentDxfZoom = 1.0;
-} else {
-// Apply zoom factor
-currentDxfZoom *= factor;
-// Limit zoom range
-currentDxfZoom = Math.max(0.1, Math.min(currentDxfZoom, 5.0));
-}
-
-plotImage.style.transform = `scale(${currentDxfZoom})`;
-zoomLevel.textContent = Math.round(currentDxfZoom * 100) + '%';
-}
-</script>
+        function zoomToolpathFromPreview(buttonElement, factor) {
+            // Get the toolpath window document
+            const toolpathDoc = buttonElement.ownerDocument;
+            const toolpathImage = toolpathDoc.getElementById('toolpathImage');
+            const zoomLevel = toolpathDoc.getElementById('toolpathZoomLevel');
+            
+            // Initialize zoom if not set
+            if (!toolpathDoc.currentToolpathZoom) {
+                toolpathDoc.currentToolpathZoom = 1.0;
+            }
+            
+            if (factor === 1.0) {
+                // Reset zoom
+                toolpathDoc.currentToolpathZoom = 1.0;
+            } else {
+                // Apply zoom factor
+                toolpathDoc.currentToolpathZoom *= factor;
+                // Limit zoom range
+                toolpathDoc.currentToolpathZoom = Math.max(0.1, Math.min(toolpathDoc.currentToolpathZoom, 5.0));
+            }
+            
+            toolpathImage.style.transform = `scale(${toolpathDoc.currentToolpathZoom})`;
+            zoomLevel.textContent = Math.round(toolpathDoc.currentToolpathZoom * 100) + '%';
+        }
+    </script>
 </body>
 
 </html>

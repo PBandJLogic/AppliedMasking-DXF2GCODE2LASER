@@ -797,24 +797,24 @@ def create_gcode_toolpath_plot(gcode):
                 label="Positioning (G0)" if not positioning_labeled else "",
             )
             positioning_labeled = True
-            
+
             # Add arrow in the middle of the line segment
             mid_x = (start[0] + end[0]) / 2
             mid_y = (start[1] + end[1]) / 2
-            
+
             # Calculate arrow direction
             dx = end[0] - start[0]
             dy = end[1] - start[1]
             length = (dx**2 + dy**2) ** 0.5
-            
+
             if length > 0:
                 # Normalize direction vector
                 dx_norm = dx / length
                 dy_norm = dy / length
-                
+
                 # Arrow length (proportional to line length)
                 arrow_length = max(0.3, length * 0.15)
-                
+
                 # Draw arrow
                 ax.annotate(
                     "",
@@ -843,24 +843,24 @@ def create_gcode_toolpath_plot(gcode):
                 label="Engraving (G1)" if not engraving_labeled else "",
             )
             engraving_labeled = True
-            
+
             # Add arrow in the middle of the line segment
             mid_x = (start[0] + end[0]) / 2
             mid_y = (start[1] + end[1]) / 2
-            
+
             # Calculate arrow direction
             dx = end[0] - start[0]
             dy = end[1] - start[1]
             length = (dx**2 + dy**2) ** 0.5
-            
+
             if length > 0:
                 # Normalize direction vector
                 dx_norm = dx / length
                 dy_norm = dy / length
-                
+
                 # Arrow length (proportional to line length)
                 arrow_length = max(0.3, length * 0.15)
-                
+
                 # Draw arrow
                 ax.annotate(
                     "",
@@ -990,9 +990,7 @@ def find_element_at_click():
                     p1 = points[i]
                     p2 = points[i + 1]
                     distance = point_to_line_distance((actual_x, actual_y), p1, p2)
-                    tolerance = (
-                        6.0  # 6mm tolerance for lines - increased for easier selection
-                    )
+                    tolerance = 15.0  # 15mm tolerance for lines - much larger for easier selection
                     checked_elements.append(
                         f"Line {element_id}: p1=({p1[0]:.1f},{p1[1]:.1f}), p2=({p2[0]:.1f},{p2[1]:.1f}), distance={distance:.1f}, tolerance={tolerance:.1f}"
                     )
@@ -1001,10 +999,13 @@ def find_element_at_click():
                         closest_element_id = element_id
 
         print(f"Checked {len(checked_elements)} elements:")
-        for elem in checked_elements[:5]:  # Show first 5 for debugging
+        for elem in checked_elements:  # Show all elements for debugging
             print(f"  {elem}")
-        if len(checked_elements) > 5:
-            print(f"  ... and {len(checked_elements) - 5} more")
+        print(f"Total elements by type:")
+        circles = len([e for e in unique_elements.values() if e["geom_type"] == "CIRCLE"])
+        lines = len([e for e in unique_elements.values() if e["geom_type"] == "LINE"])
+        polylines = len([e for e in unique_elements.values() if e["geom_type"] == "LWPOLYLINE"])
+        print(f"  Circles: {circles}, Lines: {lines}, Polylines: {polylines}")
 
         print(
             f"Closest element: {closest_element_id}, distance: {closest_distance:.3f}"
