@@ -1040,9 +1040,19 @@ def find_element_at_click():
         if data_height == 0:
             data_height = 1
 
-        # Simple direct mapping using the same bounds as the plot
-        actual_x = plot_min_x + click_x * data_width
-        actual_y = plot_min_y + click_y * data_height
+        # Try using the data bounds instead of plot bounds
+        # The issue might be that the image shows the data bounds, not the plot bounds
+        data_width = max_x - min_x
+        data_height = max_y - min_y
+        
+        if data_width == 0:
+            data_width = 1
+        if data_height == 0:
+            data_height = 1
+        
+        # Map click coordinates to data bounds
+        actual_x = min_x + click_x * data_width
+        actual_y = min_y + click_y * data_height
 
         # Debug logging
         print(f"Click coordinates: normalized=({click_x:.3f}, {click_y:.3f})")
@@ -1055,10 +1065,10 @@ def find_element_at_click():
         print(f"Data width: {data_width:.3f}, Data height: {data_height:.3f}")
         print(f"Actual coordinates: ({actual_x:.3f}, {actual_y:.3f})")
         print(
-            f"Coordinate conversion: x = {plot_min_x:.3f} + {click_x:.3f} * {data_width:.3f} = {actual_x:.3f}"
+            f"Coordinate conversion: x = {min_x:.3f} + {click_x:.3f} * {data_width:.3f} = {actual_x:.3f}"
         )
         print(
-            f"Coordinate conversion: y = {plot_min_y:.3f} + {click_y:.3f} * {data_height:.3f} = {actual_y:.3f}"
+            f"Coordinate conversion: y = {min_y:.3f} + {click_y:.3f} * {data_height:.3f} = {actual_y:.3f}"
         )
 
         # Find best element with priority system
