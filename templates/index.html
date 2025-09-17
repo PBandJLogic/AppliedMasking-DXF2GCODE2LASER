@@ -724,8 +724,8 @@ showError('Error exporting G-code: ' + error.message);
 });
 }
 
-        function selectElementAtClick(e) {
-            console.log('Click detected on plot image');
+function selectElementAtClick(e) {
+console.log('Click detected on plot image');
 
 // Get click coordinates relative to the image
 const rect = e.target.getBoundingClientRect();
@@ -790,23 +790,23 @@ console.error('Error refreshing plot:', error);
 });
 }
 
-        function updatePlot(imageData) {
-            const plotImage = document.getElementById('plotImage');
-            const noFile = document.getElementById('noFile');
+function updatePlot(imageData) {
+const plotImage = document.getElementById('plotImage');
+const noFile = document.getElementById('noFile');
 
-            if (imageData) {
-                currentPlotImage = imageData; // Update currentPlotImage
-                plotImage.src = 'data:image/png;base64,' + imageData;
-                plotImage.style.display = 'block';
-                noFile.style.display = 'none';
-                // Attach click listener when image is displayed
-                attachPlotClickListener();
-            } else {
-                currentPlotImage = null; // Clear currentPlotImage
-                plotImage.style.display = 'none';
-                noFile.style.display = 'block';
-            }
-        }
+if (imageData) {
+currentPlotImage = imageData; // Update currentPlotImage
+plotImage.src = 'data:image/png;base64,' + imageData;
+plotImage.style.display = 'block';
+noFile.style.display = 'none';
+// Attach click listener when image is displayed
+attachPlotClickListener();
+} else {
+currentPlotImage = null; // Clear currentPlotImage
+plotImage.style.display = 'none';
+noFile.style.display = 'block';
+}
+}
 
 function updateStatistics(stats) {
 document.getElementById('totalElements').textContent = stats.total_elements;
