@@ -1,5 +1,7 @@
 # DXF2TEMPLATE - Laser Engraving G-code Generator
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 A web application that converts DXF files to G-code for laser engraving machines. All elements are automatically processed for engraving with configurable settings.
 
 ## Features
@@ -73,5 +75,18 @@ This application is configured for Replit deployment with the following files:
 ├── .gitignore          # Git ignore file
 ├── templates/
 │   └── index.html      # Web interface
+├── LICENSE             # MIT License
 └── README.md           # This file
 ```
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## Support
+
+If you find this project helpful, please consider giving it a star! ⭐
