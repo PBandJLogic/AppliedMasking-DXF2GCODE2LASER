@@ -1067,7 +1067,7 @@ def find_element_at_click():
                 distance_to_circumference = abs(distance_to_center - radius)
                 # Use tolerance for circumference selection
                 tolerance = (
-                    5.0  # 5mm tolerance for circle circumference - precise selection
+                    50.0  # 50mm tolerance for circle circumference - temporary for debugging
                 )
                 checked_elements.append(
                     f"Circle {element_id}: center=({center_x:.1f},{center_y:.1f}), radius={radius:.1f}, distance_to_circumference={distance_to_circumference:.1f}, tolerance={tolerance:.1f}"
@@ -1081,7 +1081,7 @@ def find_element_at_click():
                     p1 = points[i]
                     p2 = points[i + 1]
                     distance = point_to_line_distance((actual_x, actual_y), p1, p2)
-                    tolerance = 5.0  # 5mm tolerance for lines - precise selection
+                    tolerance = 50.0  # 50mm tolerance for lines - temporary for debugging
                     checked_elements.append(
                         f"Line {element_id}: p1=({p1[0]:.1f},{p1[1]:.1f}), p2=({p2[0]:.1f},{p2[1]:.1f}), distance={distance:.1f}, tolerance={tolerance:.1f}"
                     )
@@ -1175,7 +1175,9 @@ def find_element_at_click():
                 # Clear all selections and select only this element
                 session_data["selected_elements"].clear()
                 session_data["selected_elements"].add(closest_element_id)
-                print(f"Selected element {closest_element_id} (cleared previous selections)")
+                print(
+                    f"Selected element {closest_element_id} (cleared previous selections)"
+                )
 
             return jsonify(
                 {

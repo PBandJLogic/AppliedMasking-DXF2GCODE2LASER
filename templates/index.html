@@ -529,11 +529,11 @@ G0 X0 Y0 ; Return to origin</textarea>
             // Account for image scaling - use natural dimensions for accurate coordinate mapping
             const scaleX = e.target.naturalWidth / rect.width;
             const scaleY = e.target.naturalHeight / rect.height;
-            
+
             // Scale the click coordinates to match the natural image dimensions
             const scaledX = x * scaleX;
             const scaledY = y * scaleY;
-            
+
             console.log('Scale factors:', scaleX, scaleY);
             console.log('Scaled coordinates:', scaledX, scaledY);
 
@@ -542,6 +542,7 @@ G0 X0 Y0 ; Return to origin</textarea>
             const normalizedY = scaledY / e.target.naturalHeight;
 
             console.log('Normalized coordinates:', normalizedX, normalizedY);
+            console.log('Sending to server:', {x: normalizedX, y: normalizedY});
 
             // Send click coordinates to server to find closest element
             fetch('/find_element_at_click', {
@@ -1016,11 +1017,11 @@ G0 X0 Y0 ; Return to origin</textarea>
             // Account for image scaling - use natural dimensions for accurate coordinate mapping
             const scaleX = e.target.naturalWidth / rect.width;
             const scaleY = e.target.naturalHeight / rect.height;
-            
+
             // Scale the click coordinates to match the natural image dimensions
             const scaledX = x * scaleX;
             const scaledY = y * scaleY;
-            
+
             console.log('Scale factors:', scaleX, scaleY);
             console.log('Scaled coordinates:', scaledX, scaledY);
 
@@ -1029,6 +1030,7 @@ G0 X0 Y0 ; Return to origin</textarea>
             const normalizedY = scaledY / e.target.naturalHeight;
 
             console.log('Normalized coordinates:', normalizedX, normalizedY);
+            console.log('Sending to server:', {x: normalizedX, y: normalizedY});
 
             // Send click coordinates to server to find closest element
             fetch('/find_element_at_click', {
