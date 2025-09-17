@@ -312,6 +312,42 @@ def create_plot_image(selected_elements=None):
                     alpha=alpha,
                 )
 
+    # Calculate axis limits to show all visible elements
+    if unique_elements:
+        all_x = []
+        all_y = []
+        
+        for element_id, element_info in unique_elements.items():
+            if element_id in session_data["removed_elements"]:
+                continue
+                
+            points = element_info["points"]
+            radius = element_info["radius"]
+            geom_type = element_info["geom_type"]
+            
+            for point in points:
+                all_x.append(point[0])
+                all_y.append(point[1])
+                
+            # For circles, extend bounds to include the full circle
+            if geom_type == "CIRCLE" and len(points) >= 1:
+                center_x, center_y = points[0]
+                all_x.extend([center_x - radius, center_x + radius])
+                all_y.extend([center_y - radius, center_y + radius])
+        
+        if all_x and all_y:
+            min_x, max_x = min(all_x), max(all_x)
+            min_y, max_y = min(all_y), max(all_y)
+            
+            # Add some padding (10% of range)
+            x_range = max_x - min_x
+            y_range = max_y - min_y
+            padding_x = max(x_range * 0.1, 10)  # At least 10mm padding
+            padding_y = max(y_range * 0.1, 10)  # At least 10mm padding
+            
+            ax.set_xlim(min_x - padding_x, max_x + padding_x)
+            ax.set_ylim(min_y - padding_y, max_y + padding_y)
+
     ax.set_aspect("equal")
 
     # Convert plot to base64 image
@@ -1103,14 +1139,16 @@ def clamp_to_workspace(x, y):
     """Clamp coordinates to workspace limits"""
     max_x = session_data["gcode_settings"]["max_workspace_x"]
     max_y = session_data["gcode_settings"]["max_workspace_y"]
-    
+
     clamped_x = max(0, min(x, max_x))
     clamped_y = max(0, min(y, max_y))
-    
+
     # Log if coordinates were clamped
     if x != clamped_x or y != clamped_y:
-        print(f"WARNING: Coordinates clamped from ({x:.3f}, {y:.3f}) to ({clamped_x:.3f}, {clamped_y:.3f})")
-    
+        print(
+            f"WARNING: Coordinates clamped from ({x:.3f}, {y:.3f}) to ({clamped_x:.3f}, {clamped_y:.3f})"
+        )
+
     return clamped_x, clamped_y
 
 
@@ -1134,7 +1172,7 @@ def generate_gcode(elements_by_id):
             if len(line_points) >= 2:
                 start_x, start_y = line_points[0]
                 end_x, end_y = line_points[1]
-                
+
                 # Clamp coordinates to workspace limits
                 start_x, start_y = clamp_to_workspace(start_x, start_y)
                 end_x, end_y = clamp_to_workspace(end_x, end_y)
