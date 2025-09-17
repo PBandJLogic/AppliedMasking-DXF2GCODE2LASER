@@ -428,20 +428,20 @@
 
         // Plot click handling for element selection - attach when image is loaded
         function attachPlotClickListener() {
-            const plotImage = document.getElementById('plotImage');
+            const plotImage = document.getElementById('plotImage`);
             if (plotImage) {
-                console.log('Attaching click listener to plot image');
+                console.log('Attaching click listener to plot image`);
                 // Remove any existing listener first
                 plotImage.removeEventListener('click', handlePlotClick);
                 plotImage.addEventListener('click', handlePlotClick);
-                console.log('Click listener attached successfully');
+                console.log('Click listener attached successfully`);
             } else {
-                console.log('Plot image element not found');
+                console.log('Plot image element not found`);
             }
         }
 
         function handlePlotClick(e) {
-            console.log('Plot click handler called');
+            console.log('Plot click handler called`);
             selectElementAtClick(e);
         }
 
@@ -463,9 +463,9 @@
                         currentPlotImage = data.plot_image;
                         updatePlot(data.plot_image);
                         updateStatistics(data.statistics);
-                        showSuccess('DXF file loaded successfully!');
+                        showSuccess('DXF file loaded successfully!`);
                     } else {
-                        showError(data.error || 'Failed to load DXF file');
+                        showError(data.error || 'Failed to load DXF file`);
                     }
                 })
                 .catch(error => {
@@ -495,9 +495,9 @@
                     if (data.success) {
                         updatePlot(data.plot_image);
                         updateStatistics(data.statistics);
-                        showSuccess('Offset applied successfully!');
+                        showSuccess('Offset applied successfully!`);
                     } else {
-                        showError(data.error || 'Failed to apply offset');
+                        showError(data.error || 'Failed to apply offset`);
                     }
                 })
                 .catch(error => {
@@ -507,7 +507,7 @@
 
         function markEngraving() {
             if (selectedElements.size === 0) {
-                showError('Please select elements first');
+                showError('Please select elements first`);
                 return;
             }
 
@@ -527,9 +527,9 @@
                         updateStatistics(data.statistics);
                         selectedElements.clear();
                         updateSelectedInfo();
-                        showSuccess('Elements marked for engraving!');
+                        showSuccess('Elements marked for engraving!`);
                     } else {
-                        showError(data.error || 'Failed to mark for engraving');
+                        showError(data.error || 'Failed to mark for engraving`);
                     }
                 })
                 .catch(error => {
@@ -539,7 +539,7 @@
 
         function removeElements() {
             if (selectedElements.size === 0) {
-                showError('Please select elements first');
+                showError('Please select elements first`);
                 return;
             }
 
@@ -559,9 +559,9 @@
                         updateStatistics(data.statistics);
                         selectedElements.clear();
                         updateSelectedInfo();
-                        showSuccess('Elements removed!');
+                        showSuccess('Elements removed!`);
                     } else {
-                        showError(data.error || 'Failed to remove elements');
+                        showError(data.error || 'Failed to remove elements`);
                     }
                 })
                 .catch(error => {
@@ -588,9 +588,9 @@
                         updateStatistics(data.statistics);
                         selectedElements.clear();
                         updateSelectedInfo();
-                        showSuccess('All elements marked for engraving!');
+                        showSuccess('All elements marked for engraving!`);
                     } else {
-                        showError(data.error || 'Failed to mark all for engraving');
+                        showError(data.error || 'Failed to mark all for engraving`);
                     }
                 })
                 .catch(error => {
@@ -613,9 +613,9 @@
                         updateSelectedInfo();
                         document.getElementById('xOffset').value = '0.0';
                         document.getElementById('yOffset').value = '0.0';
-                        showSuccess('All selections and modifications reset!');
+                        showSuccess('All selections and modifications reset!`);
                     } else {
-                        showError(data.error || 'Failed to reset');
+                        showError(data.error || 'Failed to reset`);
                     }
                 })
                 .catch(error => {
@@ -632,7 +632,7 @@
                     if (data.success) {
                         showGcodePreview(data.gcode, data.element_count);
                     } else {
-                        showError(data.error || 'Failed to preview G-code');
+                        showError(data.error || 'Failed to preview G-code`);
                     }
                 })
                 .catch(error => {
@@ -642,7 +642,7 @@
 
         function showGcodePreview(gcode, elementCount) {
             // Create preview window
-            const previewWindow = window.open('', 'gcodePreview', 'width=800,height=600,scrollbars=yes,resizable=yes');
+            const previewWindow = window.open('', 'gcodePreview', 'width=800,height=600,scrollbars=yes,resizable=yes`);
 
             previewWindow.document.write(`
                 <!DOCTYPE html>
@@ -679,7 +679,7 @@
                         function downloadGcode() {
                             const blob = new Blob([\`${gcode}\`], { type: 'text/plain' });
                             const url = window.URL.createObjectURL(blob);
-                            const a = document.createElement('a');
+                            const a = document.createElement('a`);
                             a.href = url;
                             a.download = 'dxf_gcode_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.nc';
                             document.body.appendChild(a);
@@ -704,20 +704,20 @@ if (response.ok) {
 return response.blob();
 } else {
 return response.json().then(data => {
-throw new Error(data.error || 'Failed to export G-code');
+throw new Error(data.error || 'Failed to export G-code`);
 });
 }
 })
 .then(blob => {
 const url = window.URL.createObjectURL(blob);
-const a = document.createElement('a');
+const a = document.createElement('a`);
 a.href = url;
 a.download = `dxf_gcode_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.nc`;
 document.body.appendChild(a);
 a.click();
 window.URL.revokeObjectURL(url);
 document.body.removeChild(a);
-showSuccess('G-code exported successfully!');
+showSuccess('G-code exported successfully!`);
 })
 .catch(error => {
 showError('Error exporting G-code: ' + error.message);
@@ -725,7 +725,7 @@ showError('Error exporting G-code: ' + error.message);
 }
 
 function selectElementAtClick(e) {
-console.log('Click detected on plot image');
+console.log('Click detected on plot image`);
 
 // Get click coordinates relative to the image
 const rect = e.target.getBoundingClientRect();
@@ -791,8 +791,8 @@ console.error('Error refreshing plot:', error);
 }
 
 function updatePlot(imageData) {
-const plotImage = document.getElementById('plotImage');
-const noFile = document.getElementById('noFile');
+const plotImage = document.getElementById('plotImage`);
+const noFile = document.getElementById('noFile`);
 
 if (imageData) {
 currentPlotImage = imageData; // Update currentPlotImage
@@ -817,7 +817,7 @@ document.getElementById('originOffset').textContent = `(${stats.origin_offset[0]
 }
 
 function updateSelectedInfo() {
-const selectedInfo = document.getElementById('selectedInfo');
+const selectedInfo = document.getElementById('selectedInfo`);
 if (selectedElements.size === 0) {
 selectedInfo.textContent = 'No elements selected';
 } else {
@@ -830,7 +830,7 @@ document.getElementById('loading').style.display = show ? 'block' : 'none';
 }
 
 function showError(message) {
-const errorDiv = document.getElementById('errorMessage');
+const errorDiv = document.getElementById('errorMessage`);
 errorDiv.textContent = message;
 errorDiv.style.display = 'block';
 setTimeout(() => {
@@ -839,7 +839,7 @@ errorDiv.style.display = 'none';
 }
 
 function showSuccess(message) {
-const successDiv = document.getElementById('successMessage');
+const successDiv = document.getElementById('successMessage`);
 successDiv.textContent = message;
 successDiv.style.display = 'block';
 setTimeout(() => {
