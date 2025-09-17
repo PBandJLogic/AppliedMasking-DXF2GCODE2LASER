@@ -30,6 +30,7 @@ session_data = {
     "origin_offset": (0.0, 0.0),
     "removed_elements": set(),
     "engraved_elements": set(),
+    "selected_elements": set(),
     "element_counter": 0,
     "element_data": {},
     "gcode_settings": {
@@ -205,8 +206,11 @@ def extract_geometry(file_path):
     return all_points
 
 
-def create_plot_image():
+def create_plot_image(selected_elements=None):
     """Create matplotlib plot and return as base64 image"""
+    if selected_elements is None:
+        selected_elements = set()
+        
     fig, ax = plt.subplots(figsize=(12, 8), dpi=100)
     ax.set_xlabel("X (mm)")
     ax.set_ylabel("Y (mm)")
@@ -234,9 +238,15 @@ def create_plot_image():
         points = element_info["points"]
 
         is_engraved = element_id in session_data["engraved_elements"]
+        is_selected = element_id in selected_elements
 
         # Choose colors and styles
-        if is_engraved:
+        if is_selected:
+            line_color = "lime"
+            marker_color = "lime"
+            line_width = 4
+            alpha = 1.0
+        elif is_engraved:
             line_color = "red"
             marker_color = "red"
             line_width = 3
@@ -258,11 +268,12 @@ def create_plot_image():
                     linewidth=line_width,
                     alpha=alpha,
                 )
+                marker_size = 15 if is_selected else 5
                 ax.scatter(
                     x_coords,
                     y_coords,
                     c=marker_color,
-                    s=5,
+                    s=marker_size,
                     marker="o",
                     alpha=alpha,
                 )
@@ -291,11 +302,12 @@ def create_plot_image():
                     linewidth=line_width,
                     alpha=alpha,
                 )
+                marker_size = 15 if is_selected else 5
                 ax.scatter(
                     x_coords,
                     y_coords,
                     c=marker_color,
-                    s=5,
+                    s=marker_size,
                     marker="s",
                     alpha=alpha,
                 )
@@ -425,14 +437,21 @@ def mark_engraving():
     try:
         data = request.get_json()
         element_ids = data.get("element_ids", [])
+        
+        # If no specific elements provided, use selected elements
+        if not element_ids:
+            element_ids = list(session_data["selected_elements"])
 
         # Mark elements for engraving
         for element_id in element_ids:
             if element_id not in session_data["removed_elements"]:
                 session_data["engraved_elements"].add(element_id)
+        
+        # Clear selection after marking
+        session_data["selected_elements"].clear()
 
         # Generate updated plot
-        plot_image = create_plot_image()
+        plot_image = create_plot_image(session_data["selected_elements"])
 
         # Calculate statistics
         total_elements = len(session_data["original_points"])
@@ -464,14 +483,21 @@ def remove_elements():
     try:
         data = request.get_json()
         element_ids = data.get("element_ids", [])
+        
+        # If no specific elements provided, use selected elements
+        if not element_ids:
+            element_ids = list(session_data["selected_elements"])
 
         # Remove elements
         for element_id in element_ids:
             session_data["removed_elements"].add(element_id)
             session_data["engraved_elements"].discard(element_id)
+        
+        # Clear selection after removing
+        session_data["selected_elements"].clear()
 
         # Generate updated plot
-        plot_image = create_plot_image()
+        plot_image = create_plot_image(session_data["selected_elements"])
 
         # Calculate statistics
         total_elements = len(session_data["original_points"])
@@ -502,11 +528,12 @@ def reset():
     """Reset all selections and modifications"""
     session_data["removed_elements"] = set()
     session_data["engraved_elements"] = set()
+    session_data["selected_elements"] = set()
     session_data["origin_offset"] = (0.0, 0.0)
 
     if session_data["original_points"]:
         session_data["current_points"] = session_data["original_points"].copy()
-        plot_image = create_plot_image()
+        plot_image = create_plot_image(session_data["selected_elements"])
     else:
         plot_image = None
 
@@ -569,6 +596,163 @@ def export_gcode():
     return send_file(
         tmp_file_path, as_attachment=True, download_name=filename, mimetype="text/plain"
     )
+
+
+@app.route("/find_element_at_click", methods=["POST"])
+def find_element_at_click():
+    """Find the closest element to a click position"""
+    try:
+        data = request.get_json()
+        click_x = data["x"]
+        click_y = data["y"]
+        
+        if not session_data["current_points"]:
+            return jsonify({"error": "No DXF file loaded"}), 400
+        
+        # Convert normalized coordinates to actual plot coordinates
+        # We need to get the plot bounds to convert properly
+        unique_elements = {}
+        for x, y, radius, geom_type, element_id in session_data["current_points"]:
+            if element_id not in unique_elements:
+                unique_elements[element_id] = {
+                    "geom_type": geom_type,
+                    "radius": radius,
+                    "points": [],
+                }
+            unique_elements[element_id]["points"].append((x, y))
+        
+        if not unique_elements:
+            return jsonify({"error": "No elements to select"}), 400
+        
+        # Calculate plot bounds
+        all_x = []
+        all_y = []
+        for element_info in unique_elements.values():
+            for point in element_info["points"]:
+                all_x.append(point[0])
+                all_y.append(point[1])
+        
+        if not all_x or not all_y:
+            return jsonify({"error": "No valid points found"}), 400
+        
+        min_x, max_x = min(all_x), max(all_x)
+        min_y, max_y = min(all_y), max(all_y)
+        
+        # Add some padding
+        padding_x = (max_x - min_x) * 0.1
+        padding_y = (max_y - min_y) * 0.1
+        min_x -= padding_x
+        max_x += padding_x
+        min_y -= padding_y
+        max_y += padding_y
+        
+        # Convert normalized coordinates to actual coordinates
+        actual_x = min_x + click_x * (max_x - min_x)
+        actual_y = min_y + (1 - click_y) * (max_y - min_y)  # Flip Y coordinate
+        
+        # Find closest element
+        closest_element_id = None
+        closest_distance = float('inf')
+        
+        for element_id, element_info in unique_elements.items():
+            if element_id in session_data["removed_elements"]:
+                continue
+                
+            geom_type = element_info["geom_type"]
+            radius = element_info["radius"]
+            points = element_info["points"]
+            
+            if geom_type == "CIRCLE" and len(points) >= 1:
+                center_x, center_y = points[0]
+                distance = math.sqrt((actual_x - center_x)**2 + (actual_y - center_y)**2)
+                # Use circle radius as tolerance
+                tolerance = max(radius * 0.5, 3.0)
+                if distance <= tolerance and distance < closest_distance:
+                    closest_distance = distance
+                    closest_element_id = element_id
+                    
+            elif geom_type in ["LINE", "LWPOLYLINE"] and len(points) >= 2:
+                # Check distance to line segments
+                for i in range(len(points) - 1):
+                    p1 = points[i]
+                    p2 = points[i + 1]
+                    distance = point_to_line_distance((actual_x, actual_y), p1, p2)
+                    tolerance = 2.0  # 2mm tolerance for lines
+                    if distance <= tolerance and distance < closest_distance:
+                        closest_distance = distance
+                        closest_element_id = element_id
+        
+        if closest_element_id:
+            # Toggle element selection
+            if closest_element_id in session_data["selected_elements"]:
+                session_data["selected_elements"].remove(closest_element_id)
+            else:
+                session_data["selected_elements"].add(closest_element_id)
+            
+            return jsonify({
+                "success": True,
+                "element_id": closest_element_id,
+                "distance": closest_distance,
+                "selected": closest_element_id in session_data["selected_elements"]
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "message": "No element found at click position"
+            })
+            
+    except Exception as e:
+        return jsonify({"error": f"Failed to find element: {str(e)}"}), 500
+
+
+@app.route("/get_plot", methods=["GET"])
+def get_plot():
+    """Get current plot with selected elements highlighted"""
+    try:
+        plot_image = create_plot_image(session_data["selected_elements"])
+        
+        return jsonify({
+            "success": True,
+            "plot_image": plot_image
+        })
+        
+    except Exception as e:
+        return jsonify({"error": f"Failed to get plot: {str(e)}"}), 500
+
+
+def point_to_line_distance(point, line_start, line_end):
+    """Calculate distance from point to line segment"""
+    px, py = point
+    x1, y1 = line_start
+    x2, y2 = line_end
+    
+    # Calculate distance from point to line segment
+    A = px - x1
+    B = py - y1
+    C = x2 - x1
+    D = y2 - y1
+    
+    dot = A * C + B * D
+    len_sq = C * C + D * D
+    
+    if len_sq == 0:
+        # Line segment is actually a point
+        return math.sqrt(A * A + B * B)
+    
+    param = dot / len_sq
+    
+    if param < 0:
+        xx, yy = x1, y1
+    elif param > 1:
+        xx, yy = x2, y2
+    else:
+        xx = x1 + param * C
+        yy = y1 + param * D
+    
+    dx = px - xx
+    dy = py - yy
+    
+    return math.sqrt(dx * dx + dy * dy)
 
 
 def generate_gcode(elements_by_id):

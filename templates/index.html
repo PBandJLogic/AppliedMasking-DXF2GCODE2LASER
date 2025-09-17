@@ -384,9 +384,7 @@
         // Plot click handling for element selection
         document.getElementById('plotImage').addEventListener('click', function (e) {
             if (currentPlotImage) {
-                // For now, we'll implement a simple click-to-select system
-                // In a full implementation, you'd need to map click coordinates to elements
-                selectElement();
+                selectElementAtClick(e);
             }
         });
 
@@ -463,25 +461,23 @@
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({
-                    element_ids: Array.from(selectedElements)
-                })
+                body: JSON.stringify({})
             })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        updatePlot(data.plot_image);
-                        updateStatistics(data.statistics);
-                        selectedElements.clear();
-                        updateSelectedInfo();
-                        showSuccess('Elements marked for engraving!');
-                    } else {
-                        showError(data.error || 'Failed to mark for engraving');
-                    }
-                })
-                .catch(error => {
-                    showError('Error marking for engraving: ' + error.message);
-                });
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    updatePlot(data.plot_image);
+                    updateStatistics(data.statistics);
+                    selectedElements.clear();
+                    updateSelectedInfo();
+                    showSuccess('Elements marked for engraving!');
+                } else {
+                    showError(data.error || 'Failed to mark for engraving');
+                }
+            })
+            .catch(error => {
+                showError('Error marking for engraving: ' + error.message);
+            });
         }
 
         function removeElements() {
@@ -497,25 +493,23 @@
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({
-                    element_ids: Array.from(selectedElements)
-                })
+                body: JSON.stringify({})
             })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        updatePlot(data.plot_image);
-                        updateStatistics(data.statistics);
-                        selectedElements.clear();
-                        updateSelectedInfo();
-                        showSuccess('Elements removed!');
-                    } else {
-                        showError(data.error || 'Failed to remove elements');
-                    }
-                })
-                .catch(error => {
-                    showError('Error removing elements: ' + error.message);
-                });
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    updatePlot(data.plot_image);
+                    updateStatistics(data.statistics);
+                    selectedElements.clear();
+                    updateSelectedInfo();
+                    showSuccess('Elements removed!');
+                } else {
+                    showError(data.error || 'Failed to remove elements');
+                }
+            })
+            .catch(error => {
+                showError('Error removing elements: ' + error.message);
+            });
         }
 
         function selectAllForEngraving() {
@@ -601,12 +595,63 @@
                 });
         }
 
-        function selectElement() {
-            // Simple element selection - in a full implementation,
-            // you'd map click coordinates to actual element IDs
-            const elementId = Math.floor(Math.random() * 100) + 1; // Mock element ID
-            selectedElements.add(elementId);
-            updateSelectedInfo();
+        function selectElementAtClick(e) {
+            if (!currentPlotImage) return;
+            
+            // Get click coordinates relative to the image
+            const rect = e.target.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            // Convert to normalized coordinates (0-1)
+            const normalizedX = x / rect.width;
+            const normalizedY = y / rect.height;
+            
+            // Send click coordinates to server to find closest element
+            fetch('/find_element_at_click', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    x: normalizedX,
+                    y: normalizedY
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.element_id) {
+                    // Update local selection to match server
+                    if (data.selected) {
+                        selectedElements.add(data.element_id);
+                    } else {
+                        selectedElements.delete(data.element_id);
+                    }
+                    updateSelectedInfo();
+                    // Refresh the plot to show selection
+                    refreshPlot();
+                } else if (!data.success) {
+                    console.log('No element found at click position');
+                }
+            })
+            .catch(error => {
+                console.error('Error selecting element:', error);
+            });
+        }
+        
+        function refreshPlot() {
+            if (!currentPlotImage) return;
+            
+            fetch('/get_plot')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    updatePlot(data.plot_image);
+                }
+            })
+            .catch(error => {
+                console.error('Error refreshing plot:', error);
+            });
         }
 
         function updatePlot(imageData) {
