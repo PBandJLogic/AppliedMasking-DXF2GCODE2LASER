@@ -1,99 +1,77 @@
-# DXF2TEMPLATE - Web Version
+# DXF2TEMPLATE - Laser Engraving G-code Generator
 
-A Flask web application for viewing, editing, and processing DXF files for laser engraving/cutting.
+A web application that converts DXF files to G-code for laser engraving machines. All elements are automatically processed for engraving with configurable settings.
 
 ## Features
 
-- **DXF File Upload**: Load and parse DXF files through a web interface
-- **Interactive Visualization**: View DXF geometry with matplotlib plots
-- **Origin Adjustment**: Set X/Y offsets for positioning
-- **Element Selection**: Click to select elements for processing
-- **Engraving Marking**: Mark elements for engraving (displayed in red)
-- **Element Removal**: Remove unwanted elements
-- **G-code Export**: Generate G-code for laser engraving/cutting
-- **Statistics**: Real-time statistics of elements and modifications
+- **DXF File Processing**: Load and process DXF files with automatic geometry extraction
+- **Automatic Element Processing**: All elements are automatically marked for engraving
+- **Origin Offset**: Adjust the origin position with X,Y offsets
+- **G-code Generation**: Generate G-code with configurable settings:
+  - Laser power control
+  - Cutting depth (Z-axis)
+  - Feedrate settings
+  - Workspace limits
+  - Custom preamble and postscript
+- **Visual Preview**: Interactive plot showing original and processed elements
+- **G-code Preview**: Text and graphical preview of generated G-code
 
-## Installation
+## Quick Start
 
-1. Install Python dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-2. Run the Flask application:
-```bash
-python app.py
-```
-
-3. Open your web browser and navigate to:
-```
-http://localhost:8080
-```
-
-## Usage
-
-1. **Load DXF File**: Click "Load DXF File" and select a .dxf file
-2. **Adjust Origin**: Enter X and Y offset values and click "Apply Offset"
-3. **Select Elements**: Click on elements in the plot to select them
-4. **Mark for Engraving**: Click "Mark for Engraving" to mark selected elements (they'll turn red)
-5. **Remove Elements**: Click "Remove Elements" to remove selected elements
-6. **Export G-code**: Click "Export G-code" to download the generated G-code file
-
-## Supported DXF Elements
-
-- **Lines**: Individual line segments
-- **Circles**: Circular geometry
-- **Polylines**: Connected line segments
-- **Blocks/Inserts**: Complex geometry with transformations
+1. **Load DXF File**: Click "Choose File" and select your DXF file
+2. **Adjust Origin** (optional): Set X,Y offsets if needed
+3. **Configure Settings**: Adjust laser power, feedrate, and other G-code settings
+4. **Preview G-code**: Click "Preview G-code" to see the generated code
+5. **Export**: Download the G-code file for your laser engraver
 
 ## G-code Settings
 
-The application includes configurable G-code settings:
-- Laser power (0-255)
-- Cutting Z height
-- Feedrate (mm/min)
-- Workspace dimensions
-- Custom preamble and postscript
+- **Laser Power**: Power level for the laser (0-100%)
+- **Cutting Z**: Z-axis depth for cutting/engraving
+- **Feedrate**: Movement speed in mm/min
+- **Max Workspace X/Y**: Maximum workspace dimensions
+- **Preamble**: Custom G-code commands before the main program
+- **Postscript**: Custom G-code commands after the main program
+
+## Color Legend
+
+- **Blue**: Original DXF elements
+- **Red**: Elements marked for engraving
+
+## Technical Details
+
+- **Backend**: Flask (Python)
+- **Frontend**: HTML/CSS/JavaScript
+- **DXF Processing**: ezdxf library
+- **Plotting**: Matplotlib
+- **G-code Generation**: Custom implementation with workspace clamping
+
+## Deployment
+
+This application is configured for Replit deployment with the following files:
+- `main.py`: Entry point for Replit
+- `app.py`: Main Flask application
+- `requirements.txt`: Python dependencies
+- `.replit`: Replit configuration
+- `replit.nix`: Replit environment setup
+
+## Usage Notes
+
+- All elements in the DXF file are automatically processed
+- G-code coordinates are clamped to the specified workspace limits
+- The application maintains equal aspect ratio for accurate geometry representation
+- Offset adjustments automatically update the plot scale to show all elements
 
 ## File Structure
 
 ```
-DXF2TEMPLATE/
-├── app.py                 # Main Flask application
-├── dxf2template.py        # Original desktop GUI version
-├── requirements.txt       # Python dependencies
+├── main.py              # Replit entry point
+├── app.py               # Main Flask application
+├── requirements.txt     # Python dependencies
+├── .replit             # Replit configuration
+├── replit.nix          # Replit environment
+├── .gitignore          # Git ignore file
 ├── templates/
-│   └── index.html        # Web interface template
-└── README.md             # This file
+│   └── index.html      # Web interface
+└── README.md           # This file
 ```
-
-## For Replit Deployment
-
-This Flask application is designed to work on Replit:
-
-1. Upload all files to your Replit project
-2. Replit will automatically install dependencies from `requirements.txt`
-3. Run the application - it will start on the default Replit port
-4. The web interface will be available at your Replit URL
-
-## Technical Details
-
-- **Backend**: Flask with matplotlib for plotting
-- **Frontend**: HTML/CSS/JavaScript with responsive design
-- **DXF Processing**: ezdxf library for DXF file parsing
-- **Plot Generation**: matplotlib with base64 encoding for web display
-- **File Handling**: Temporary file processing for DXF uploads
-
-## Browser Compatibility
-
-- Chrome/Chromium (recommended)
-- Firefox
-- Safari
-- Edge
-
-## Notes
-
-- Maximum file size: 16MB
-- Supported DXF versions: R12, R2000, R2004, R2007, R2010, R2013, R2018
-- The web version maintains the same functionality as the desktop version
-- All processing is done server-side for security and performance

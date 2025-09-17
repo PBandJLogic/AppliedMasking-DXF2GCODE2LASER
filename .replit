@@ -1,0 +1,4 @@
+run = "python main.py"
+entrypoint = "main.py"
+language = "python3"
+modules = ["python-3.11"]

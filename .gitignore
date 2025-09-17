@@ -19,11 +19,12 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-MANIFEST
 
 # Virtual environments
-venv/
+.env
+.venv
 env/
+venv/
 ENV/
 env.bak/
 venv.bak/
@@ -33,36 +34,10 @@ venv.bak/
 .idea/
 *.swp
 *.swo
-*~
 
 # OS
 .DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
 Thumbs.db
 
-# Flask
-instance/
-.webassets-cache
-
-# Temporary files
-*.tmp
-*.temp
-temp/
-tmp/
-
-# Logs
-*.log
-
-# DXF files (optional - remove if you want to include sample files)
-*.dxf
-
-# G-code output files
-*.nc
-*.gcode
-
-# Matplotlib cache
-.matplotlib/
+# Replit
+.replit.nix
