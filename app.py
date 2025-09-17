@@ -957,7 +957,9 @@ def find_element_at_click():
 
         # Debug logging
         print(f"Click coordinates: normalized=({click_x:.3f}, {click_y:.3f})")
-        print(f"Data bounds: x=({min_x:.3f}, {max_x:.3f}), y=({min_y:.3f}, {max_y:.3f})")
+        print(
+            f"Data bounds: x=({min_x:.3f}, {max_x:.3f}), y=({min_y:.3f}, {max_y:.3f})"
+        )
         print(f"Actual coordinates: ({actual_x:.3f}, {actual_y:.3f})")
 
         # Find closest element
@@ -1097,6 +1099,21 @@ def point_to_line_distance(point, line_start, line_end):
     return math.sqrt(dx * dx + dy * dy)
 
 
+def clamp_to_workspace(x, y):
+    """Clamp coordinates to workspace limits"""
+    max_x = session_data["gcode_settings"]["max_workspace_x"]
+    max_y = session_data["gcode_settings"]["max_workspace_y"]
+    
+    clamped_x = max(0, min(x, max_x))
+    clamped_y = max(0, min(y, max_y))
+    
+    # Log if coordinates were clamped
+    if x != clamped_x or y != clamped_y:
+        print(f"WARNING: Coordinates clamped from ({x:.3f}, {y:.3f}) to ({clamped_x:.3f}, {clamped_y:.3f})")
+    
+    return clamped_x, clamped_y
+
+
 def generate_gcode(elements_by_id):
     """Generate G-code from elements"""
     gcode = []
@@ -1117,6 +1134,10 @@ def generate_gcode(elements_by_id):
             if len(line_points) >= 2:
                 start_x, start_y = line_points[0]
                 end_x, end_y = line_points[1]
+                
+                # Clamp coordinates to workspace limits
+                start_x, start_y = clamp_to_workspace(start_x, start_y)
+                end_x, end_y = clamp_to_workspace(end_x, end_y)
 
                 # Position to start point
                 gcode.append(f"G0 X{start_x:.3f} Y{start_y:.3f}")
@@ -1147,6 +1168,7 @@ def generate_gcode(elements_by_id):
                 # Position to circle start point (top of circle)
                 start_x = cx
                 start_y = cy + radius
+                start_x, start_y = clamp_to_workspace(start_x, start_y)
                 gcode.append(f"G0 X{start_x:.3f} Y{start_y:.3f}")
 
                 # Turn on laser and lower Z
@@ -1165,6 +1187,8 @@ def generate_gcode(elements_by_id):
                     angle = math.radians(i)
                     x = cx + radius * math.cos(angle)
                     y = cy + radius * math.sin(angle)
+                    # Clamp each point to workspace limits
+                    x, y = clamp_to_workspace(x, y)
                     gcode.append(f"G1 X{x:.3f} Y{y:.3f} ; Engrave circle")
 
                 # Turn off laser and raise Z
@@ -1178,6 +1202,7 @@ def generate_gcode(elements_by_id):
             if len(polyline_points) >= 2:
                 # Position to first point
                 first_x, first_y = polyline_points[0]
+                first_x, first_y = clamp_to_workspace(first_x, first_y)
                 gcode.append(f"G0 X{first_x:.3f} Y{first_y:.3f}")
 
                 # Turn on laser and lower Z
@@ -1191,6 +1216,8 @@ def generate_gcode(elements_by_id):
                 # Engrave polyline segments
                 for i in range(1, len(polyline_points)):
                     x, y = polyline_points[i]
+                    # Clamp each point to workspace limits
+                    x, y = clamp_to_workspace(x, y)
                     gcode.append(f"G1 X{x:.3f} Y{y:.3f} ; Engrave polyline")
 
                 # Turn off laser and raise Z
