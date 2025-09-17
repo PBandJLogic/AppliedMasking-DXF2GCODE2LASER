@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DXF 2 Template</title>
+    <title>DXF 2 Template - v2.0</title>
     <style>
         /* CSS is unchanged */
         * {
@@ -359,19 +359,6 @@
                 <button class="btn" onclick="applyOffset()">Apply Offset</button>
             </div>
 
-            <div class="section">
-                <h3>Element Selection</h3>
-                <p style="color: #bdc3c7; font-size: 11px; margin-bottom: 8px;">
-                    Click on elements in the plot to select them.
-                </p>
-                <div id="selectedInfo" style="color: #ecf0f1; font-weight: bold; margin-bottom: 8px; font-size: 12px;">
-                    No elements selected
-                </div>
-                <button class="btn btn-warning" onclick="markEngraving()">Mark for Engraving</button>
-                <button class="btn btn-danger" onclick="removeElements()">Remove Elements</button>
-                <button class="btn btn-success" onclick="selectAllForEngraving()">Engrave All</button>
-                <button class="btn" onclick="resetAll()">Reset All</button>
-            </div>
 
             <div class="section">
                 <h3>G-code Settings</h3>
@@ -452,14 +439,13 @@ G0 X0 Y0 ; Return to origin</textarea>
                 <ul>
                     <li>1. Load a DXF file using the button above</li>
                     <li>2. Adjust the origin by entering X,Y offsets</li>
-                    <li>3. Click on elements in the plot to select them</li>
-                    <li>4. Mark elements for engraving (red) or removal</li>
-                    <li>5. Export G-code for the final design</li>
+                    <li>3. All elements are automatically available for processing</li>
+                    <li>4. Use G-code settings to configure engraving parameters</li>
+                    <li>5. Preview and export G-code for the final design</li>
                 </ul>
                 <div class="color-info">
                     <div><span class="blue">• Blue:</span> Original elements</div>
                     <div><span class="red">• Red:</span> Marked for engraving</div>
-                    <div><span class="green">• Green:</span> Selected elements</div>
                 </div>
             </div>
         </div>
@@ -480,7 +466,8 @@ G0 X0 Y0 ; Return to origin</textarea>
     <div id="successMessage" class="success"></div>
 
     <script>
-        let selectedElements = new Set();
+        // Cache buster - v2.0 - Updated coordinate conversion
+        // All elements are selected by default - no selection needed
         let currentPlotImage = null;
 
         // File upload handling
@@ -496,91 +483,7 @@ G0 X0 Y0 ; Return to origin</textarea>
         });
 
         // Plot click handling for element selection
-        function attachPlotClickListener() {
-            const plotImage = document.getElementById('plotImage');
-            console.log('attachPlotClickListener called');
-            console.log('plotImage element:', plotImage);
-            if (plotImage) {
-                console.log('Plot image found, attaching click listener');
-                console.log('Image dimensions:', plotImage.width, plotImage.height);
-                console.log('Image display style:', plotImage.style.display);
-                // Remove any existing listener first
-                plotImage.removeEventListener('click', handlePlotClick);
-                plotImage.addEventListener('click', handlePlotClick);
-                console.log('Click listener attached successfully');
-            } else {
-                console.log('ERROR: Plot image element not found');
-            }
-        }
-
-        function handlePlotClick(e) {
-            console.log('Plot click handler called');
-            selectElementAtClick(e);
-        }
-
-        function selectElementAtClick(e) {
-            console.log('Click detected on plot image');
-
-            // Get click coordinates relative to the image
-            const rect = e.target.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const y = e.clientY - rect.top;
-
-            console.log('Click coordinates:', x, y);
-            console.log('Image dimensions (displayed):', rect.width, rect.height);
-            console.log('Image dimensions (natural):', e.target.naturalWidth, e.target.naturalHeight);
-
-            // Direct mapping - the image should display the full plot area
-            const normalizedX = x / rect.width;
-            const normalizedY = y / rect.height;
-
-            console.log('Direct mapping - no scaling');
-            console.log('Image dimensions:', rect.width, rect.height);
-            console.log('Natural dimensions:', e.target.naturalWidth, e.target.naturalHeight);
-
-            console.log('Normalized coordinates:', normalizedX, normalizedY);
-
-            console.log('Normalized coordinates:', normalizedX, normalizedY);
-            console.log('Sending to server:', { x: normalizedX, y: normalizedY });
-            console.log('Click analysis:');
-            console.log('  - Raw click:', x, y);
-            console.log('  - Displayed size:', rect.width, rect.height);
-            console.log('  - Natural size:', e.target.naturalWidth, e.target.naturalHeight);
-            console.log('  - Normalized:', normalizedX.toFixed(3), normalizedY.toFixed(3));
-
-            // Send click coordinates to server to find closest element
-            fetch('/find_element_at_click', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    x: normalizedX,
-                    y: normalizedY
-                })
-            })
-                .then(response => response.json())
-                .then(data => {
-                    console.log('Server response:', data);
-                    if (data.success && data.element_id) {
-                        console.log('Element found:', data.element_id, 'Selected:', data.selected);
-                        // Update local selection to match server
-                        if (data.selected) {
-                            selectedElements.add(data.element_id);
-                        } else {
-                            selectedElements.delete(data.element_id);
-                        }
-                        updateSelectedInfo();
-                        // Refresh the plot to show selection
-                        refreshPlot();
-                    } else if (!data.success) {
-                        console.log('No element found at click position:', data.message);
-                    }
-                })
-                .catch(error => {
-                    console.error('Error selecting element:', error);
-                });
-        }
+        // Element selection disabled - all elements are selected by default
 
         function refreshPlot() {
             if (!currentPlotImage) return;
@@ -667,133 +570,6 @@ G0 X0 Y0 ; Return to origin</textarea>
                 });
         }
 
-        function markEngraving() {
-            if (selectedElements.size === 0) {
-                showError('Please select elements first');
-                return;
-            }
-
-            hideMessages();
-
-            // Pass the selected elements to the server
-            const selectedElementsArray = Array.from(selectedElements);
-
-            fetch('/mark_engraving', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    element_ids: selectedElementsArray
-                })
-            })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        updatePlot(data.plot_image);
-                        updateStatistics(data.statistics);
-                        selectedElements.clear();
-                        updateSelectedInfo();
-                        showSuccess('Elements marked for engraving!');
-                    } else {
-                        showError(data.error || 'Failed to mark for engraving'); // Fixed
-                    }
-                })
-                .catch(error => {
-                    showError('Error marking for engraving: ' + error.message);
-                });
-        }
-
-        function removeElements() {
-            if (selectedElements.size === 0) {
-                showError('Please select elements first');
-                return;
-            }
-
-            hideMessages();
-
-            // Pass the selected elements to the server
-            const selectedElementsArray = Array.from(selectedElements);
-
-            fetch('/remove_elements', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    element_ids: selectedElementsArray
-                })
-            })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        updatePlot(data.plot_image);
-                        updateStatistics(data.statistics);
-                        selectedElements.clear();
-                        updateSelectedInfo();
-                        showSuccess('Elements removed!');
-                    } else {
-                        showError(data.error || 'Failed to remove elements'); // Fixed
-                    }
-                })
-                .catch(error => {
-                    showError('Error removing elements: ' + error.message);
-                });
-        }
-
-        function selectAllForEngraving() {
-            hideMessages();
-
-            fetch('/mark_engraving', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    element_ids: [] // Empty array means select all
-                })
-            })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        updatePlot(data.plot_image);
-                        updateStatistics(data.statistics);
-                        selectedElements.clear();
-                        updateSelectedInfo();
-                        showSuccess('All elements marked for engraving!');
-                    } else {
-                        showError(data.error || 'Failed to mark all for engraving'); // Fixed
-                    }
-                })
-                .catch(error => {
-                    showError('Error marking all for engraving: ' + error.message);
-                });
-        }
-
-        function resetAll() {
-            hideMessages();
-
-            fetch('/reset', {
-                method: 'POST'
-            })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        updatePlot(data.plot_image);
-                        updateStatistics(data.statistics);
-                        selectedElements.clear();
-                        updateSelectedInfo();
-                        document.getElementById('xOffset').value = '0.0';
-                        document.getElementById('yOffset').value = '0.0';
-                        showSuccess('All selections and modifications reset!');
-                    } else {
-                        showError(data.error || 'Failed to reset'); // Fixed
-                    }
-                })
-                .catch(error => {
-                    showError('Error resetting: ' + error.message);
-                });
-        }
 
         function previewGcode() {
             hideMessages();
@@ -1006,85 +782,6 @@ G0 X0 Y0 ; Return to origin</textarea>
                 });
         }
 
-        function selectElementAtClick(e) {
-            console.log('Click detected on plot image');
-
-            // Get click coordinates relative to the image
-            const rect = e.target.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const y = e.clientY - rect.top;
-
-            console.log('Click coordinates:', x, y);
-            console.log('Image dimensions (displayed):', rect.width, rect.height);
-            console.log('Image dimensions (natural):', e.target.naturalWidth, e.target.naturalHeight);
-
-            // Direct mapping - the image should display the full plot area
-            const normalizedX = x / rect.width;
-            const normalizedY = y / rect.height;
-
-            console.log('Direct mapping - no scaling');
-            console.log('Image dimensions:', rect.width, rect.height);
-            console.log('Natural dimensions:', e.target.naturalWidth, e.target.naturalHeight);
-
-            console.log('Normalized coordinates:', normalizedX, normalizedY);
-
-            console.log('Normalized coordinates:', normalizedX, normalizedY);
-            console.log('Sending to server:', { x: normalizedX, y: normalizedY });
-            console.log('Click analysis:');
-            console.log('  - Raw click:', x, y);
-            console.log('  - Displayed size:', rect.width, rect.height);
-            console.log('  - Natural size:', e.target.naturalWidth, e.target.naturalHeight);
-            console.log('  - Normalized:', normalizedX.toFixed(3), normalizedY.toFixed(3));
-
-            // Send click coordinates to server to find closest element
-            fetch('/find_element_at_click', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    x: normalizedX,
-                    y: normalizedY
-                })
-            })
-                .then(response => response.json())
-                .then(data => {
-                    console.log('Server response:', data);
-                    if (data.success && data.element_id) {
-                        console.log('Element found:', data.element_id, 'Selected:', data.selected);
-                        // Update local selection to match server
-                        if (data.selected) {
-                            selectedElements.add(data.element_id);
-                        } else {
-                            selectedElements.delete(data.element_id);
-                        }
-                        updateSelectedInfo();
-                        // Refresh the plot to show selection
-                        refreshPlot();
-                    } else if (!data.success) {
-                        console.log('No element found at click position:', data.message);
-                    }
-                })
-                .catch(error => {
-                    console.error('Error selecting element:', error);
-                });
-        }
-
-        function refreshPlot() {
-            if (!currentPlotImage) return;
-
-            fetch('/get_plot')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        updatePlot(data.plot_image);
-                    }
-                })
-                .catch(error => {
-                    console.error('Error refreshing plot:', error);
-                });
-        }
-
         function updatePlot(imageData) {
             const plotImage = document.getElementById('plotImage');
             const noFile = document.getElementById('noFile');
@@ -1094,8 +791,18 @@ G0 X0 Y0 ; Return to origin</textarea>
                 plotImage.src = 'data:image/png;base64,' + imageData;
                 plotImage.style.display = 'block';
                 noFile.style.display = 'none';
-                // Attach click listener when image is displayed
-                attachPlotClickListener();
+
+                // Debug: Log image dimensions when image loads
+                plotImage.onload = function () {
+                    console.log('=== IMAGE LOADED ===');
+                    console.log('Natural dimensions:', plotImage.naturalWidth, 'x', plotImage.naturalHeight);
+                    console.log('Displayed dimensions:', plotImage.width, 'x', plotImage.height);
+                    console.log('Client rect:', plotImage.getBoundingClientRect());
+                    console.log('Image style:', plotImage.style.cssText);
+                    console.log('==================');
+                };
+
+                // Element selection disabled - all elements are selected by default
             } else {
                 currentPlotImage = null; // Clear currentPlotImage
                 plotImage.style.display = 'none';
@@ -1111,14 +818,7 @@ G0 X0 Y0 ; Return to origin</textarea>
             document.getElementById('originOffset').textContent = `(${stats.origin_offset[0]}, ${stats.origin_offset[1]})`;
         }
 
-        function updateSelectedInfo() {
-            const selectedInfo = document.getElementById('selectedInfo');
-            if (selectedElements.size === 0) {
-                selectedInfo.textContent = 'No elements selected';
-            } else {
-                selectedInfo.textContent = `${selectedElements.size} element(s) selected`;
-            }
-        }
+        // Element selection disabled - all elements are selected by default
 
         function showLoading(show) {
             document.getElementById('loading').style.display = show ? 'block' : 'none';
@@ -1146,7 +846,6 @@ G0 X0 Y0 ; Return to origin</textarea>
             document.getElementById('errorMessage').style.display = 'none';
             document.getElementById('successMessage').style.display = 'none';
         }
-
 
     </script>
 </body>

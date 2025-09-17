@@ -215,7 +215,7 @@ def create_plot_image(selected_elements=None):
     ax.set_xlabel("X (mm)")
     ax.set_ylabel("Y (mm)")
     ax.grid(True, alpha=0.3)
-    ax.set_title("DXF Geometry - Click on elements to select")
+    ax.set_title("DXF Geometry - All elements marked for engraving")
 
     # Get unique elements
     unique_elements = {}
@@ -394,8 +394,14 @@ def upload_file():
             session_data["removed_elements"] = set()
             session_data["engraved_elements"] = set()
             session_data["origin_offset"] = (0.0, 0.0)
-            
-            print(f"DXF loaded: {len(session_data['original_points'])} original points, {len(session_data['current_points'])} current points")
+
+            # Automatically mark all elements for engraving
+            for x, y, radius, geom_type, element_id in session_data["current_points"]:
+                session_data["engraved_elements"].add(element_id)
+
+            print(
+                f"DXF loaded: {len(session_data['original_points'])} original points, {len(session_data['current_points'])} current points"
+            )
 
             # Clean up temp file
             os.unlink(tmp_file.name)
@@ -538,9 +544,21 @@ def remove_elements():
         data = request.get_json()
         element_ids = data.get("element_ids", [])
 
-        # If no specific elements provided, use selected elements
+        # If no specific elements provided, remove all elements
         if not element_ids:
-            element_ids = list(session_data["selected_elements"])
+            # Check if this is a "remove all" request (empty array from frontend)
+            if data.get("element_ids") == []:
+                # Remove all non-removed elements
+                all_element_ids = set()
+                for x, y, radius, geom_type, element_id in session_data[
+                    "current_points"
+                ]:
+                    if element_id not in session_data["removed_elements"]:
+                        all_element_ids.add(element_id)
+                element_ids = list(all_element_ids)
+            else:
+                # Use currently selected elements
+                element_ids = list(session_data["selected_elements"])
 
         # Remove elements
         for element_id in element_ids:
@@ -587,6 +605,9 @@ def reset():
 
     if session_data["original_points"]:
         session_data["current_points"] = session_data["original_points"].copy()
+        # Automatically mark all elements for engraving after reset
+        for x, y, radius, geom_type, element_id in session_data["current_points"]:
+            session_data["engraved_elements"].add(element_id)
         plot_image = create_plot_image(session_data["selected_elements"])
     else:
         plot_image = None
@@ -942,293 +963,11 @@ def create_gcode_toolpath_plot(gcode):
     return img_base64
 
 
+# Element selection disabled - all elements are selected by default
 @app.route("/find_element_at_click", methods=["POST"])
 def find_element_at_click():
-    """Find the closest element to a click position"""
-    try:
-        data = request.get_json()
-        print(f"Click request data: {data}")
-
-        if not data:
-            print("ERROR: No JSON data received")
-            return jsonify({"error": "No data received"}), 400
-
-        if "x" not in data or "y" not in data:
-            print(f"ERROR: Missing x or y coordinates in data: {data}")
-            return jsonify({"error": "Missing x or y coordinates"}), 400
-
-        click_x = data["x"]
-        click_y = data["y"]
-        print(f"Processing click at: ({click_x}, {click_y})")
-
-        if not session_data["current_points"]:
-            print(
-                f"ERROR: No current points. Session data: {len(session_data['original_points'])} original points"
-            )
-            print(f"Session data keys: {list(session_data.keys())}")
-            print(f"Session data: {session_data}")
-            return (
-                jsonify(
-                    {"error": "No DXF file loaded. Please upload a DXF file first."}
-                ),
-                400,
-            )
-
-        # Convert normalized coordinates to actual plot coordinates
-        # We need to get the plot bounds to convert properly
-        unique_elements = {}
-        for x, y, radius, geom_type, element_id in session_data["current_points"]:
-            if element_id not in unique_elements:
-                unique_elements[element_id] = {
-                    "geom_type": geom_type,
-                    "radius": radius,
-                    "points": [],
-                }
-            unique_elements[element_id]["points"].append((x, y))
-
-        if not unique_elements:
-            return jsonify({"error": "No elements to select"}), 400
-
-        # Calculate plot bounds (same as in create_plot_image)
-        all_x = []
-        all_y = []
-
-        for element_id, element_info in unique_elements.items():
-            if element_id in session_data["removed_elements"]:
-                continue
-
-            points = element_info["points"]
-            radius = element_info["radius"]
-            geom_type = element_info["geom_type"]
-
-            for point in points:
-                all_x.append(point[0])
-                all_y.append(point[1])
-
-            # For circles, extend bounds to include the full circle
-            if geom_type == "CIRCLE" and len(points) >= 1:
-                center_x, center_y = points[0]
-                all_x.extend([center_x - radius, center_x + radius])
-                all_y.extend([center_y - radius, center_y + radius])
-
-        if not all_x or not all_y:
-            return jsonify({"error": "No valid points found"}), 400
-
-        min_x, max_x = min(all_x), max(all_x)
-        min_y, max_y = min(all_y), max(all_y)
-
-        # Add same padding as in create_plot_image
-        x_range = max_x - min_x
-        y_range = max_y - min_y
-        padding_x = max(x_range * 0.1, 10)  # At least 10mm padding
-        padding_y = max(y_range * 0.1, 10)  # At least 10mm padding
-
-        # Use the same bounds as the plot (with padding)
-        plot_min_x = min_x - padding_x
-        plot_max_x = max_x + padding_x
-        plot_min_y = min_y - padding_y
-        plot_max_y = max_y + padding_y
-
-        # The problem is that the web image might be scaled differently than the matplotlib figure
-        # We need to account for the actual plot area that matplotlib creates
-
-        # Matplotlib creates a figure with aspect ratio enforcement
-        # When we use bbox_inches="tight", it crops to the actual data
-        # But we need to account for equal aspect ratio
-
-        data_width = plot_max_x - plot_min_x
-        data_height = plot_max_y - plot_min_y
-
-        if data_width == 0:
-            data_width = 1
-        if data_height == 0:
-            data_height = 1
-
-        # Use the plot bounds (with padding) for coordinate conversion
-        # This matches what's actually displayed in the image
-        data_width = plot_max_x - plot_min_x
-        data_height = plot_max_y - plot_min_y
-
-        if data_width == 0:
-            data_width = 1
-        if data_height == 0:
-            data_height = 1
-
-        # Map click coordinates to plot bounds
-        actual_x = plot_min_x + click_x * data_width
-        actual_y = plot_min_y + click_y * data_height
-
-        # Debug logging
-        print(f"Click coordinates: normalized=({click_x:.3f}, {click_y:.3f})")
-        print(
-            f"Data bounds: x=({min_x:.3f}, {max_x:.3f}), y=({min_y:.3f}, {max_y:.3f})"
-        )
-        print(
-            f"Plot bounds: x=({plot_min_x:.3f}, {plot_max_x:.3f}), y=({plot_min_y:.3f}, {plot_max_y:.3f})"
-        )
-        print(f"Data width: {data_width:.3f}, Data height: {data_height:.3f}")
-        print(f"Actual coordinates: ({actual_x:.3f}, {actual_y:.3f})")
-        print(
-            f"Coordinate conversion: x = {plot_min_x:.3f} + {click_x:.3f} * {data_width:.3f} = {actual_x:.3f}"
-        )
-        print(
-            f"Coordinate conversion: y = {plot_min_y:.3f} + {click_y:.3f} * {data_height:.3f} = {actual_y:.3f}"
-        )
-
-        # Find best element with priority system
-        closest_element_id = None
-        closest_distance = float("inf")
-        checked_elements = []
-
-        # Separate candidates by type
-        line_candidates = []
-        circle_candidates = []
-
-        for element_id, element_info in unique_elements.items():
-            if element_id in session_data["removed_elements"]:
-                continue
-
-            geom_type = element_info["geom_type"]
-            radius = element_info["radius"]
-            points = element_info["points"]
-
-            if geom_type == "CIRCLE" and len(points) >= 1:
-                center_x, center_y = points[0]
-                distance_to_center = math.sqrt(
-                    (actual_x - center_x) ** 2 + (actual_y - center_y) ** 2
-                )
-                # Calculate distance to circumference (not center)
-                distance_to_circumference = abs(distance_to_center - radius)
-                # Use tolerance for circumference selection
-                tolerance = (
-                    5.0  # 5mm tolerance for circle circumference - precise selection
-                )
-                checked_elements.append(
-                    f"Circle {element_id}: center=({center_x:.1f},{center_y:.1f}), radius={radius:.1f}, distance_to_circumference={distance_to_circumference:.1f}, tolerance={tolerance:.1f}"
-                )
-                if distance_to_circumference <= tolerance:
-                    circle_candidates.append((element_id, distance_to_circumference))
-
-            elif geom_type in ["LINE", "LWPOLYLINE"] and len(points) >= 2:
-                # Check distance to line segments
-                for i in range(len(points) - 1):
-                    p1 = points[i]
-                    p2 = points[i + 1]
-                    distance = point_to_line_distance((actual_x, actual_y), p1, p2)
-                    tolerance = 5.0  # 5mm tolerance for lines - precise selection
-                    checked_elements.append(
-                        f"Line {element_id}: p1=({p1[0]:.1f},{p1[1]:.1f}), p2=({p2[0]:.1f},{p2[1]:.1f}), distance={distance:.1f}, tolerance={tolerance:.1f}"
-                    )
-                    if distance <= tolerance:
-                        line_candidates.append((element_id, distance))
-                        break  # Only add once per line element
-
-        # Priority selection: prefer lines over circles if both are selectable
-        # This gives better user experience when clicking on overlapping elements
-        if line_candidates:
-            # Select the closest line
-            closest_element_id, closest_distance = min(
-                line_candidates, key=lambda x: x[1]
-            )
-            print(
-                f"Selected LINE (priority): {closest_element_id}, distance: {closest_distance:.3f}"
-            )
-        elif circle_candidates:
-            # Select the closest circle only if no lines are selectable
-            closest_element_id, closest_distance = min(
-                circle_candidates, key=lambda x: x[1]
-            )
-            print(
-                f"Selected CIRCLE (fallback): {closest_element_id}, distance: {closest_distance:.3f}"
-            )
-        else:
-            closest_element_id = None
-            closest_distance = float("inf")
-            print("No elements within tolerance")
-
-        print(f"Checked {len(checked_elements)} elements:")
-        for elem in checked_elements:  # Show all elements for debugging
-            print(f"  {elem}")
-        print(f"Total elements by type:")
-        circles = len(
-            [e for e in unique_elements.values() if e["geom_type"] == "CIRCLE"]
-        )
-        lines = len([e for e in unique_elements.values() if e["geom_type"] == "LINE"])
-        polylines = len(
-            [e for e in unique_elements.values() if e["geom_type"] == "LWPOLYLINE"]
-        )
-        print(f"  Circles: {circles}, Lines: {lines}, Polylines: {polylines}")
-
-        # Show all elements within tolerance
-        selectable_elements = []
-        for element_id, element_info in unique_elements.items():
-            if element_id in session_data["removed_elements"]:
-                continue
-
-            geom_type = element_info["geom_type"]
-            radius = element_info["radius"]
-            points = element_info["points"]
-
-            if geom_type == "CIRCLE" and len(points) >= 1:
-                center_x, center_y = points[0]
-                distance_to_center = math.sqrt(
-                    (actual_x - center_x) ** 2 + (actual_y - center_y) ** 2
-                )
-                distance_to_circumference = abs(distance_to_center - radius)
-                if distance_to_circumference <= 50.0:
-                    selectable_elements.append(
-                        f"SELECTABLE Circle {element_id}: distance={distance_to_circumference:.1f}"
-                    )
-
-            elif geom_type in ["LINE", "LWPOLYLINE"] and len(points) >= 2:
-                for i in range(len(points) - 1):
-                    p1 = points[i]
-                    p2 = points[i + 1]
-                    distance = point_to_line_distance((actual_x, actual_y), p1, p2)
-                    if distance <= 50.0:
-                        selectable_elements.append(
-                            f"SELECTABLE Line {element_id}: distance={distance:.1f}"
-                        )
-                        break  # Only check first segment for each line
-
-        print(f"Elements within tolerance: {len(selectable_elements)}")
-        for elem in selectable_elements:
-            print(f"  {elem}")
-
-        print(
-            f"Closest element: {closest_element_id}, distance: {closest_distance:.3f}"
-        )
-
-        if closest_element_id:
-            # Single selection mode - clear all previous selections
-            if closest_element_id in session_data["selected_elements"]:
-                # If clicking the same element, deselect it
-                session_data["selected_elements"].clear()
-                print(f"Deselected element {closest_element_id}")
-            else:
-                # Clear all selections and select only this element
-                session_data["selected_elements"].clear()
-                session_data["selected_elements"].add(closest_element_id)
-                print(
-                    f"Selected element {closest_element_id} (cleared previous selections)"
-                )
-
-            return jsonify(
-                {
-                    "success": True,
-                    "element_id": closest_element_id,
-                    "distance": closest_distance,
-                    "selected": closest_element_id in session_data["selected_elements"],
-                }
-            )
-        else:
-            print("No element found within tolerance")
-            return jsonify(
-                {"success": False, "message": "No element found at click position"}
-            )
-
-    except Exception as e:
-        return jsonify({"error": f"Failed to find element: {str(e)}"}), 500
+    """Element selection disabled - all elements are selected by default"""
+    return jsonify({"success": False, "message": "Element selection disabled"})
 
 
 @app.route("/get_plot", methods=["GET"])
