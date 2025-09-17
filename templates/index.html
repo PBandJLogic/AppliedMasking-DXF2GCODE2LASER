@@ -542,7 +542,14 @@ G0 X0 Y0 ; Return to origin</textarea>
             const normalizedY = scaledY / e.target.naturalHeight;
 
             console.log('Normalized coordinates:', normalizedX, normalizedY);
-            console.log('Sending to server:', {x: normalizedX, y: normalizedY});
+            console.log('Sending to server:', { x: normalizedX, y: normalizedY });
+            console.log('Click analysis:');
+            console.log('  - Raw click:', x, y);
+            console.log('  - Displayed size:', rect.width, rect.height);
+            console.log('  - Natural size:', e.target.naturalWidth, e.target.naturalHeight);
+            console.log('  - Scale factors:', scaleX.toFixed(3), scaleY.toFixed(3));
+            console.log('  - Scaled click:', scaledX.toFixed(3), scaledY.toFixed(3));
+            console.log('  - Normalized:', normalizedX.toFixed(3), normalizedY.toFixed(3));
 
             // Send click coordinates to server to find closest element
             fetch('/find_element_at_click', {
@@ -1030,7 +1037,14 @@ G0 X0 Y0 ; Return to origin</textarea>
             const normalizedY = scaledY / e.target.naturalHeight;
 
             console.log('Normalized coordinates:', normalizedX, normalizedY);
-            console.log('Sending to server:', {x: normalizedX, y: normalizedY});
+            console.log('Sending to server:', { x: normalizedX, y: normalizedY });
+            console.log('Click analysis:');
+            console.log('  - Raw click:', x, y);
+            console.log('  - Displayed size:', rect.width, rect.height);
+            console.log('  - Natural size:', e.target.naturalWidth, e.target.naturalHeight);
+            console.log('  - Scale factors:', scaleX.toFixed(3), scaleY.toFixed(3));
+            console.log('  - Scaled click:', scaledX.toFixed(3), scaledY.toFixed(3));
+            console.log('  - Normalized:', normalizedX.toFixed(3), normalizedY.toFixed(3));
 
             // Send click coordinates to server to find closest element
             fetch('/find_element_at_click', {

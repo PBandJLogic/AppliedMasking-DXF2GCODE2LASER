@@ -1039,7 +1039,10 @@ def find_element_at_click():
         print(
             f"Data bounds: x=({min_x:.3f}, {max_x:.3f}), y=({min_y:.3f}, {max_y:.3f})"
         )
+        print(f"Data width: {data_width:.3f}, Data height: {data_height:.3f}")
         print(f"Actual coordinates: ({actual_x:.3f}, {actual_y:.3f})")
+        print(f"Coordinate conversion: x = {min_x:.3f} + {click_x:.3f} * {data_width:.3f} = {actual_x:.3f}")
+        print(f"Coordinate conversion: y = {max_y:.3f} - {click_y:.3f} * {data_height:.3f} = {actual_y:.3f}")
 
         # Find best element with priority system
         closest_element_id = None
@@ -1066,7 +1069,7 @@ def find_element_at_click():
                 # Calculate distance to circumference (not center)
                 distance_to_circumference = abs(distance_to_center - radius)
                 # Use tolerance for circumference selection
-                tolerance = 20.0  # 20mm tolerance for circle circumference - reasonable precision
+                tolerance = 5.0  # 5mm tolerance for circle circumference - precise selection
                 checked_elements.append(
                     f"Circle {element_id}: center=({center_x:.1f},{center_y:.1f}), radius={radius:.1f}, distance_to_circumference={distance_to_circumference:.1f}, tolerance={tolerance:.1f}"
                 )
@@ -1079,7 +1082,7 @@ def find_element_at_click():
                     p1 = points[i]
                     p2 = points[i + 1]
                     distance = point_to_line_distance((actual_x, actual_y), p1, p2)
-                    tolerance = 20.0  # 20mm tolerance for lines - reasonable precision
+                    tolerance = 5.0  # 5mm tolerance for lines - precise selection
                     checked_elements.append(
                         f"Line {element_id}: p1=({p1[0]:.1f},{p1[1]:.1f}), p2=({p2[0]:.1f},{p2[1]:.1f}), distance={distance:.1f}, tolerance={tolerance:.1f}"
                     )
