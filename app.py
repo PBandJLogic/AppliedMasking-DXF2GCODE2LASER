@@ -1019,10 +1019,11 @@ def find_element_at_click():
         padding_x = max(x_range * 0.1, 10)  # At least 10mm padding
         padding_y = max(y_range * 0.1, 10)  # At least 10mm padding
 
-        min_x -= padding_x
-        max_x += padding_x
-        min_y -= padding_y
-        max_y += padding_y
+        # Use the same bounds as the plot (with padding)
+        plot_min_x = min_x - padding_x
+        plot_max_x = max_x + padding_x
+        plot_min_y = min_y - padding_y
+        plot_max_y = max_y + padding_y
 
         # The problem is that the web image might be scaled differently than the matplotlib figure
         # We need to account for the actual plot area that matplotlib creates
@@ -1031,30 +1032,33 @@ def find_element_at_click():
         # When we use bbox_inches="tight", it crops to the actual data
         # But we need to account for equal aspect ratio
 
-        data_width = max_x - min_x
-        data_height = max_y - min_y
+        data_width = plot_max_x - plot_min_x
+        data_height = plot_max_y - plot_min_y
 
         if data_width == 0:
             data_width = 1
         if data_height == 0:
             data_height = 1
 
-        # Simple direct mapping - this should work if the image displays the full data range
-        actual_x = min_x + click_x * data_width
-        actual_y = min_y + click_y * data_height  # Use min_y as origin for consistent mapping
+        # Simple direct mapping using the same bounds as the plot
+        actual_x = plot_min_x + click_x * data_width
+        actual_y = plot_min_y + click_y * data_height
 
         # Debug logging
         print(f"Click coordinates: normalized=({click_x:.3f}, {click_y:.3f})")
         print(
             f"Data bounds: x=({min_x:.3f}, {max_x:.3f}), y=({min_y:.3f}, {max_y:.3f})"
         )
+        print(
+            f"Plot bounds: x=({plot_min_x:.3f}, {plot_max_x:.3f}), y=({plot_min_y:.3f}, {plot_max_y:.3f})"
+        )
         print(f"Data width: {data_width:.3f}, Data height: {data_height:.3f}")
         print(f"Actual coordinates: ({actual_x:.3f}, {actual_y:.3f})")
         print(
-            f"Coordinate conversion: x = {min_x:.3f} + {click_x:.3f} * {data_width:.3f} = {actual_x:.3f}"
+            f"Coordinate conversion: x = {plot_min_x:.3f} + {click_x:.3f} * {data_width:.3f} = {actual_x:.3f}"
         )
         print(
-            f"Coordinate conversion: y = {min_y:.3f} + {click_y:.3f} * {data_height:.3f} = {actual_y:.3f}"
+            f"Coordinate conversion: y = {plot_min_y:.3f} + {click_y:.3f} * {data_height:.3f} = {actual_y:.3f}"
         )
 
         # Find best element with priority system
