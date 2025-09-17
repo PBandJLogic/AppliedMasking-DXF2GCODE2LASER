@@ -462,8 +462,8 @@ G0 X0 Y0 ; Return to origin</textarea>
                     <p>Please select a DXF file to begin</p>
                 </div>
                 <div id="dxfPlotContainer"
-                    style="overflow: auto; max-height: 600px; border: 1px solid #ddd; display: none;">
-                    <img id="plotImage" class="plot-image" style="transition: transform 0.2s; cursor: grab;" />
+                    style="overflow: hidden; max-height: 600px; border: 1px solid #ddd; display: none; position: relative; cursor: grab;">
+                    <img id="plotImage" class="plot-image" style="position: absolute; top: 0; left: 0; transform-origin: 0 0;" />
                 </div>
             </div>
         </div>
@@ -476,6 +476,11 @@ G0 X0 Y0 ; Return to origin</textarea>
         let selectedElements = new Set();
         let currentPlotImage = null;
         let currentDxfZoom = 1.0;
+        let panX = 0;
+        let panY = 0;
+        let isDragging = false;
+        let lastMouseX = 0;
+        let lastMouseY = 0;
 
         // File upload handling
         document.getElementById('fileInput').addEventListener('change', function (e) {
@@ -998,10 +1003,14 @@ G0 X0 Y0 ; Return to origin</textarea>
                 plotContainer.style.display = 'block';
                 zoomControls.style.display = 'flex';
                 noFile.style.display = 'none';
-                // Reset zoom
+                // Reset zoom and pan
                 currentDxfZoom = 1.0;
-                plotImage.style.transform = 'scale(1.0)';
+                panX = 0;
+                panY = 0;
+                updatePlotTransform();
                 document.getElementById('zoomLevel').textContent = '100%';
+                // Initialize panning functionality
+                initializePlotPanning();
                 // Attach click listener when image is displayed
                 attachPlotClickListener();
             } else {
@@ -1061,8 +1070,10 @@ G0 X0 Y0 ; Return to origin</textarea>
             const zoomLevel = document.getElementById('zoomLevel');
             
             if (factor === 1.0) {
-                // Reset zoom
+                // Reset zoom and pan
                 currentDxfZoom = 1.0;
+                panX = 0;
+                panY = 0;
             } else {
                 // Apply zoom factor
                 currentDxfZoom *= factor;
@@ -1070,8 +1081,63 @@ G0 X0 Y0 ; Return to origin</textarea>
                 currentDxfZoom = Math.max(0.1, Math.min(currentDxfZoom, 5.0));
             }
             
-            plotImage.style.transform = `scale(${currentDxfZoom})`;
+            updatePlotTransform();
             zoomLevel.textContent = Math.round(currentDxfZoom * 100) + '%';
+        }
+
+        function updatePlotTransform() {
+            const plotImage = document.getElementById('plotImage');
+            plotImage.style.transform = `translate(${panX}px, ${panY}px) scale(${currentDxfZoom})`;
+        }
+
+        function initializePlotPanning() {
+            const plotContainer = document.getElementById('dxfPlotContainer');
+            const plotImage = document.getElementById('plotImage');
+            
+            plotContainer.addEventListener('mousedown', function(e) {
+                if (e.button === 0) { // Left mouse button
+                    isDragging = true;
+                    lastMouseX = e.clientX;
+                    lastMouseY = e.clientY;
+                    plotContainer.style.cursor = 'grabbing';
+                    e.preventDefault();
+                }
+            });
+            
+            plotContainer.addEventListener('mousemove', function(e) {
+                if (isDragging) {
+                    const deltaX = e.clientX - lastMouseX;
+                    const deltaY = e.clientY - lastMouseY;
+                    
+                    panX += deltaX;
+                    panY += deltaY;
+                    
+                    updatePlotTransform();
+                    
+                    lastMouseX = e.clientX;
+                    lastMouseY = e.clientY;
+                    e.preventDefault();
+                }
+            });
+            
+            plotContainer.addEventListener('mouseup', function(e) {
+                if (e.button === 0) {
+                    isDragging = false;
+                    plotContainer.style.cursor = 'grab';
+                }
+            });
+            
+            plotContainer.addEventListener('mouseleave', function(e) {
+                isDragging = false;
+                plotContainer.style.cursor = 'grab';
+            });
+            
+            // Handle wheel zoom
+            plotContainer.addEventListener('wheel', function(e) {
+                e.preventDefault();
+                const factor = e.deltaY > 0 ? 0.9 : 1.1;
+                zoomDxfPlot(factor);
+            });
         }
 
         function zoomToolpathFromPreview(buttonElement, factor) {
@@ -1079,12 +1145,12 @@ G0 X0 Y0 ; Return to origin</textarea>
             const toolpathDoc = buttonElement.ownerDocument;
             const toolpathImage = toolpathDoc.getElementById('toolpathImage');
             const zoomLevel = toolpathDoc.getElementById('toolpathZoomLevel');
-            
+
             // Initialize zoom if not set
             if (!toolpathDoc.currentToolpathZoom) {
                 toolpathDoc.currentToolpathZoom = 1.0;
             }
-            
+
             if (factor === 1.0) {
                 // Reset zoom
                 toolpathDoc.currentToolpathZoom = 1.0;
@@ -1094,7 +1160,7 @@ G0 X0 Y0 ; Return to origin</textarea>
                 // Limit zoom range
                 toolpathDoc.currentToolpathZoom = Math.max(0.1, Math.min(toolpathDoc.currentToolpathZoom, 5.0));
             }
-            
+
             toolpathImage.style.transform = `scale(${toolpathDoc.currentToolpathZoom})`;
             zoomLevel.textContent = Math.round(toolpathDoc.currentToolpathZoom * 100) + '%';
         }
