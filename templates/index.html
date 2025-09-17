@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DXF Viewer & Editor</title>
+    <title>DXF 2 Template</title>
     <style>
         * {
             margin: 0;
@@ -115,17 +115,17 @@
             width: 100%;
             transition: background-color 0.3s;
         }
-        
+
         .btn-row {
             display: flex;
             gap: 8px;
         }
-        
+
         .btn-half {
             flex: 1;
             width: calc(50% - 4px);
         }
-        
+
         .btn-multiline {
             font-size: 14px;
             line-height: 1.2;
@@ -308,8 +308,8 @@
     <div class="container">
         <div class="sidebar">
             <div class="header">
-                <h1>DXF Viewer & Editor</h1>
-                <p>Interactive DXF Processing</p>
+                <h1>DXF 2 Template</h1>
+                <p>G code for laser engraving</p>
             </div>
 
             <div class="section">
@@ -319,7 +319,8 @@
                         <input type="file" id="fileInput" accept=".dxf" />
                         <label for="fileInput" class="file-input-label">Load DXF File</label>
                     </div>
-                    <button class="btn btn-success btn-half btn-multiline" onclick="exportGcode()">Export<br>G-code</button>
+                    <button class="btn btn-success btn-half btn-multiline"
+                        onclick="exportGcode()">Export<br>G-code</button>
                 </div>
             </div>
 
@@ -424,12 +425,21 @@
             }
         });
 
-        // Plot click handling for element selection
-        document.getElementById('plotImage').addEventListener('click', function (e) {
+        // Plot click handling for element selection - attach when image is loaded
+        function attachPlotClickListener() {
+            const plotImage = document.getElementById('plotImage');
+            if (plotImage) {
+                // Remove any existing listener first
+                plotImage.removeEventListener('click', handlePlotClick);
+                plotImage.addEventListener('click', handlePlotClick);
+            }
+        }
+
+        function handlePlotClick(e) {
             if (currentPlotImage) {
                 selectElementAtClick(e);
             }
-        });
+        }
 
         function uploadFile(file) {
             const formData = new FormData();
@@ -506,21 +516,21 @@
                 },
                 body: JSON.stringify({})
             })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    updatePlot(data.plot_image);
-                    updateStatistics(data.statistics);
-                    selectedElements.clear();
-                    updateSelectedInfo();
-                    showSuccess('Elements marked for engraving!');
-                } else {
-                    showError(data.error || 'Failed to mark for engraving');
-                }
-            })
-            .catch(error => {
-                showError('Error marking for engraving: ' + error.message);
-            });
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        updatePlot(data.plot_image);
+                        updateStatistics(data.statistics);
+                        selectedElements.clear();
+                        updateSelectedInfo();
+                        showSuccess('Elements marked for engraving!');
+                    } else {
+                        showError(data.error || 'Failed to mark for engraving');
+                    }
+                })
+                .catch(error => {
+                    showError('Error marking for engraving: ' + error.message);
+                });
         }
 
         function removeElements() {
@@ -538,21 +548,21 @@
                 },
                 body: JSON.stringify({})
             })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    updatePlot(data.plot_image);
-                    updateStatistics(data.statistics);
-                    selectedElements.clear();
-                    updateSelectedInfo();
-                    showSuccess('Elements removed!');
-                } else {
-                    showError(data.error || 'Failed to remove elements');
-                }
-            })
-            .catch(error => {
-                showError('Error removing elements: ' + error.message);
-            });
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        updatePlot(data.plot_image);
+                        updateStatistics(data.statistics);
+                        selectedElements.clear();
+                        updateSelectedInfo();
+                        showSuccess('Elements removed!');
+                    } else {
+                        showError(data.error || 'Failed to remove elements');
+                    }
+                })
+                .catch(error => {
+                    showError('Error removing elements: ' + error.message);
+                });
         }
 
         function selectAllForEngraving() {
@@ -639,17 +649,26 @@
         }
 
         function selectElementAtClick(e) {
-            if (!currentPlotImage) return;
-            
+            console.log('Click detected on plot image');
+            if (!currentPlotImage) {
+                console.log('No current plot image available');
+                return;
+            }
+
             // Get click coordinates relative to the image
             const rect = e.target.getBoundingClientRect();
             const x = e.clientX - rect.left;
             const y = e.clientY - rect.top;
-            
+
+            console.log('Click coordinates:', x, y);
+            console.log('Image dimensions:', rect.width, rect.height);
+
             // Convert to normalized coordinates (0-1)
             const normalizedX = x / rect.width;
             const normalizedY = y / rect.height;
-            
+
+            console.log('Normalized coordinates:', normalizedX, normalizedY);
+
             // Send click coordinates to server to find closest element
             fetch('/find_element_at_click', {
                 method: 'POST',
@@ -663,7 +682,9 @@
             })
             .then(response => response.json())
             .then(data => {
+                console.log('Server response:', data);
                 if (data.success && data.element_id) {
+                    console.log('Element found:', data.element_id, 'Selected:', data.selected);
                     // Update local selection to match server
                     if (data.selected) {
                         selectedElements.add(data.element_id);
@@ -674,27 +695,27 @@
                     // Refresh the plot to show selection
                     refreshPlot();
                 } else if (!data.success) {
-                    console.log('No element found at click position');
+                    console.log('No element found at click position:', data.message);
                 }
             })
-            .catch(error => {
-                console.error('Error selecting element:', error);
-            });
+                .catch(error => {
+                    console.error('Error selecting element:', error);
+                });
         }
-        
+
         function refreshPlot() {
             if (!currentPlotImage) return;
-            
+
             fetch('/get_plot')
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    updatePlot(data.plot_image);
-                }
-            })
-            .catch(error => {
-                console.error('Error refreshing plot:', error);
-            });
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        updatePlot(data.plot_image);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error refreshing plot:', error);
+                });
         }
 
         function updatePlot(imageData) {
@@ -705,6 +726,8 @@
                 plotImage.src = 'data:image/png;base64,' + imageData;
                 plotImage.style.display = 'block';
                 noFile.style.display = 'none';
+                // Attach click listener when image is displayed
+                attachPlotClickListener();
             } else {
                 plotImage.style.display = 'none';
                 noFile.style.display = 'block';
