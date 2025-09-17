@@ -965,19 +965,19 @@ def find_element_at_click():
         # Calculate plot bounds (same as in create_plot_image)
         all_x = []
         all_y = []
-        
+
         for element_id, element_info in unique_elements.items():
             if element_id in session_data["removed_elements"]:
                 continue
-                
+
             points = element_info["points"]
             radius = element_info["radius"]
             geom_type = element_info["geom_type"]
-            
+
             for point in points:
                 all_x.append(point[0])
                 all_y.append(point[1])
-                
+
             # For circles, extend bounds to include the full circle
             if geom_type == "CIRCLE" and len(points) >= 1:
                 center_x, center_y = points[0]
@@ -995,7 +995,7 @@ def find_element_at_click():
         y_range = max_y - min_y
         padding_x = max(x_range * 0.1, 10)  # At least 10mm padding
         padding_y = max(y_range * 0.1, 10)  # At least 10mm padding
-        
+
         min_x -= padding_x
         max_x += padding_x
         min_y -= padding_y
@@ -1036,7 +1036,7 @@ def find_element_at_click():
                 # Calculate distance to circumference (not center)
                 distance_to_circumference = abs(distance_to_center - radius)
                 # Use tolerance for circumference selection
-                tolerance = 8.0  # 8mm tolerance for circle circumference
+                tolerance = 50.0  # 50mm tolerance for circle circumference - increased for easier selection
                 checked_elements.append(
                     f"Circle {element_id}: center=({center_x:.1f},{center_y:.1f}), radius={radius:.1f}, distance_to_circumference={distance_to_circumference:.1f}, tolerance={tolerance:.1f}"
                 )
@@ -1053,7 +1053,7 @@ def find_element_at_click():
                     p1 = points[i]
                     p2 = points[i + 1]
                     distance = point_to_line_distance((actual_x, actual_y), p1, p2)
-                    tolerance = 15.0  # 15mm tolerance for lines - much larger for easier selection
+                    tolerance = 50.0  # 50mm tolerance for lines - much larger for easier selection
                     checked_elements.append(
                         f"Line {element_id}: p1=({p1[0]:.1f},{p1[1]:.1f}), p2=({p2[0]:.1f},{p2[1]:.1f}), distance={distance:.1f}, tolerance={tolerance:.1f}"
                     )
