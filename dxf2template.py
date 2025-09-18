@@ -1710,23 +1710,9 @@ Origin offset: ({self.origin_offset[0]:.1f}, {self.origin_offset[1]:.1f})"""
         # Add navigation toolbar for zoom/pan functionality
         toolbar = NavigationToolbar2Tk(canvas, plot_frame)
         toolbar.update()
+        toolbar.pack(side="bottom", fill="x")
 
-        # Apply focus fixes to prevent focus loss issues
-        def ensure_focus_after_plot_interaction():
-            """Ensure focus is maintained after plot interactions"""
-            try:
-                # Ensure the preview window can receive focus
-                preview_window.focus_set()
-            except Exception as e:
-                print(f"Warning: Could not ensure focus: {e}")
-
-        # Bind focus events to the canvas
-        canvas.get_tk_widget().bind(
-            "<Button-1>", lambda e: ensure_focus_after_plot_interaction()
-        )
-        canvas.get_tk_widget().bind(
-            "<ButtonRelease-1>", lambda e: ensure_focus_after_plot_interaction()
-        )
+        # Note: Removed focus event bindings that were interfering with matplotlib zoom/pan functionality
 
         # G-code Text Tab
         gcode_frame = ttk.Frame(notebook)
