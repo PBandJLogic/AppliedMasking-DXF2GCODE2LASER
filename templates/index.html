@@ -393,6 +393,12 @@
                     </div>
                 </div>
                 <div class="form-group">
+                    <div class="form-row">
+                        <input type="checkbox" id="raiseLaserBetweenPaths" />
+                        <label for="raiseLaserBetweenPaths">Raise laser between paths</label>
+                    </div>
+                </div>
+                <div class="form-group">
                     <label for="preamble">Preamble:</label>
                     <textarea id="preamble" rows="3">G21 ; Set units to millimeters
 G90 ; Absolute positioning
@@ -653,7 +659,8 @@ G0 X0 Y0 ; Return to origin</textarea>
                 cutting_z: parseFloat(document.getElementById('cuttingZ').value),
                 feedrate: parseInt(document.getElementById('feedrate').value),
                 max_workspace_x: parseFloat(document.getElementById('maxWorkspaceX').value),
-                max_workspace_y: parseFloat(document.getElementById('maxWorkspaceY').value)
+                max_workspace_y: parseFloat(document.getElementById('maxWorkspaceY').value),
+                raise_laser_between_paths: document.getElementById('raiseLaserBetweenPaths').checked
             };
 
             console.log('Updating G-code settings:', settings);

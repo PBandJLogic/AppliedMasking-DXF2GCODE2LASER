@@ -41,6 +41,7 @@ session_data = {
         "feedrate": 1500,
         "max_workspace_x": 800.0 - 10.0,
         "max_workspace_y": 400.0 - 10.0,
+        "raise_laser_between_paths": False,
     },
 }
 
@@ -726,6 +727,10 @@ def update_gcode_settings():
             session_data["gcode_settings"]["max_workspace_x"] = data["max_workspace_x"]
         if "max_workspace_y" in data:
             session_data["gcode_settings"]["max_workspace_y"] = data["max_workspace_y"]
+        if "raise_laser_between_paths" in data:
+            session_data["gcode_settings"]["raise_laser_between_paths"] = data[
+                "raise_laser_between_paths"
+            ]
 
         return jsonify({"success": True, "message": "Settings updated successfully"})
 
@@ -852,7 +857,7 @@ def create_gcode_toolpath_plot(gcode):
 
     # Plot positioning moves in green with arrows
     positioning_labeled = False
-    for line_segment in positioning_lines:
+    for i, line_segment in enumerate(positioning_lines):
         start, end = line_segment
         if start != end:  # Only plot if there's actual movement
             ax.plot(
@@ -864,6 +869,17 @@ def create_gcode_toolpath_plot(gcode):
                 label="Positioning (G0)" if not positioning_labeled else "",
             )
             positioning_labeled = True
+
+            # Add arrow only every few segments for circles (reduce clutter)
+            # For short segments (likely circles), show arrows every 8th segment
+            segment_length = (
+                (end[0] - start[0]) ** 2 + (end[1] - start[1]) ** 2
+            ) ** 0.5
+            if segment_length < 5:  # Likely a circle segment
+                if i % 8 != 0:  # Skip most arrows for circles
+                    continue
+            else:  # Regular line segments - show all arrows
+                pass
 
             # Add arrow in the middle of the line segment
             mid_x = (start[0] + end[0]) / 2
@@ -879,8 +895,14 @@ def create_gcode_toolpath_plot(gcode):
                 dx_norm = dx / length
                 dy_norm = dy / length
 
-                # Arrow length (proportional to line length)
+                # Arrow length (proportional to line length, scaled for small circles)
                 arrow_length = max(0.3, length * 0.15)
+
+                # If this is part of a circle (short segments), scale arrow length down
+                if length < 5:  # Likely a circle segment
+                    arrow_length = max(
+                        0.2, length * 0.3
+                    )  # Shorter arrows for small segments
 
                 # Draw arrow
                 ax.annotate(
@@ -898,7 +920,7 @@ def create_gcode_toolpath_plot(gcode):
 
     # Plot engraving moves in red with arrows
     engraving_labeled = False
-    for line_segment in engraving_lines:
+    for i, line_segment in enumerate(engraving_lines):
         start, end = line_segment
         if start != end:  # Only plot if there's actual movement
             ax.plot(
@@ -910,6 +932,17 @@ def create_gcode_toolpath_plot(gcode):
                 label="Engraving (G1)" if not engraving_labeled else "",
             )
             engraving_labeled = True
+
+            # Add arrow only every few segments for circles (reduce clutter)
+            # For short segments (likely circles), show arrows every 8th segment
+            segment_length = (
+                (end[0] - start[0]) ** 2 + (end[1] - start[1]) ** 2
+            ) ** 0.5
+            if segment_length < 5:  # Likely a circle segment
+                if i % 8 != 0:  # Skip most arrows for circles
+                    continue
+            else:  # Regular line segments - show all arrows
+                pass
 
             # Add arrow in the middle of the line segment
             mid_x = (start[0] + end[0]) / 2
@@ -925,8 +958,14 @@ def create_gcode_toolpath_plot(gcode):
                 dx_norm = dx / length
                 dy_norm = dy / length
 
-                # Arrow length (proportional to line length)
+                # Arrow length (proportional to line length, scaled for small circles)
                 arrow_length = max(0.3, length * 0.15)
+
+                # If this is part of a circle (short segments), scale arrow length down
+                if length < 5:  # Likely a circle segment
+                    arrow_length = max(
+                        0.2, length * 0.3
+                    )  # Shorter arrows for small segments
 
                 # Draw arrow
                 ax.annotate(
@@ -1034,6 +1073,130 @@ def clamp_to_workspace(x, y):
     return clamped_x, clamped_y
 
 
+def is_within_workspace(x, y):
+    """Check if a point is within workspace limits"""
+    max_x = session_data["gcode_settings"]["max_workspace_x"]
+    max_y = session_data["gcode_settings"]["max_workspace_y"]
+    return 0.0 <= x <= max_x and 0.0 <= y <= max_y
+
+
+def clip_line_to_workspace(start_x, start_y, end_x, end_y):
+    """Clip a line segment to workspace boundaries using intersection logic"""
+    max_x = session_data["gcode_settings"]["max_workspace_x"]
+    max_y = session_data["gcode_settings"]["max_workspace_y"]
+
+    # Check if both points are outside workspace
+    start_out = not is_within_workspace(start_x, start_y)
+    end_out = not is_within_workspace(end_x, end_y)
+
+    if start_out and end_out:
+        # Both points outside - check if line intersects workspace
+        if not line_intersects_workspace(start_x, start_y, end_x, end_y):
+            return None  # No intersection, skip this line
+
+    # Find intersection points with workspace boundaries
+    clipped_start_x, clipped_start_y = start_x, start_y
+    clipped_end_x, clipped_end_y = end_x, end_y
+
+    # Clip start point if outside
+    if start_out:
+        intersection = find_line_workspace_intersection(
+            start_x, start_y, end_x, end_y, start_x, start_y
+        )
+        if intersection:
+            clipped_start_x, clipped_start_y = intersection
+        else:
+            return None  # No valid intersection
+
+    # Clip end point if outside
+    if end_out:
+        intersection = find_line_workspace_intersection(
+            start_x, start_y, end_x, end_y, end_x, end_y
+        )
+        if intersection:
+            clipped_end_x, clipped_end_y = intersection
+        else:
+            return None  # No valid intersection
+
+    return (clipped_start_x, clipped_start_y, clipped_end_x, clipped_end_y)
+
+
+def line_intersects_workspace(x1, y1, x2, y2):
+    """Check if a line segment intersects with the workspace rectangle"""
+    max_x = session_data["gcode_settings"]["max_workspace_x"]
+    max_y = session_data["gcode_settings"]["max_workspace_y"]
+
+    # Check if line intersects with any of the four workspace boundaries
+    boundaries = [
+        (0, 0, max_x, 0),  # Bottom edge
+        (0, max_y, max_x, max_y),  # Top edge
+        (0, 0, 0, max_y),  # Left edge
+        (max_x, 0, max_x, max_y),  # Right edge
+    ]
+
+    for bx1, by1, bx2, by2 in boundaries:
+        if line_segments_intersect(x1, y1, x2, y2, bx1, by1, bx2, by2):
+            return True
+    return False
+
+
+def find_line_workspace_intersection(x1, y1, x2, y2, target_x, target_y):
+    """Find intersection of line with workspace boundary closest to target point"""
+    max_x = session_data["gcode_settings"]["max_workspace_x"]
+    max_y = session_data["gcode_settings"]["max_workspace_y"]
+
+    intersections = []
+
+    # Check intersections with all four boundaries
+    boundaries = [
+        (0, 0, max_x, 0),  # Bottom edge
+        (0, max_y, max_x, max_y),  # Top edge
+        (0, 0, 0, max_y),  # Left edge
+        (max_x, 0, max_x, max_y),  # Right edge
+    ]
+
+    for bx1, by1, bx2, by2 in boundaries:
+        intersection = line_segment_intersection(x1, y1, x2, y2, bx1, by1, bx2, by2)
+        if intersection:
+            intersections.append(intersection)
+
+    if not intersections:
+        return None
+
+    # Return intersection closest to target point
+    closest = min(
+        intersections, key=lambda p: (p[0] - target_x) ** 2 + (p[1] - target_y) ** 2
+    )
+    return closest
+
+
+def line_segments_intersect(x1, y1, x2, y2, x3, y3, x4, y4):
+    """Check if two line segments intersect"""
+
+    def ccw(A, B, C):
+        return (C[1] - A[1]) * (B[0] - A[0]) > (B[1] - A[1]) * (C[0] - A[0])
+
+    A, B, C, D = (x1, y1), (x2, y2), (x3, y3), (x4, y4)
+    return ccw(A, C, D) != ccw(B, C, D) and ccw(A, B, C) != ccw(A, B, D)
+
+
+def line_segment_intersection(x1, y1, x2, y2, x3, y3, x4, y4):
+    """Find intersection point of two line segments, if it exists"""
+    denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
+    if abs(denom) < 1e-10:
+        return None  # Lines are parallel
+
+    t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denom
+    u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / denom
+
+    if 0 <= t <= 1 and 0 <= u <= 1:
+        x = x1 + t * (x2 - x1)
+        y = y1 + t * (y2 - y1)
+        return (x, y)
+
+    return None
+
+
 def generate_gcode(elements_by_id):
     """Generate G-code from elements"""
     gcode = []
@@ -1055,28 +1218,37 @@ def generate_gcode(elements_by_id):
                 start_x, start_y = line_points[0]
                 end_x, end_y = line_points[1]
 
-                # Clamp coordinates to workspace limits
-                start_x, start_y = clamp_to_workspace(start_x, start_y)
-                end_x, end_y = clamp_to_workspace(end_x, end_y)
+                # Clip line to workspace using intersection logic
+                clipped_line = clip_line_to_workspace(start_x, start_y, end_x, end_y)
 
-                # Position to start point
-                gcode.append(f"G0 X{start_x:.3f} Y{start_y:.3f}")
+                if clipped_line:
+                    clipped_start_x, clipped_start_y, clipped_end_x, clipped_end_y = (
+                        clipped_line
+                    )
 
-                # Turn on laser and lower Z
-                gcode.append(
-                    f"M3 S{session_data['gcode_settings']['laser_power']} ; Turn on laser"
-                )
-                gcode.append(
-                    f"G1 Z{session_data['gcode_settings']['cutting_z']:.3f} F{session_data['gcode_settings']['feedrate']} ; Lower Z"
-                )
+                    # Position to clipped start point with Z at cutting height
+                    gcode.append(
+                        f"G0 X{clipped_start_x:.3f} Y{clipped_start_y:.3f} Z{session_data['gcode_settings']['cutting_z']:.3f}"
+                    )
 
-                # Engrave to end point
-                gcode.append(f"G1 X{end_x:.3f} Y{end_y:.3f} ; Engrave line")
+                    # Turn on laser
+                    gcode.append(
+                        f"M3 S{session_data['gcode_settings']['laser_power']} ; Turn on laser"
+                    )
 
-                # Turn off laser and raise Z
-                gcode.append("M5 ; Turn off laser")
-                gcode.append("G0 Z5 ; Raise Z")
-                gcode.append("")
+                    # Engrave to clipped end point
+                    gcode.append(
+                        f"G1 X{clipped_end_x:.3f} Y{clipped_end_y:.3f} F{session_data['gcode_settings']['feedrate']} ; Engrave line"
+                    )
+
+                    # Turn off laser
+                    gcode.append("M5 ; Turn off laser")
+
+                    # Conditionally raise Z between paths
+                    if session_data["gcode_settings"]["raise_laser_between_paths"]:
+                        gcode.append("G0 Z-5.0 ; Raise laser between paths")
+
+                    gcode.append("")
 
         elif geom_type == "CIRCLE":
             gcode.append("; === CIRCLE GEOMETRY ===")
@@ -1085,23 +1257,25 @@ def generate_gcode(elements_by_id):
                 cx, cy = circle_points[0]
                 radius = element_info["radius"]
 
-                # Position to circle start point (top of circle)
+                # Position to circle start point (top of circle) with Z at cutting height
                 start_x = cx
                 start_y = cy + radius
                 start_x, start_y = clamp_to_workspace(start_x, start_y)
-                gcode.append(f"G0 X{start_x:.3f} Y{start_y:.3f}")
+                gcode.append(
+                    f"G0 X{start_x:.3f} Y{start_y:.3f} Z{session_data['gcode_settings']['cutting_z']:.3f}"
+                )
 
-                # Turn on laser and lower Z
+                # Turn on laser
                 gcode.append(
                     f"M3 S{session_data['gcode_settings']['laser_power']} ; Turn on laser"
                 )
-                gcode.append(
-                    f"G1 Z{session_data['gcode_settings']['cutting_z']:.3f} F{session_data['gcode_settings']['feedrate']} ; Lower Z"
-                )
 
-                # Generate circular path
-                angles = list(range(90, 450, 5))
-                angles.append(450)
+                # Generate circular path (360 degrees in 5-degree steps for precision)
+                # Start at 90 degrees (top of circle) and go to 445 degrees, then add 450 to close
+                angles = list(range(90, 450, 5))  # [90, 95, 100, ..., 445]
+                angles.append(
+                    450
+                )  # Add 450 degrees (same as 90 degrees) to close the circle
 
                 for i in angles:
                     angle = math.radians(i)
@@ -1109,40 +1283,64 @@ def generate_gcode(elements_by_id):
                     y = cy + radius * math.sin(angle)
                     # Clamp each point to workspace limits
                     x, y = clamp_to_workspace(x, y)
-                    gcode.append(f"G1 X{x:.3f} Y{y:.3f} ; Engrave circle")
+                    gcode.append(
+                        f"G1 X{x:.3f} Y{y:.3f} F{session_data['gcode_settings']['feedrate']} ; Engrave circle"
+                    )
 
-                # Turn off laser and raise Z
+                # Turn off laser
                 gcode.append("M5 ; Turn off laser")
-                gcode.append("G0 Z5 ; Raise Z")
+
+                # Conditionally raise Z between paths
+                if session_data["gcode_settings"]["raise_laser_between_paths"]:
+                    gcode.append("G0 Z-5.0 ; Raise laser between paths")
+
                 gcode.append("")
 
         elif geom_type == "LWPOLYLINE":
             gcode.append("; === POLYLINE GEOMETRY ===")
             polyline_points = element_info["points"]
             if len(polyline_points) >= 2:
-                # Position to first point
+                # Process polyline segments with proper clipping
                 first_x, first_y = polyline_points[0]
-                first_x, first_y = clamp_to_workspace(first_x, first_y)
-                gcode.append(f"G0 X{first_x:.3f} Y{first_y:.3f}")
+                gcode.append(
+                    f"G0 X{first_x:.3f} Y{first_y:.3f} Z{session_data['gcode_settings']['cutting_z']:.3f}"
+                )
 
-                # Turn on laser and lower Z
+                # Turn on laser
                 gcode.append(
                     f"M3 S{session_data['gcode_settings']['laser_power']} ; Turn on laser"
                 )
-                gcode.append(
-                    f"G1 Z{session_data['gcode_settings']['cutting_z']:.3f} F{session_data['gcode_settings']['feedrate']} ; Lower Z"
-                )
 
-                # Engrave polyline segments
+                # Engrave polyline segments with proper clipping
                 for i in range(1, len(polyline_points)):
-                    x, y = polyline_points[i]
-                    # Clamp each point to workspace limits
-                    x, y = clamp_to_workspace(x, y)
-                    gcode.append(f"G1 X{x:.3f} Y{y:.3f} ; Engrave polyline")
+                    prev_x, prev_y = polyline_points[i - 1]
+                    curr_x, curr_y = polyline_points[i]
 
-                # Turn off laser and raise Z
+                    # Clip line segment to workspace
+                    clipped_line = clip_line_to_workspace(
+                        prev_x, prev_y, curr_x, curr_y
+                    )
+
+                    if clipped_line:
+                        (
+                            clipped_start_x,
+                            clipped_start_y,
+                            clipped_end_x,
+                            clipped_end_y,
+                        ) = clipped_line
+
+                        # Engrave to clipped end point
+                        gcode.append(
+                            f"G1 X{clipped_end_x:.3f} Y{clipped_end_y:.3f} F{session_data['gcode_settings']['feedrate']} ; Engrave polyline"
+                        )
+
+                # Turn off laser
                 gcode.append("M5 ; Turn off laser")
-                gcode.append("G0 Z5 ; Raise Z")
+
+                # Conditionally raise Z between paths
+                if session_data["gcode_settings"]["raise_laser_between_paths"]:
+                    gcode.append("G0 Z-5.0 ; Raise laser between paths")
+
                 gcode.append("")
 
     # Add postscript
