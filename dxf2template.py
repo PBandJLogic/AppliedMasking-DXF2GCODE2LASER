@@ -53,7 +53,12 @@ class DXFGUI:
             "max_workspace_x": 800.0 - 10.0,
             "max_workspace_y": 400.0 - 10.0,
             "raise_laser_between_paths": False,
+            "optimize_toolpath": True,  # Enable toolpath optimization by default
         }
+
+        # Unit conversion settings
+        self.dxf_units = "mm"  # Default to mm
+        self.unit_conversion_factor = 1.0  # Factor to convert to mm
 
         self.setup_ui()
 
@@ -307,14 +312,301 @@ Colors:
         except Exception as e:
             messagebox.showerror("Error", f"Failed to load DXF file:\n{str(e)}")
 
+    def detect_dxf_units(self, doc):
+        """Detect the units used in the DXF file and set conversion factor"""
+        try:
+            # Check the header section for units
+            header = doc.header
+
+            # Try to get units from INSUNITS (Drawing Units)
+            insunits = None
+            try:
+                insunits = header["$INSUNITS"]
+            except:
+                pass
+
+            if insunits is not None:
+                unit_mapping = {
+                    0: ("Unitless", 1.0),
+                    1: ("Inches", 25.4),  # Convert inches to mm
+                    2: ("Feet", 304.8),  # Convert feet to mm
+                    3: ("Miles", 1609344.0),  # Convert miles to mm
+                    4: ("Millimeters", 1.0),  # Already in mm
+                    5: ("Centimeters", 10.0),  # Convert cm to mm
+                    6: ("Meters", 1000.0),  # Convert meters to mm
+                    7: ("Kilometers", 1000000.0),  # Convert km to mm
+                    8: ("Microinches", 0.0000254),  # Convert microinches to mm
+                    9: ("Mils", 0.0254),  # Convert mils to mm
+                    10: ("Yards", 914.4),  # Convert yards to mm
+                    11: ("Angstroms", 0.0000001),  # Convert angstroms to mm
+                    12: ("Nanometers", 0.000001),  # Convert nanometers to mm
+                    13: ("Microns", 0.001),  # Convert microns to mm
+                    14: ("Decimeters", 100.0),  # Convert decimeters to mm
+                    15: ("Decameters", 10000.0),  # Convert decameters to mm
+                    16: ("Hectometers", 100000.0),  # Convert hectometers to mm
+                    17: ("Gigameters", 1000000000.0),  # Convert gigameters to mm
+                    18: ("Astronomical units", 149597870700000.0),  # Convert AU to mm
+                    19: (
+                        "Light years",
+                        9460730472580800000000.0,
+                    ),  # Convert light years to mm
+                    20: ("Parsecs", 30856775814913673000000.0),  # Convert parsecs to mm
+                }
+
+                if insunits in unit_mapping:
+                    unit_name, conversion_factor = unit_mapping[insunits]
+                    self.dxf_units = unit_name
+                    self.unit_conversion_factor = conversion_factor
+                    print(
+                        f"DXF Units detected from header: {unit_name} (conversion factor: {conversion_factor})"
+                    )
+                    return
+                else:
+                    print(f"Unknown INSUNITS value: {insunits}")
+
+        except Exception as e:
+            print(f"Could not detect DXF units from header: {e}")
+
+        # Fallback: Try to detect units by analyzing geometry scale
+        try:
+            # Look for typical dimensions that might indicate units
+            msp = doc.modelspace()
+            max_coord = 0
+            min_coord = float("inf")
+            coord_count = 0
+
+            for entity in msp:
+                if entity.dxftype() in ["LINE", "CIRCLE", "ARC", "LWPOLYLINE"]:
+                    if entity.dxftype() == "LINE":
+                        start = entity.dxf.start
+                        end = entity.dxf.end
+                        coords = [start.x, start.y, end.x, end.y]
+                    elif entity.dxftype() == "CIRCLE":
+                        center = entity.dxf.center
+                        radius = entity.dxf.radius
+                        coords = [center.x, center.y, radius]
+                    elif entity.dxftype() == "ARC":
+                        center = entity.dxf.center
+                        radius = entity.dxf.radius
+                        coords = [center.x, center.y, radius]
+                    elif entity.dxftype() == "LWPOLYLINE":
+                        points = list(entity.get_points())
+                        coords = []
+                        for x, y, *_ in points:
+                            coords.extend([x, y])
+
+                    for coord in coords:
+                        max_coord = max(max_coord, abs(coord))
+                        if coord != 0:
+                            min_coord = min(min_coord, abs(coord))
+                        coord_count += 1
+
+            print(
+                f"Geometry analysis: max_coord={max_coord:.2f}, min_coord={min_coord:.2f}, coord_count={coord_count}"
+            )
+
+            # Improved heuristic: look for typical patterns
+            # Based on test files: inches (max_coord=4), mm (max_coord=100), meters (max_coord=20)
+            if max_coord > 0:
+                if max_coord <= 10:  # Small values, likely inches or meters
+                    # If very small (1-5), likely inches. If larger (5-10), could be meters
+                    if max_coord <= 5:
+                        self.dxf_units = "Inches (heuristic - small values)"
+                        self.unit_conversion_factor = 25.4
+                        print(
+                            f"DXF Units detected: Inches (heuristic - max coord: {max_coord:.2f})"
+                        )
+                    else:
+                        self.dxf_units = "Meters (heuristic - medium values)"
+                        self.unit_conversion_factor = 1000.0
+                        print(
+                            f"DXF Units detected: Meters (heuristic - max coord: {max_coord:.2f})"
+                        )
+                elif max_coord <= 200:  # Medium values, likely millimeters
+                    self.dxf_units = "Millimeters (heuristic - typical mm range)"
+                    self.unit_conversion_factor = 1.0
+                    print(
+                        f"DXF Units detected: Millimeters (heuristic - max coord: {max_coord:.2f})"
+                    )
+                else:  # Large values, likely millimeters
+                    self.dxf_units = "Millimeters (heuristic - large values)"
+                    self.unit_conversion_factor = 1.0
+                    print(
+                        f"DXF Units detected: Millimeters (heuristic - max coord: {max_coord:.2f})"
+                    )
+            else:
+                self.dxf_units = "Unknown (no geometry found)"
+                self.unit_conversion_factor = 1.0
+                print("DXF Units: Unknown (no geometry found)")
+
+        except Exception as e:
+            print(f"Could not detect units heuristically: {e}")
+            self.dxf_units = "Unknown (assuming mm)"
+            self.unit_conversion_factor = 1.0
+
+    def convert_units(self, value):
+        """Convert a value from DXF units to millimeters"""
+        return value * self.unit_conversion_factor
+
+    def get_element_start_point(self, element_id, element_info):
+        """Get the starting point for an element (where the tool should move to)"""
+        geom_type = element_info["geom_type"]
+        points = element_info["points"]
+
+        if geom_type == "LINE" and len(points) >= 2:
+            return points[0]  # Start of line
+        elif geom_type == "CIRCLE" and len(points) >= 1:
+            # Start at 0 degrees (right side of circle)
+            cx, cy = points[0]
+            radius = element_info["radius"]
+            return (cx + radius, cy)
+        elif geom_type == "ARC" and len(points) >= 1:
+            # Start at the arc's start angle
+            cx, cy = points[0]
+            radius = element_info["radius"]
+            element_data = self.element_data.get(element_id)
+            if element_data and len(element_data) >= 5:
+                _, _, _, _, original_data = element_data
+                if len(original_data) >= 6:
+                    _, _, _, start_angle, _, _ = original_data
+                    start_rad = math.radians(start_angle)
+                    start_x = cx + radius * math.cos(start_rad)
+                    start_y = cy + radius * math.sin(start_rad)
+                    return (start_x, start_y)
+            # Fallback to right side of arc
+            return (cx + radius, cy)
+        elif geom_type == "LWPOLYLINE" and len(points) >= 1:
+            return points[0]  # First point of polyline
+
+        # Fallback
+        return (0.0, 0.0)
+
+    def calculate_distance(self, point1, point2):
+        """Calculate Euclidean distance between two points"""
+        return math.sqrt((point1[0] - point2[0]) ** 2 + (point1[1] - point2[1]) ** 2)
+
+    def optimize_toolpath(self, elements_by_id, start_x, start_y):
+        """Optimize toolpath using nearest neighbor algorithm to minimize travel distance"""
+        if not elements_by_id:
+            return []
+
+        # Convert to list for easier manipulation
+        elements_list = list(elements_by_id.items())
+        optimized = []
+        remaining = elements_list.copy()
+        current_pos = (start_x, start_y)
+
+        print(f"Optimizing toolpath for {len(elements_list)} elements...")
+
+        # Use nearest neighbor algorithm
+        while remaining:
+            # Find the element with the closest start point to current position
+            min_distance = float("inf")
+            closest_index = 0
+
+            for i, (element_id, element_info) in enumerate(remaining):
+                start_point = self.get_element_start_point(element_id, element_info)
+                distance = self.calculate_distance(current_pos, start_point)
+
+                if distance < min_distance:
+                    min_distance = distance
+                    closest_index = i
+
+            # Add the closest element to optimized list
+            closest_element = remaining.pop(closest_index)
+            optimized.append(closest_element)
+
+            # Update current position to the end of this element
+            element_id, element_info = closest_element
+            geom_type = element_info["geom_type"]
+            points = element_info["points"]
+
+            if geom_type == "LINE" and len(points) >= 2:
+                current_pos = points[1]  # End of line
+            elif geom_type == "CIRCLE" and len(points) >= 1:
+                # End at 360 degrees (same as start for full circle)
+                current_pos = points[0]  # Back to start
+            elif geom_type == "ARC" and len(points) >= 1:
+                # End at the arc's end angle
+                cx, cy = points[0]
+                radius = element_info["radius"]
+                element_data = self.element_data.get(element_id)
+                if element_data and len(element_data) >= 5:
+                    _, _, _, _, original_data = element_data
+                    if len(original_data) >= 6:
+                        _, _, _, _, end_angle, _ = original_data
+                        end_rad = math.radians(end_angle)
+                        end_x = cx + radius * math.cos(end_rad)
+                        end_y = cy + radius * math.sin(end_rad)
+                        current_pos = (end_x, end_y)
+                    else:
+                        current_pos = points[0]
+                else:
+                    current_pos = points[0]
+            elif geom_type == "LWPOLYLINE" and len(points) >= 1:
+                current_pos = points[-1]  # Last point of polyline
+            else:
+                current_pos = points[0] if points else (0.0, 0.0)
+
+        # Calculate total travel distance for comparison
+        total_distance = 0.0
+        current_pos = (start_x, start_y)
+        for element_id, element_info in optimized:
+            start_point = self.get_element_start_point(element_id, element_info)
+            total_distance += self.calculate_distance(current_pos, start_point)
+
+            # Update current position to end of element
+            geom_type = element_info["geom_type"]
+            points = element_info["points"]
+            if geom_type == "LINE" and len(points) >= 2:
+                current_pos = points[1]
+            elif geom_type == "CIRCLE" and len(points) >= 1:
+                current_pos = points[0]
+            elif geom_type == "ARC" and len(points) >= 1:
+                cx, cy = points[0]
+                radius = element_info["radius"]
+                element_data = self.element_data.get(element_id)
+                if element_data and len(element_data) >= 5:
+                    _, _, _, _, original_data = element_data
+                    if len(original_data) >= 6:
+                        _, _, _, _, end_angle, _ = original_data
+                        end_rad = math.radians(end_angle)
+                        end_x = cx + radius * math.cos(end_rad)
+                        end_y = cy + radius * math.sin(end_rad)
+                        current_pos = (end_x, end_y)
+                    else:
+                        current_pos = points[0]
+                else:
+                    current_pos = points[0]
+            elif geom_type == "LWPOLYLINE" and len(points) >= 1:
+                current_pos = points[-1]
+            else:
+                current_pos = points[0] if points else (0.0, 0.0)
+
+        print(
+            f"Toolpath optimization complete. Total travel distance: {total_distance:.2f} mm"
+        )
+
+        return optimized
+
     def extract_geometry(self, file_path):
         """Extract geometry from DXF file (simplified version of the original function)"""
         doc = ezdxf.readfile(file_path)
+
+        # Detect and set up unit conversion
+        self.detect_dxf_units(doc)
+
         msp = doc.modelspace()
         all_points = []
 
+        # Debug: Count entities
+        entity_count = 0
+        entity_types = {}
+
         for entity in msp:
             entity_type = entity.dxftype()
+            entity_count += 1
+            entity_types[entity_type] = entity_types.get(entity_type, 0) + 1
 
             if entity_type == "INSERT":
                 block_name = entity.dxf.name
@@ -343,6 +635,12 @@ Colors:
                             end_pt.x, end_pt.y, insert_pos, scale, rotation
                         )
 
+                        # Convert units to mm
+                        start_x = self.convert_units(start_x)
+                        start_y = self.convert_units(start_y)
+                        end_x = self.convert_units(end_x)
+                        end_y = self.convert_units(end_y)
+
                         element_id = self.get_next_element_id()
                         # Store both points with the same element ID
                         all_points.append((start_x, start_y, 0, "LINE", element_id))
@@ -370,6 +668,12 @@ Colors:
                         # Apply scale transformation to radius as well!
                         original_radius = block_entity.dxf.radius
                         scaled_radius = original_radius * scale[0]  # Use X scale factor
+
+                        # Convert units to mm
+                        cx = self.convert_units(cx)
+                        cy = self.convert_units(cy)
+                        scaled_radius = self.convert_units(scaled_radius)
+
                         print(
                             f"  Found CIRCLE: original_center=({original_cx:.2f}, {original_cy:.2f}), transformed_center=({cx:.2f}, {cy:.2f}), original_radius={original_radius:.2f}, scaled_radius={scaled_radius:.2f}"
                         )
@@ -406,18 +710,65 @@ Colors:
                             polyline_points,
                         )
 
+                    elif block_entity.dxftype() == "ARC":
+                        original_cx = block_entity.dxf.center.x
+                        original_cy = block_entity.dxf.center.y
+                        cx, cy = self.transform_point(
+                            original_cx,
+                            original_cy,
+                            insert_pos,
+                            scale,
+                            rotation,
+                        )
+                        # Apply scale transformation to radius as well!
+                        original_radius = block_entity.dxf.radius
+                        scaled_radius = original_radius * scale[0]  # Use X scale factor
+                        start_angle = block_entity.dxf.start_angle
+                        end_angle = block_entity.dxf.end_angle
+
+                        # Convert units to mm
+                        cx = self.convert_units(cx)
+                        cy = self.convert_units(cy)
+                        scaled_radius = self.convert_units(scaled_radius)
+
+                        print(
+                            f"  Found ARC: original_center=({original_cx:.2f}, {original_cy:.2f}), transformed_center=({cx:.2f}, {cy:.2f}), original_radius={original_radius:.2f}, scaled_radius={scaled_radius:.2f}, angles=({start_angle:.2f}, {end_angle:.2f})"
+                        )
+                        element_id = self.get_next_element_id()
+                        all_points.append((cx, cy, scaled_radius, "ARC", element_id))
+                        self.element_data[element_id] = (
+                            cx,
+                            cy,
+                            scaled_radius,
+                            "ARC",
+                            (
+                                block_entity.dxf.center.x,
+                                block_entity.dxf.center.y,
+                                original_radius,
+                                start_angle,
+                                end_angle,
+                                "ARC",
+                            ),
+                        )
+
             elif entity_type == "LINE":
                 # Store line as start and end points with same element ID
                 start_pt = entity.dxf.start
                 end_pt = entity.dxf.end
                 element_id = self.get_next_element_id()
 
-                all_points.append((start_pt.x, start_pt.y, 0, "LINE", element_id))
-                all_points.append((end_pt.x, end_pt.y, 0, "LINE", element_id))
+                # Convert units to mm
+                start_x = self.convert_units(start_pt.x)
+                start_y = self.convert_units(start_pt.y)
+                end_x = self.convert_units(end_pt.x)
+                end_y = self.convert_units(end_pt.y)
+
+                all_points.append((start_x, start_y, 0, "LINE", element_id))
+                all_points.append((end_x, end_y, 0, "LINE", element_id))
 
                 self.element_data[element_id] = (
-                    (start_pt.x, end_pt.x),  # X coordinates
-                    (start_pt.y, end_pt.y),  # Y coordinates
+                    (start_x, end_x),  # X coordinates (converted)
+                    (start_y, end_y),  # Y coordinates (converted)
                     0,
                     "LINE",
                     ((start_pt.x, start_pt.y), (end_pt.x, end_pt.y), "LINE"),
@@ -427,14 +778,52 @@ Colors:
                 center = entity.dxf.center
                 radius = entity.dxf.radius
                 element_id = self.get_next_element_id()
-                all_points.append((center.x, center.y, radius, "CIRCLE", element_id))
+
+                # Convert units to mm
+                cx = self.convert_units(center.x)
+                cy = self.convert_units(center.y)
+                radius_mm = self.convert_units(radius)
+
+                all_points.append((cx, cy, radius_mm, "CIRCLE", element_id))
                 self.element_data[element_id] = (
-                    center.x,
-                    center.y,
-                    radius,
+                    cx,
+                    cy,
+                    radius_mm,
                     "CIRCLE",
                     (center.x, center.y, radius, "CIRCLE"),
                 )
+
+            elif entity_type == "ARC":
+                center = entity.dxf.center
+                radius = entity.dxf.radius
+                start_angle = entity.dxf.start_angle
+                end_angle = entity.dxf.end_angle
+                element_id = self.get_next_element_id()
+
+                # Convert units to mm
+                cx = self.convert_units(center.x)
+                cy = self.convert_units(center.y)
+                radius_mm = self.convert_units(radius)
+
+                all_points.append((cx, cy, radius_mm, "ARC", element_id))
+                self.element_data[element_id] = (
+                    cx,
+                    cy,
+                    radius_mm,
+                    "ARC",
+                    (center.x, center.y, radius, start_angle, end_angle, "ARC"),
+                )
+
+        # Debug: Print entity information
+        print(f"DXF File Analysis:")
+        print(f"  Total entities found: {entity_count}")
+        print(f"  Entity types: {entity_types}")
+        print(f"  Points extracted: {len(all_points)}")
+
+        if entity_count == 0:
+            print("  WARNING: No entities found in DXF file!")
+            print("  This suggests the file may be incomplete or corrupted.")
+            print("  Expected to find ENTITIES section with geometry data.")
 
         return all_points
 
@@ -468,6 +857,11 @@ Colors:
                 tx, ty = self.transform_point(x, y, insert_pos, scale, rotation)
             else:
                 tx, ty = x, y
+
+            # Convert units to mm
+            tx = self.convert_units(tx)
+            ty = self.convert_units(ty)
+
             points.append((tx, ty))
 
         if is_closed and len(points) > 2:
@@ -739,6 +1133,60 @@ Colors:
                         # Circles have highest priority (1)
                         candidates.append((distance, 1, element_id))
 
+            elif geom_type == "ARC":
+                if len(points) >= 1:
+                    center_x, center_y = points[0]
+                    # Get arc parameters from element data
+                    element_data = self.element_data.get(element_id)
+                    if element_data and len(element_data) >= 5:
+                        _, _, _, _, original_data = element_data
+                        if len(original_data) >= 6:
+                            _, _, _, start_angle, end_angle, _ = original_data
+
+                            # Calculate distance from click to arc center
+                            distance_to_center = math.sqrt(
+                                (click_x - center_x) ** 2 + (click_y - center_y) ** 2
+                            )
+
+                            # Check if click is within arc radius tolerance
+                            radius_tolerance = 3.0
+                            if abs(distance_to_center - radius) <= radius_tolerance:
+                                # Check if click is within arc angle range
+                                click_angle = math.atan2(
+                                    click_y - center_y, click_x - center_x
+                                )
+                                click_angle_deg = math.degrees(click_angle)
+
+                                # Normalize angles to 0-360 range
+                                start_angle_norm = start_angle % 360
+                                end_angle_norm = end_angle % 360
+                                click_angle_norm = click_angle_deg % 360
+
+                                # Handle arc that crosses 0 degrees
+                                if start_angle_norm > end_angle_norm:
+                                    # Arc crosses 0 degrees
+                                    in_arc = (
+                                        click_angle_norm >= start_angle_norm
+                                        or click_angle_norm <= end_angle_norm
+                                    )
+                                else:
+                                    # Normal arc
+                                    in_arc = (
+                                        start_angle_norm
+                                        <= click_angle_norm
+                                        <= end_angle_norm
+                                    )
+
+                                if in_arc:
+                                    # Arcs have same priority as circles (1)
+                                    candidates.append(
+                                        (
+                                            abs(distance_to_center - radius),
+                                            1,
+                                            element_id,
+                                        )
+                                    )
+
             elif geom_type == "LINE":
                 if len(points) >= 2:
                     # Check distance to line segment
@@ -852,6 +1300,24 @@ Colors:
                     )
                 else:
                     self.selected_info_var.set("Polyline: no points")
+            elif geom_type == "ARC":
+                # For arcs, x and y are center coordinates, radius is the radius
+                # Get arc parameters from original data
+                if len(element_data) >= 5:
+                    _, _, _, _, original_data = element_data
+                    if len(original_data) >= 6:
+                        _, _, _, start_angle, end_angle, _ = original_data
+                        self.selected_info_var.set(
+                            f"Arc: center=({x:.1f}, {y:.1f}), radius={radius:.1f}mm, angles=({start_angle:.1f}°, {end_angle:.1f}°)"
+                        )
+                    else:
+                        self.selected_info_var.set(
+                            f"Arc: center=({x:.1f}, {y:.1f}), radius={radius:.1f}mm"
+                        )
+                else:
+                    self.selected_info_var.set(
+                        f"Arc: center=({x:.1f}, {y:.1f}), radius={radius:.1f}mm"
+                    )
             else:
                 # For other geometry types, just show the type
                 self.selected_info_var.set(f"{geom_type}: selected")
@@ -1022,6 +1488,20 @@ Colors:
                         self.clipped_elements.add(element_id)
                         # Debug print removed for cleaner output
 
+            elif geom_type == "ARC":
+                if len(points) >= 1:
+                    cx, cy = points[0]
+                    max_x = self.gcode_settings["max_workspace_x"]
+                    max_y = self.gcode_settings["max_workspace_y"]
+
+                    # Check if arc intersects with workspace
+                    # An arc intersects if its bounding box intersects with workspace
+                    arc_in_workspace = self.arc_intersects_workspace(
+                        cx, cy, radius, element_id
+                    )
+                    if not arc_in_workspace:
+                        self.clipped_elements.add(element_id)
+
         # Debug prints removed for cleaner output
 
         # Plot each unique element
@@ -1098,6 +1578,43 @@ Colors:
                         alpha=alpha,
                     )
                     self.ax.add_patch(circle)
+
+            elif geom_type == "ARC":
+                if len(points) >= 1:
+                    center_x, center_y = points[0]
+                    # Get arc parameters from element data
+                    element_data = self.element_data.get(element_id)
+                    if element_data and len(element_data) >= 5:
+                        _, _, _, _, original_data = element_data
+                        if len(original_data) >= 6:
+                            _, _, _, start_angle, end_angle, _ = original_data
+                            # Convert angles from degrees to radians if needed
+                            # DXF angles are typically in degrees
+                            start_rad = math.radians(start_angle)
+                            end_rad = math.radians(end_angle)
+
+                            # Calculate arc span
+                            arc_span = end_rad - start_rad
+                            if arc_span < 0:
+                                arc_span += 2 * math.pi
+
+                            # Draw arc using matplotlib Arc
+                            from matplotlib.patches import Arc
+
+                            arc = Arc(
+                                (center_x, center_y),
+                                2 * radius,  # width
+                                2 * radius,  # height
+                                angle=0,  # rotation
+                                theta1=math.degrees(
+                                    start_rad
+                                ),  # start angle in degrees
+                                theta2=math.degrees(end_rad),  # end angle in degrees
+                                color=line_color,
+                                linewidth=line_width,
+                                alpha=alpha,
+                            )
+                            self.ax.add_patch(arc)
 
             elif geom_type == "LWPOLYLINE":
                 if len(points) >= 2:
@@ -1203,7 +1720,8 @@ Removed: {removed_count}
 Engraved: {engraved_count}
 Clipped (outside workspace): {clipped_count}
 Remaining: {remaining_count}
-Origin offset: ({self.origin_offset[0]:.1f}, {self.origin_offset[1]:.1f})"""
+Origin offset: ({self.origin_offset[0]:.1f}, {self.origin_offset[1]:.1f})
+DXF Units: {self.dxf_units}"""
 
         self.stats_var.set(stats_text)
 
@@ -1261,8 +1779,17 @@ Origin offset: ({self.origin_offset[0]:.1f}, {self.origin_offset[1]:.1f})"""
         current_x, current_y = 0.0, 0.0
         last_engraved_x, last_engraved_y = 0.0, 0.0
 
-        # Generate G-code for each element
-        for element_id, element_info in elements_by_id.items():
+        # Optimize toolpath by sorting elements to minimize travel distance (if enabled)
+        if self.gcode_settings.get("optimize_toolpath", True):
+            optimized_elements = self.optimize_toolpath(
+                elements_by_id, current_x, current_y
+            )
+        else:
+            optimized_elements = list(elements_by_id.items())
+            print("Toolpath optimization disabled - using original element order")
+
+        # Generate G-code for each element in optimized order
+        for element_id, element_info in optimized_elements:
             geom_type = element_info["geom_type"]
             radius = element_info["radius"]
 
@@ -1434,6 +1961,179 @@ Origin offset: ({self.origin_offset[0]:.1f}, {self.origin_offset[1]:.1f})"""
                         # Update position for next element but don't generate any G-code
                         current_x, current_y = cx, cy
 
+            elif geom_type == "ARC":
+                # Use the offset coordinates from current_points (already includes X/Y offsets)
+                arc_points = element_info["points"]
+                if len(arc_points) >= 1:
+                    cx, cy = arc_points[0]
+                    radius = element_info["radius"]
+
+                    # Get arc parameters from element data
+                    element_data = self.element_data.get(element_id)
+                    if element_data and len(element_data) >= 5:
+                        _, _, _, _, original_data = element_data
+                        if len(original_data) >= 6:
+                            _, _, _, start_angle, end_angle, _ = original_data
+
+                            # Check if arc intersects with workspace
+                            arc_in_workspace = self.arc_intersects_workspace(
+                                cx, cy, radius, element_id
+                            )
+
+                            if arc_in_workspace:
+                                # Convert angles to radians
+                                start_rad = math.radians(start_angle)
+                                end_rad = math.radians(end_angle)
+
+                                # Calculate start and end points of arc
+                                start_x = cx + radius * math.cos(start_rad)
+                                start_y = cy + radius * math.sin(start_rad)
+                                end_x = cx + radius * math.cos(end_rad)
+                                end_y = cy + radius * math.sin(end_rad)
+
+                                # Check if start and end points are both outside workspace
+                                start_outside = not self.is_within_workspace(
+                                    start_x, start_y
+                                )
+                                end_outside = not self.is_within_workspace(end_x, end_y)
+
+                                # If both start and end points are outside workspace, check if any arc segment is inside
+                                if start_outside and end_outside:
+                                    # Sample points along the arc to see if any part is within workspace
+                                    arc_span = end_rad - start_rad
+                                    if arc_span < 0:
+                                        arc_span += 2 * math.pi
+
+                                    num_samples = max(
+                                        10, int(arc_span / math.radians(5))
+                                    )
+                                    angle_step = arc_span / num_samples
+                                    any_point_inside = False
+
+                                    for i in range(num_samples + 1):
+                                        angle = start_rad + i * angle_step
+                                        x = cx + radius * math.cos(angle)
+                                        y = cy + radius * math.sin(angle)
+                                        if self.is_within_workspace(x, y):
+                                            any_point_inside = True
+                                            break
+
+                                    # If no part of the arc is within workspace, skip G-code generation
+                                    if not any_point_inside:
+                                        current_x, current_y = end_x, end_y
+                                        continue
+
+                                # Only add header if we're actually going to engrave
+                                gcode.append("; === ARC GEOMETRY ===")
+
+                                # G0 move to start point if not already there and start point is accessible
+                                if (current_x, current_y) != (start_x, start_y):
+                                    # If start point is outside workspace, move to intersection instead
+                                    if start_outside:
+                                        # Find intersection point with workspace boundary
+                                        intersection = (
+                                            self.find_line_workspace_intersection(
+                                                current_x,
+                                                current_y,
+                                                start_x,
+                                                start_y,
+                                                start_x,
+                                                start_y,
+                                            )
+                                        )
+                                        if intersection:
+                                            gcode.append(
+                                                f"G0 X{intersection[0]:.3f} Y{intersection[1]:.3f} Z{self.gcode_settings['cutting_z']:.3f}"
+                                            )
+                                        else:
+                                            # No valid intersection, skip this arc
+                                            current_x, current_y = end_x, end_y
+                                            continue
+                                    else:
+                                        gcode.append(
+                                            f"G0 X{start_x:.3f} Y{start_y:.3f} Z{self.gcode_settings['cutting_z']:.3f}"
+                                        )
+
+                                # Turn on laser
+                                gcode.append(
+                                    f"M3 S{self.gcode_settings['laser_power']} ; Turn on laser"
+                                )
+
+                                # Generate arc segments with proper intersection-based clipping
+                                # Calculate number of segments based on arc length
+                                arc_span = end_rad - start_rad
+                                if arc_span < 0:
+                                    arc_span += 2 * math.pi
+
+                                # Use 5-degree steps for precision
+                                num_segments = max(1, int(arc_span / math.radians(5)))
+                                angle_step = arc_span / num_segments
+
+                                prev_x, prev_y = start_x, start_y
+                                for i in range(1, num_segments + 1):
+                                    angle = start_rad + i * angle_step
+                                    x = cx + radius * math.cos(angle)
+                                    y = cy + radius * math.sin(angle)
+
+                                    # Check if the original segment intersects the workspace
+                                    clipped_line = self.clip_line_to_workspace(
+                                        prev_x, prev_y, x, y
+                                    )
+
+                                    if clipped_line:
+                                        (
+                                            seg_start_x,
+                                            seg_start_y,
+                                            seg_end_x,
+                                            seg_end_y,
+                                        ) = clipped_line
+
+                                        # Determine the intersection case based on original segment points
+                                        start_inside = self.is_within_workspace(
+                                            prev_x, prev_y
+                                        )
+                                        end_inside = self.is_within_workspace(x, y)
+
+                                        if not start_inside and end_inside:
+                                            # Start outside, end inside: G0 to intersection, then G1 to end
+                                            gcode.append(
+                                                f"G0 X{seg_start_x:.3f} Y{seg_start_y:.3f} Z{self.gcode_settings['cutting_z']:.3f} ; Move to intersection"
+                                            )
+                                            gcode.append(
+                                                f"G1 X{seg_end_x:.3f} Y{seg_end_y:.3f} F{self.gcode_settings['feedrate']} ; Engrave arc"
+                                            )
+                                        elif start_inside and not end_inside:
+                                            # Start inside, end outside: G1 to intersection, then move to next segment
+                                            gcode.append(
+                                                f"G1 X{seg_end_x:.3f} Y{seg_end_y:.3f} F{self.gcode_settings['feedrate']} ; Engrave to boundary"
+                                            )
+                                        elif start_inside and end_inside:
+                                            # Both inside: normal G1 engraving
+                                            gcode.append(
+                                                f"G1 X{seg_end_x:.3f} Y{seg_end_y:.3f} F{self.gcode_settings['feedrate']} ; Engrave arc"
+                                            )
+                                        # If both outside, no G-code is generated (clipped_line would be None)
+
+                                    # Update previous point for next segment
+                                    prev_x, prev_y = x, y
+
+                                # Turn off laser
+                                gcode.append("M5 ; Turn off laser")
+
+                                # Update current position to end of arc
+                                current_x, current_y = end_x, end_y
+                                last_engraved_x, last_engraved_y = end_x, end_y
+
+                                # Conditionally raise Z between paths
+                                if self.gcode_settings["raise_laser_between_paths"]:
+                                    gcode.append("G0 Z-5.0 ; Raise laser between paths")
+
+                                gcode.append("")  # Blank line between elements
+                            else:
+                                # Arc is completely outside workspace - no G-code generated
+                                # Update position for next element but don't generate any G-code
+                                current_x, current_y = cx, cy
+
             elif geom_type == "LWPOLYLINE":
                 # Use the offset coordinates from current_points (already includes X/Y offsets)
                 polyline_points = element_info["points"]
@@ -1517,6 +2217,57 @@ Origin offset: ({self.origin_offset[0]:.1f}, {self.origin_offset[1]:.1f})"""
         max_y = self.gcode_settings["max_workspace_y"]
 
         return 0.0 <= x <= max_x and 0.0 <= y <= max_y
+
+    def arc_intersects_workspace(self, cx, cy, radius, element_id):
+        """Check if an arc intersects with the workspace"""
+        max_x = self.gcode_settings["max_workspace_x"]
+        max_y = self.gcode_settings["max_workspace_y"]
+
+        # Get arc parameters
+        element_data = self.element_data.get(element_id)
+        if not element_data or len(element_data) < 5:
+            return False
+
+        _, _, _, _, original_data = element_data
+        if len(original_data) < 6:
+            return False
+
+        _, _, _, start_angle, end_angle, _ = original_data
+
+        # Convert angles to radians
+        start_rad = math.radians(start_angle)
+        end_rad = math.radians(end_angle)
+
+        # First check if the arc's bounding box intersects with workspace
+        # This is a quick rejection test
+        if not (
+            cx - radius <= max_x
+            and cx + radius >= 0
+            and cy - radius <= max_y
+            and cy + radius >= 0
+        ):
+            return False
+
+        # Check if any part of the arc intersects with workspace boundaries
+        # Sample points along the arc and check if any are within workspace
+        arc_span = end_rad - start_rad
+        if arc_span < 0:
+            arc_span += 2 * math.pi
+
+        # Use more samples for better accuracy
+        num_samples = max(20, int(arc_span / math.radians(2)))  # 2-degree steps
+        angle_step = arc_span / num_samples
+
+        for i in range(num_samples + 1):
+            angle = start_rad + i * angle_step
+            x = cx + radius * math.cos(angle)
+            y = cy + radius * math.sin(angle)
+
+            if self.is_within_workspace(x, y):
+                return True
+
+        # If no sampled points are within workspace, the arc doesn't intersect
+        return False
 
     def clip_to_workspace(self, x, y):
         """Clip coordinates to workspace limits"""
@@ -2079,6 +2830,16 @@ Origin offset: ({self.origin_offset[0]:.1f}, {self.origin_offset[1]:.1f})"""
             settings_frame, text="Raise laser between paths", variable=raise_laser_var
         ).pack(anchor="w", pady=(5, 0))
 
+        # Optimize toolpath checkbox
+        optimize_toolpath_var = tk.BooleanVar(
+            value=self.gcode_settings.get("optimize_toolpath", True)
+        )
+        ttk.Checkbutton(
+            settings_frame,
+            text="Optimize toolpath (reduce travel distance)",
+            variable=optimize_toolpath_var,
+        ).pack(anchor="w", pady=(5, 0))
+
         # Buttons
         button_frame = ttk.Frame(main_frame)
         button_frame.pack(fill="x", pady=(20, 0))
@@ -2093,6 +2854,7 @@ Origin offset: ({self.origin_offset[0]:.1f}, {self.origin_offset[1]:.1f})"""
             self.gcode_settings["max_workspace_x"] = max_x_var.get()
             self.gcode_settings["max_workspace_y"] = max_y_var.get()
             self.gcode_settings["raise_laser_between_paths"] = raise_laser_var.get()
+            self.gcode_settings["optimize_toolpath"] = optimize_toolpath_var.get()
             settings_window.destroy()
 
         ttk.Button(button_frame, text="Save", command=save_settings).pack(

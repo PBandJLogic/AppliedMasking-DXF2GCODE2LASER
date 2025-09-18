@@ -20,7 +20,7 @@ import threading
 class DXFGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("Interactive DXF Viewer and Editor")
+        self.root.title("Interactive DXF 2 Template Editor")
         self.root.geometry("1400x900")
 
         # Data storage
@@ -29,6 +29,9 @@ class DXFGUI:
         self.origin_offset = (0.0, 0.0)
         self.removed_elements = set()  # Set of element IDs to remove
         self.engraved_elements = set()  # Set of element IDs to engrave
+        self.clipped_elements = (
+            set()
+        )  # Set of element IDs that are clipped out of workspace
 
         # Element tracking
         self.element_counter = 0
@@ -49,9 +52,22 @@ class DXFGUI:
             "feedrate": 1500,
             "max_workspace_x": 800.0 - 10.0,
             "max_workspace_y": 400.0 - 10.0,
+            "raise_laser_between_paths": False,
         }
 
         self.setup_ui()
+
+    def generate_and_display_gcode(self):
+        """Generate G-code and show preview window"""
+        if not self.current_points:
+            messagebox.showwarning("Warning", "No DXF file loaded")
+            return
+
+        # Generate G-code
+        gcode = self.generate_gcode(self.current_points)
+
+        # Show preview window with both plot and G-code text
+        self.show_gcode_preview(gcode)
 
     def setup_ui(self):
         # Main container
@@ -63,12 +79,12 @@ class DXFGUI:
         control_frame.pack(side="left", fill="y", padx=(0, 10))
         control_frame.pack_propagate(False)
 
-        # Right panel for plot
-        plot_frame = ttk.Frame(main_frame)
-        plot_frame.pack(side="right", fill="both", expand=True)
+        # Right panel for plot and G-code
+        right_panel = ttk.Frame(main_frame)
+        right_panel.pack(side="right", fill="both", expand=True)
 
         self.setup_controls(control_frame)
-        self.setup_plot(plot_frame)
+        self.setup_plot(right_panel)
 
         # Setup keyboard shortcuts
         self.setup_keyboard_shortcuts()
@@ -78,6 +94,9 @@ class DXFGUI:
         # Bind Ctrl+Z (Windows/Linux) and Cmd+Z (macOS)
         self.root.bind("<Control-z>", lambda e: self.undo())
         self.root.bind("<Command-z>", lambda e: self.undo())
+
+        # Bind Ctrl+R to refresh input fields (debug hotkey)
+        self.root.bind("<Control-r>", lambda e: self.ensure_input_fields_active())
 
         # Focus the root window so keyboard events are captured
         self.root.focus_set()
@@ -104,7 +123,7 @@ class DXFGUI:
 
         # Title
         title_label = ttk.Label(
-            header_frame, text="DXF Viewer & Editor", font=("Arial", 16, "bold")
+            header_frame, text="DXF to\nTemplate\nEditor", font=("Arial", 16, "bold")
         )
         title_label.pack(side="left", pady=10)
 
@@ -131,16 +150,26 @@ class DXFGUI:
         x_frame.pack(fill="x", pady=(0, 5))
         ttk.Label(x_frame, text="X Offset (mm):").pack(side="left")
         self.x_offset_var = tk.StringVar(value="0.0")
-        x_entry = ttk.Entry(x_frame, textvariable=self.x_offset_var, width=15)
-        x_entry.pack(side="right")
+        self.x_entry = ttk.Entry(x_frame, textvariable=self.x_offset_var, width=15)
+        self.x_entry.pack(side="right")
+
+        # Add event handlers to ensure proper focus
+        self.x_entry.bind("<Button-1>", self.debug_input_field)
+        self.x_entry.bind("<FocusIn>", lambda e: None)
+        self.x_entry.bind("<FocusOut>", lambda e: None)
 
         # Y offset
         y_frame = ttk.Frame(origin_frame)
         y_frame.pack(fill="x", pady=(0, 10))
         ttk.Label(y_frame, text="Y Offset (mm):").pack(side="left")
         self.y_offset_var = tk.StringVar(value="0.0")
-        y_entry = ttk.Entry(y_frame, textvariable=self.y_offset_var, width=15)
-        y_entry.pack(side="right")
+        self.y_entry = ttk.Entry(y_frame, textvariable=self.y_offset_var, width=15)
+        self.y_entry.pack(side="right")
+
+        # Add event handlers to ensure proper focus
+        self.y_entry.bind("<Button-1>", self.debug_input_field)
+        self.y_entry.bind("<FocusIn>", lambda e: None)
+        self.y_entry.bind("<FocusOut>", lambda e: None)
 
         ttk.Button(origin_frame, text="Apply Offset", command=self.apply_offset).pack(
             fill="x"
@@ -238,6 +267,9 @@ Colors:
 
         self.toolbar = NavigationToolbar2Tk(self.canvas, toolbar_frame)
         self.toolbar.update()
+
+        # Bind canvas events to ensure input fields can still receive focus
+        self.canvas.mpl_connect("button_press_event", self.on_canvas_click)
 
         # Connect click event with higher priority
         self.canvas.mpl_connect("button_press_event", self.on_click)
@@ -498,6 +530,9 @@ Colors:
 
             self.update_plot()
             self.update_statistics()
+
+            # Ensure input fields remain active after applying offset
+            self.ensure_input_fields_active()
 
         except ValueError:
             messagebox.showerror(
@@ -873,6 +908,7 @@ Colors:
         """Reset all selections and modifications"""
         self.removed_elements.clear()
         self.engraved_elements.clear()
+        self.clipped_elements.clear()
         self.selected_element_id = None
         self.origin_offset = (0.0, 0.0)
         self.x_offset_var.set("0.0")
@@ -925,12 +961,15 @@ Colors:
         self.canvas.draw()
 
     def update_plot(self):
-        """Update the matplotlib plot"""
+        """Update the matplotlib plot with original DXF geometry"""
         self.ax.clear()
         self.ax.set_xlabel("X (mm)")
         self.ax.set_ylabel("Y (mm)")
         self.ax.grid(True, alpha=0.3)
-        self.ax.set_title("DXF Geometry - Click on elements to select")
+        self.ax.set_title("DXF Geometry - Load file and click 'Generate G-code'")
+
+        # Clear clipped elements before recalculating
+        self.clipped_elements.clear()
 
         # Get unique elements (since lines/polylines have multiple points)
         unique_elements = {}
@@ -942,6 +981,48 @@ Colors:
                     "points": [],
                 }
             unique_elements[element_id]["points"].append((x, y))
+
+        # Check which elements are clipped (outside workspace)
+        for element_id, element_info in unique_elements.items():
+            geom_type = element_info["geom_type"]
+            radius = element_info["radius"]
+            points = element_info["points"]
+
+            if geom_type == "LINE":
+                if len(points) >= 2:
+                    start_x, start_y = points[0]
+                    end_x, end_y = points[1]
+                    # Debug print removed for cleaner output
+                    clipped_line = self.clip_line_to_workspace(
+                        start_x, start_y, end_x, end_y
+                    )
+                    if not clipped_line:
+                        self.clipped_elements.add(element_id)
+
+            elif geom_type == "CIRCLE":
+                if len(points) >= 1:
+                    cx, cy = points[0]
+                    max_x = self.gcode_settings["max_workspace_x"]
+                    max_y = self.gcode_settings["max_workspace_y"]
+                    # Debug print removed for cleaner output
+                    circle_in_workspace = (
+                        cx - radius <= max_x and cx + radius >= 0
+                    ) and (cy - radius <= max_y and cy + radius >= 0)
+                    if not circle_in_workspace:
+                        self.clipped_elements.add(element_id)
+
+            elif geom_type == "LWPOLYLINE":
+                if len(points) >= 2:
+                    polyline_in_workspace = False
+                    for x, y in points:
+                        if self.is_within_workspace(x, y):
+                            polyline_in_workspace = True
+                            break
+                    if not polyline_in_workspace:
+                        self.clipped_elements.add(element_id)
+                        # Debug print removed for cleaner output
+
+        # Debug prints removed for cleaner output
 
         # Plot each unique element
         for element_id, element_info in unique_elements.items():
@@ -962,6 +1043,12 @@ Colors:
                 marker_color = "lime"
                 line_width = 4
                 alpha = 1.0  # Full opacity for selected
+            elif element_id in self.clipped_elements:
+                # Clipped elements (outside workspace) - gray/dashed
+                line_color = "gray"
+                marker_color = "gray"
+                line_width = 1
+                alpha = 0.5
             elif is_engraved:
                 line_color = "red"
                 marker_color = "red"
@@ -978,12 +1065,14 @@ Colors:
                     x_coords = [p[0] for p in points]
                     y_coords = [p[1] for p in points]
                     # Draw line segment
+                    linestyle = "--" if element_id in self.clipped_elements else "-"
                     self.ax.plot(
                         x_coords,
                         y_coords,
                         color=line_color,
                         linewidth=line_width,
                         alpha=alpha,
+                        linestyle=linestyle,
                     )
                     # Draw markers at endpoints
                     marker_size = 15 if is_selected else 5
@@ -1015,12 +1104,14 @@ Colors:
                     x_coords = [p[0] for p in points]
                     y_coords = [p[1] for p in points]
                     # Draw connected polyline
+                    linestyle = "--" if element_id in self.clipped_elements else "-"
                     self.ax.plot(
                         x_coords,
                         y_coords,
                         color=line_color,
                         linewidth=line_width,
                         alpha=alpha,
+                        linestyle=linestyle,
                     )
                     # Draw markers at vertices
                     marker_size = 15 if is_selected else 5
@@ -1037,6 +1128,64 @@ Colors:
         self.ax.set_aspect("equal")
         self.canvas.draw()
 
+        # Ensure input fields remain interactive after plot updates
+        self.ensure_input_fields_active()
+
+    def on_canvas_click(self, event):
+        """Handle canvas clicks to ensure input fields can still receive focus"""
+        # This method is called when the matplotlib canvas is clicked
+        # It helps ensure that input fields can still receive focus
+        pass
+
+    def debug_input_field(self, event):
+        """Debug function to check input field state when clicked"""
+        widget = event.widget
+        try:
+            state = widget.cget("state")
+            focus_widget = self.root.focus_get()
+            # Debug information removed for cleaner output
+
+            # Force the field to be active and focused
+            widget.configure(state="normal")
+            # Use after_idle to ensure focus is set after the click event
+            self.root.after_idle(lambda: widget.focus_set())
+            # Also select all text for easy editing
+            self.root.after_idle(lambda: widget.select_range(0, tk.END))
+
+        except Exception as e:
+            # Debug error removed for cleaner output
+            pass
+
+    def ensure_input_fields_active(self):
+        """Ensure input fields remain active and responsive"""
+        try:
+            # Re-enable input fields if they somehow got disabled
+            if hasattr(self, "x_entry"):
+                self.x_entry.configure(state="normal")
+                # Ensure the entry can receive focus
+                self.root.after_idle(
+                    lambda: (
+                        self.x_entry.focus_set()
+                        if self.x_entry.winfo_exists()
+                        else None
+                    )
+                )
+            if hasattr(self, "y_entry"):
+                self.y_entry.configure(state="normal")
+                # Ensure the entry can receive focus
+                self.root.after_idle(
+                    lambda: (
+                        self.y_entry.focus_set()
+                        if self.y_entry.winfo_exists()
+                        else None
+                    )
+                )
+
+            # Ensure the root window can receive focus
+            self.root.focus_set()
+        except Exception as e:
+            print(f"Warning: Could not ensure input fields are active: {e}")
+
     def update_statistics(self):
         """Update statistics display"""
         if not self.original_points:
@@ -1046,11 +1195,13 @@ Colors:
         total_elements = len(self.original_points)
         removed_count = len(self.removed_elements)
         engraved_count = len(self.engraved_elements)
+        clipped_count = len(self.clipped_elements)
         remaining_count = total_elements - removed_count
 
         stats_text = f"""Total elements: {total_elements}
 Removed: {removed_count}
 Engraved: {engraved_count}
+Clipped (outside workspace): {clipped_count}
 Remaining: {remaining_count}
 Origin offset: ({self.origin_offset[0]:.1f}, {self.origin_offset[1]:.1f})"""
 
@@ -1087,8 +1238,9 @@ Origin offset: ({self.origin_offset[0]:.1f}, {self.origin_offset[1]:.1f})"""
 
         # Add preamble
         preamble_lines = self.gcode_settings["preamble"].strip().split("\n")
+        gcode.append("; preamble")
         gcode.extend(preamble_lines)
-        gcode.append("")  # Add blank line after preamble
+        gcode.append("; end preamble")
 
         # Group points by element_id to get complete geometry
         elements_by_id = {}
@@ -1105,55 +1257,71 @@ Origin offset: ({self.origin_offset[0]:.1f}, {self.origin_offset[1]:.1f})"""
                     }
                 elements_by_id[element_id]["points"].append((x, y))
 
+        # Track current position for G0 moves between elements
+        current_x, current_y = 0.0, 0.0
+        last_engraved_x, last_engraved_y = 0.0, 0.0
+
         # Generate G-code for each element
         for element_id, element_info in elements_by_id.items():
             geom_type = element_info["geom_type"]
             radius = element_info["radius"]
 
             if geom_type == "LINE":
-                gcode.append("; === LINE GEOMETRY ===")
                 # Use the offset coordinates from current_points (already includes X/Y offsets)
                 line_points = element_info["points"]
                 if len(line_points) >= 2:
                     start_x, start_y = line_points[0]
                     end_x, end_y = line_points[1]
 
-                    # Check if line is within workspace
-                    start_in_workspace = self.is_within_workspace(start_x, start_y)
-                    end_in_workspace = self.is_within_workspace(end_x, end_y)
+                    # Clip line to workspace using intersection logic
+                    clipped_line = self.clip_line_to_workspace(
+                        start_x, start_y, end_x, end_y
+                    )
 
-                    if start_in_workspace or end_in_workspace:
-                        # Position to start point
-                        clipped_start_x, clipped_start_y = self.clip_to_workspace(
-                            start_x, start_y
-                        )
-                        gcode.append(
-                            f"G0 X{clipped_start_x:.3f} Y{clipped_start_y:.3f}"
-                        )
+                    if clipped_line:
+                        # Only add header if we're actually going to engrave
+                        gcode.append("; === LINE GEOMETRY ===")
+                        (
+                            clipped_start_x,
+                            clipped_start_y,
+                            clipped_end_x,
+                            clipped_end_y,
+                        ) = clipped_line
 
-                        # Turn on laser and lower Z
+                        # G0 move to start point if not already there
+                        if (current_x, current_y) != (clipped_start_x, clipped_start_y):
+                            gcode.append(
+                                f"G0 X{clipped_start_x:.3f} Y{clipped_start_y:.3f} Z{self.gcode_settings['cutting_z']:.3f}"
+                            )
+
+                        # Turn on laser
                         gcode.append(
                             f"M3 S{self.gcode_settings['laser_power']} ; Turn on laser"
                         )
+
+                        # Engrave to clipped end point
                         gcode.append(
-                            f"G1 Z{self.gcode_settings['cutting_z']:.3f} F{self.gcode_settings['feedrate']} ; Lower Z"
+                            f"G1 X{clipped_end_x:.3f} Y{clipped_end_y:.3f} F{self.gcode_settings['feedrate']} ; Engrave line"
                         )
 
-                        # Engrave to end point
-                        clipped_end_x, clipped_end_y = self.clip_to_workspace(
-                            end_x, end_y
-                        )
-                        gcode.append(
-                            f"G1 X{clipped_end_x:.3f} Y{clipped_end_y:.3f} ; Engrave line"
-                        )
-
-                        # Turn off laser and raise Z
+                        # Turn off laser
                         gcode.append("M5 ; Turn off laser")
-                        gcode.append("G0 Z5 ; Raise Z")
+
+                        # Update current position
+                        current_x, current_y = clipped_end_x, clipped_end_y
+                        last_engraved_x, last_engraved_y = clipped_end_x, clipped_end_y
+
+                        # Conditionally raise Z between paths
+                        if self.gcode_settings["raise_laser_between_paths"]:
+                            gcode.append("G0 Z-5.0 ; Raise laser between paths")
+
                         gcode.append("")  # Blank line between elements
+                    else:
+                        # Line is completely outside workspace - no G-code generated
+                        # Update position for next element but don't generate any G-code
+                        current_x, current_y = end_x, end_y
 
             elif geom_type == "CIRCLE":
-                gcode.append("; === CIRCLE GEOMETRY ===")
                 # Use the offset coordinates from current_points (already includes X/Y offsets)
                 circle_points = element_info["points"]
                 if len(circle_points) >= 1:
@@ -1168,47 +1336,105 @@ Origin offset: ({self.origin_offset[0]:.1f}, {self.origin_offset[1]:.1f})"""
                     ) and (cy - radius <= max_y and cy + radius >= 0)
 
                     if circle_in_workspace:
-                        # Position to circle start point (top of circle)
-                        start_x = cx
-                        start_y = cy + radius
+                        # Only add header if we're actually going to engrave
+                        gcode.append("; === CIRCLE GEOMETRY ===")
+                        # Position to circle start point (0 degrees - right side of circle) with Z at cutting height
+                        start_x = cx + radius
+                        start_y = cy
                         clipped_start_x, clipped_start_y = self.clip_to_workspace(
                             start_x, start_y
                         )
-                        gcode.append(
-                            f"G0 X{clipped_start_x:.3f} Y{clipped_start_y:.3f}"
-                        )
 
-                        # Turn on laser and lower Z
+                        # G0 move to start point if not already there
+                        if (current_x, current_y) != (clipped_start_x, clipped_start_y):
+                            gcode.append(
+                                f"G0 X{clipped_start_x:.3f} Y{clipped_start_y:.3f} Z{self.gcode_settings['cutting_z']:.3f}"
+                            )
+
+                        # Turn on laser
                         gcode.append(
                             f"M3 S{self.gcode_settings['laser_power']} ; Turn on laser"
                         )
-                        gcode.append(
-                            f"G1 Z{self.gcode_settings['cutting_z']:.3f} F{self.gcode_settings['feedrate']} ; Lower Z"
-                        )
 
-                        # Generate circular path (360 degrees in 5-degree steps)
-                        # Start at 90 degrees (top of circle) and go to 445 degrees, then add 450 to close
-                        angles = list(range(90, 450, 5))  # [90, 95, 100, ..., 445]
+                        # Generate circular path (360 degrees in 5-degree steps for precision)
+                        # Start at 0 degrees (right side of circle) and go to 355 degrees, then add 360 to close
+                        angles = list(range(0, 360, 5))  # [0, 5, 10, ..., 355]
                         angles.append(
-                            450
-                        )  # Add 450 degrees (same as 90 degrees) to close the circle
+                            360
+                        )  # Add 360 degrees (same as 0 degrees) to close the circle
 
+                        # Generate circle segments with proper intersection-based clipping
+                        # Start from the actual 0-degree point, not the clipped position
+                        prev_x, prev_y = (
+                            start_x,
+                            start_y,
+                        )  # Use actual 0-degree point, not clipped
                         for i in angles:
                             angle = math.radians(i)
                             x = cx + radius * math.cos(angle)
                             y = cy + radius * math.sin(angle)
-                            clipped_x, clipped_y = self.clip_to_workspace(x, y)
-                            gcode.append(
-                                f"G1 X{clipped_x:.3f} Y{clipped_y:.3f} ; Engrave circle"
+
+                            # Check if the original segment intersects the workspace
+                            clipped_line = self.clip_line_to_workspace(
+                                prev_x, prev_y, x, y
                             )
 
-                        # Turn off laser and raise Z
+                            if clipped_line:
+                                (
+                                    seg_start_x,
+                                    seg_start_y,
+                                    seg_end_x,
+                                    seg_end_y,
+                                ) = clipped_line
+
+                                # Determine the intersection case based on original segment points
+                                start_inside = self.is_within_workspace(prev_x, prev_y)
+                                end_inside = self.is_within_workspace(x, y)
+
+                                if not start_inside and end_inside:
+                                    # Start outside, end inside: G0 to intersection, then G1 to end
+                                    gcode.append(
+                                        f"G0 X{seg_start_x:.3f} Y{seg_start_y:.3f} Z{self.gcode_settings['cutting_z']:.3f} ; Move to intersection"
+                                    )
+                                    gcode.append(
+                                        f"G1 X{seg_end_x:.3f} Y{seg_end_y:.3f} F{self.gcode_settings['feedrate']} ; Engrave circle"
+                                    )
+                                elif start_inside and not end_inside:
+                                    # Start inside, end outside: G1 to intersection, then move to next segment
+                                    gcode.append(
+                                        f"G1 X{seg_end_x:.3f} Y{seg_end_y:.3f} F{self.gcode_settings['feedrate']} ; Engrave to boundary"
+                                    )
+                                elif start_inside and end_inside:
+                                    # Both inside: normal G1 engraving
+                                    gcode.append(
+                                        f"G1 X{seg_end_x:.3f} Y{seg_end_y:.3f} F{self.gcode_settings['feedrate']} ; Engrave circle"
+                                    )
+                                # If both outside, no G-code is generated (clipped_line would be None)
+
+                            # Update previous point for next segment
+                            prev_x, prev_y = x, y
+
+                        # Turn off laser
                         gcode.append("M5 ; Turn off laser")
-                        gcode.append("G0 Z5 ; Raise Z")
+
+                        # Update current position to end of circle
+                        end_angle = math.radians(360)
+                        end_x = cx + radius * math.cos(end_angle)
+                        end_y = cy + radius * math.sin(end_angle)
+                        current_x, current_y = end_x, end_y
+                        last_engraved_x, last_engraved_y = end_x, end_y
+
+                        # Conditionally raise Z between paths
+                        if self.gcode_settings["raise_laser_between_paths"]:
+                            gcode.append("G0 Z-5.0 ; Raise laser between paths")
+
                         gcode.append("")  # Blank line between elements
+                    else:
+                        # Circle is completely outside workspace - no G-code generated
+                        # Update position for next element but don't generate any G-code
+                        current_x, current_y = cx, cy
 
             elif geom_type == "LWPOLYLINE":
-                gcode.append("; === POLYLINE GEOMETRY ===")
                 # Use the offset coordinates from current_points (already includes X/Y offsets)
                 polyline_points = element_info["points"]
                 if len(polyline_points) >= 2:
@@ -1220,39 +1446,67 @@ Origin offset: ({self.origin_offset[0]:.1f}, {self.origin_offset[1]:.1f})"""
                             break
 
                     if polyline_in_workspace:
-                        # Position to first point
+                        # Only add header if we're actually going to engrave
+                        gcode.append("; === POLYLINE GEOMETRY ===")
+                        # Process polyline segments with proper clipping
                         first_x, first_y = polyline_points[0]
-                        clipped_start_x, clipped_start_y = self.clip_to_workspace(
-                            first_x, first_y
-                        )
-                        gcode.append(
-                            f"G0 X{clipped_start_x:.3f} Y{clipped_start_y:.3f}"
-                        )
 
-                        # Turn on laser and lower Z
+                        # G0 move to start point if not already there
+                        if (current_x, current_y) != (first_x, first_y):
+                            gcode.append(
+                                f"G0 X{first_x:.3f} Y{first_y:.3f} Z{self.gcode_settings['cutting_z']:.3f}"
+                            )
+
+                        # Turn on laser
                         gcode.append(
                             f"M3 S{self.gcode_settings['laser_power']} ; Turn on laser"
                         )
-                        gcode.append(
-                            f"G1 Z{self.gcode_settings['cutting_z']:.3f} F{self.gcode_settings['feedrate']} ; Lower Z"
-                        )
 
-                        # Engrave polyline segments
+                        # Engrave polyline segments with proper clipping
                         for i in range(1, len(polyline_points)):
-                            x, y = polyline_points[i]
-                            clipped_x, clipped_y = self.clip_to_workspace(x, y)
-                            gcode.append(
-                                f"G1 X{clipped_x:.3f} Y{clipped_y:.3f} ; Engrave polyline"
+                            prev_x, prev_y = polyline_points[i - 1]
+                            curr_x, curr_y = polyline_points[i]
+
+                            # Clip line segment to workspace
+                            clipped_line = self.clip_line_to_workspace(
+                                prev_x, prev_y, curr_x, curr_y
                             )
 
-                        # Turn off laser and raise Z
+                            if clipped_line:
+                                (
+                                    clipped_start_x,
+                                    clipped_start_y,
+                                    clipped_end_x,
+                                    clipped_end_y,
+                                ) = clipped_line
+
+                                # Engrave to clipped end point
+                                gcode.append(
+                                    f"G1 X{clipped_end_x:.3f} Y{clipped_end_y:.3f} F{self.gcode_settings['feedrate']} ; Engrave polyline"
+                                )
+
+                        # Turn off laser
                         gcode.append("M5 ; Turn off laser")
-                        gcode.append("G0 Z5 ; Raise Z")
+
+                        # Update current position to end of polyline
+                        last_x, last_y = polyline_points[-1]
+                        current_x, current_y = last_x, last_y
+                        last_engraved_x, last_engraved_y = last_x, last_y
+
+                        # Conditionally raise Z between paths
+                        if self.gcode_settings["raise_laser_between_paths"]:
+                            gcode.append("G0 Z-5.0 ; Raise laser between paths")
+
                         gcode.append("")  # Blank line between elements
+                    else:
+                        # Polyline is completely outside workspace - no G-code generated
+                        # Update position for next element but don't generate any G-code
+                        last_x, last_y = polyline_points[-1]
+                        current_x, current_y = last_x, last_y
 
         # Add postscript
         postscript_lines = self.gcode_settings["postscript"].strip().split("\n")
-        gcode.append("")  # Add blank line before postscript
+        gcode.append("; postscript")
         gcode.extend(postscript_lines)
 
         return "\n".join(gcode)
@@ -1274,11 +1528,125 @@ Origin offset: ({self.origin_offset[0]:.1f}, {self.origin_offset[1]:.1f})"""
 
         return clipped_x, clipped_y
 
+    def clip_line_to_workspace(self, start_x, start_y, end_x, end_y):
+        """Clip a line segment to workspace boundaries using intersection logic"""
+        max_x = self.gcode_settings["max_workspace_x"]
+        max_y = self.gcode_settings["max_workspace_y"]
+
+        # Check if both points are outside workspace
+        start_out = not self.is_within_workspace(start_x, start_y)
+        end_out = not self.is_within_workspace(end_x, end_y)
+
+        if start_out and end_out:
+            # Both points outside - check if line intersects workspace
+            if not self.line_intersects_workspace(start_x, start_y, end_x, end_y):
+                return None  # No intersection, skip this line
+
+        # Find intersection points with workspace boundaries
+        clipped_start_x, clipped_start_y = start_x, start_y
+        clipped_end_x, clipped_end_y = end_x, end_y
+
+        # Clip start point if outside
+        if start_out:
+            intersection = self.find_line_workspace_intersection(
+                start_x, start_y, end_x, end_y, start_x, start_y
+            )
+            if intersection:
+                clipped_start_x, clipped_start_y = intersection
+            else:
+                return None  # No valid intersection
+
+        # Clip end point if outside
+        if end_out:
+            intersection = self.find_line_workspace_intersection(
+                start_x, start_y, end_x, end_y, end_x, end_y
+            )
+            if intersection:
+                clipped_end_x, clipped_end_y = intersection
+            else:
+                return None  # No valid intersection
+
+        return (clipped_start_x, clipped_start_y, clipped_end_x, clipped_end_y)
+
+    def line_intersects_workspace(self, x1, y1, x2, y2):
+        """Check if a line segment intersects with the workspace rectangle"""
+        max_x = self.gcode_settings["max_workspace_x"]
+        max_y = self.gcode_settings["max_workspace_y"]
+
+        # Check if line intersects with any of the four workspace boundaries
+        boundaries = [
+            (0, 0, max_x, 0),  # Bottom edge
+            (0, max_y, max_x, max_y),  # Top edge
+            (0, 0, 0, max_y),  # Left edge
+            (max_x, 0, max_x, max_y),  # Right edge
+        ]
+
+        for bx1, by1, bx2, by2 in boundaries:
+            if self.line_segments_intersect(x1, y1, x2, y2, bx1, by1, bx2, by2):
+                return True
+        return False
+
+    def find_line_workspace_intersection(self, x1, y1, x2, y2, target_x, target_y):
+        """Find intersection of line with workspace boundary closest to target point"""
+        max_x = self.gcode_settings["max_workspace_x"]
+        max_y = self.gcode_settings["max_workspace_y"]
+
+        intersections = []
+
+        # Check intersections with all four boundaries
+        boundaries = [
+            (0, 0, max_x, 0),  # Bottom edge
+            (0, max_y, max_x, max_y),  # Top edge
+            (0, 0, 0, max_y),  # Left edge
+            (max_x, 0, max_x, max_y),  # Right edge
+        ]
+
+        for bx1, by1, bx2, by2 in boundaries:
+            intersection = self.line_segment_intersection(
+                x1, y1, x2, y2, bx1, by1, bx2, by2
+            )
+            if intersection:
+                intersections.append(intersection)
+
+        if not intersections:
+            return None
+
+        # Return intersection closest to target point
+        closest = min(
+            intersections, key=lambda p: (p[0] - target_x) ** 2 + (p[1] - target_y) ** 2
+        )
+        return closest
+
+    def line_segments_intersect(self, x1, y1, x2, y2, x3, y3, x4, y4):
+        """Check if two line segments intersect"""
+
+        def ccw(A, B, C):
+            return (C[1] - A[1]) * (B[0] - A[0]) > (B[1] - A[1]) * (C[0] - A[0])
+
+        A, B, C, D = (x1, y1), (x2, y2), (x3, y3), (x4, y4)
+        return ccw(A, C, D) != ccw(B, C, D) and ccw(A, B, C) != ccw(A, B, D)
+
+    def line_segment_intersection(self, x1, y1, x2, y2, x3, y3, x4, y4):
+        """Find intersection point of two line segments, if it exists"""
+        denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
+        if abs(denom) < 1e-10:
+            return None  # Lines are parallel
+
+        t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denom
+        u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / denom
+
+        if 0 <= t <= 1 and 0 <= u <= 1:
+            x = x1 + t * (x2 - x1)
+            y = y1 + t * (y2 - y1)
+            return (x, y)
+
+        return None
+
     def show_gcode_preview(self, gcode, file_path=None):
-        """Show G-code preview window with visual toolpath plot"""
+        """Show G-code preview window with visual toolpath plot and G-code text"""
         preview_window = tk.Toplevel(self.root)
         preview_window.title("G-code Toolpath Preview")
-        preview_window.geometry("900x800")
+        preview_window.geometry("1000x800")
         preview_window.transient(self.root)
         preview_window.grab_set()
 
@@ -1295,19 +1663,15 @@ Origin offset: ({self.origin_offset[0]:.1f}, {self.origin_offset[1]:.1f})"""
         )
         title_label.pack(pady=(0, 10))
 
-        # Legend
-        legend_frame = ttk.Frame(main_frame)
-        legend_frame.pack(fill="x", pady=(0, 10))
+        # Create notebook for tabs
+        notebook = ttk.Notebook(main_frame)
+        notebook.pack(fill="both", expand=True, pady=(0, 10))
 
-        ttk.Label(legend_frame, text="Legend:", font=("Arial", 10, "bold")).pack(
-            side="left"
-        )
-        ttk.Label(
-            legend_frame, text="Green = Positioning moves (G0)", foreground="green"
-        ).pack(side="left", padx=(20, 10))
-        ttk.Label(
-            legend_frame, text="Red = Engraving moves (G1)", foreground="red"
-        ).pack(side="left", padx=(0, 10))
+        # Toolpath Plot Tab
+        plot_frame = ttk.Frame(notebook)
+        notebook.add(plot_frame, text="Toolpath Plot")
+
+        # Legend removed as requested
 
         # Create matplotlib figure for toolpath visualization
         from matplotlib.backends.backend_tkagg import (
@@ -1324,13 +1688,51 @@ Origin offset: ({self.origin_offset[0]:.1f}, {self.origin_offset[1]:.1f})"""
         self.plot_gcode_toolpath(gcode, ax)
 
         # Embed plot in tkinter
-        canvas = FigureCanvasTkAgg(fig, main_frame)
+        canvas = FigureCanvasTkAgg(fig, plot_frame)
         canvas.draw()
         canvas.get_tk_widget().pack(fill="both", expand=True, pady=(0, 10))
 
         # Add navigation toolbar for zoom/pan functionality
-        toolbar = NavigationToolbar2Tk(canvas, main_frame)
+        toolbar = NavigationToolbar2Tk(canvas, plot_frame)
         toolbar.update()
+        toolbar.pack(side="bottom", fill="x")
+
+        # Note: Removed focus event bindings that were interfering with matplotlib zoom/pan functionality
+
+        # G-code Text Tab
+        gcode_frame = ttk.Frame(notebook)
+        notebook.add(gcode_frame, text="G-code Text")
+
+        # G-code text widget with scrollbar
+        text_frame = ttk.Frame(gcode_frame)
+        text_frame.pack(fill="both", expand=True, padx=10, pady=10)
+
+        gcode_text = tk.Text(
+            text_frame, wrap=tk.WORD, font=("Courier", 9), height=25, width=80
+        )
+        gcode_text.pack(side="left", fill="both", expand=True)
+
+        # Scrollbar for G-code text
+        scrollbar = ttk.Scrollbar(
+            text_frame, orient="vertical", command=gcode_text.yview
+        )
+        gcode_text.configure(yscrollcommand=scrollbar.set)
+        scrollbar.pack(side="right", fill="y")
+
+        # Insert G-code into text widget
+        gcode_text.insert(1.0, gcode)
+
+        # Apply focus fixes to the G-code text widget
+        def ensure_text_focus():
+            """Ensure text widget maintains focus"""
+            try:
+                gcode_text.focus_set()
+            except Exception as e:
+                print(f"Warning: Could not ensure text focus: {e}")
+
+        # Bind focus events to the text widget
+        gcode_text.bind("<Button-1>", lambda e: ensure_text_focus())
+        gcode_text.bind("<FocusIn>", lambda e: ensure_text_focus())
 
         # Buttons frame
         button_frame = ttk.Frame(main_frame)
@@ -1361,6 +1763,15 @@ Origin offset: ({self.origin_offset[0]:.1f}, {self.origin_offset[1]:.1f})"""
                 print(f"Error saving G-code: {str(e)}")
                 messagebox.showerror("Error", f"Failed to save G-code:\n{str(e)}")
 
+        def copy_gcode():
+            """Copy G-code to clipboard"""
+            preview_window.clipboard_clear()
+            preview_window.clipboard_append(preview_window.gcode_content)
+            messagebox.showinfo("Success", "G-code copied to clipboard")
+
+        ttk.Button(button_frame, text="Copy G-code", command=copy_gcode).pack(
+            side="right", padx=(5, 0)
+        )
         ttk.Button(button_frame, text="Save G-code", command=save_gcode).pack(
             side="right", padx=(5, 0)
         )
@@ -1434,11 +1845,22 @@ Origin offset: ({self.origin_offset[0]:.1f}, {self.origin_offset[1]:.1f})"""
                 last_y = current_y
 
         # Plot positioning moves in green with arrows
-        for line_segment in positioning_lines:
+        for i, line_segment in enumerate(positioning_lines):
             start, end = line_segment
             ax.plot(
                 [start[0], end[0]], [start[1], end[1]], "g-", linewidth=2, alpha=0.8
             )
+
+            # Add arrow only every few segments for circles (reduce clutter)
+            # For short segments (likely circles), show arrows every 8th segment
+            segment_length = (
+                (end[0] - start[0]) ** 2 + (end[1] - start[1]) ** 2
+            ) ** 0.5
+            if segment_length < 5:  # Likely a circle segment
+                if i % 8 != 0:  # Skip most arrows for circles
+                    continue
+            else:  # Regular line segments - show all arrows
+                pass
 
             # Add arrow in the middle of the line segment
             mid_x = (start[0] + end[0]) / 2
@@ -1454,8 +1876,14 @@ Origin offset: ({self.origin_offset[0]:.1f}, {self.origin_offset[1]:.1f})"""
                 dx_norm = dx / length
                 dy_norm = dy / length
 
-                # Arrow length (proportional to line length, much smaller for small circles)
+                # Arrow length (proportional to line length, scaled for small circles)
                 arrow_length = max(0.3, length * 0.15)
+
+                # If this is part of a circle (short segments), scale arrow length down
+                if length < 5:  # Likely a circle segment
+                    arrow_length = max(
+                        0.2, length * 0.3
+                    )  # Shorter arrows for small segments
 
                 # Draw arrow
                 ax.annotate(
@@ -1472,11 +1900,22 @@ Origin offset: ({self.origin_offset[0]:.1f}, {self.origin_offset[1]:.1f})"""
                 )
 
         # Plot engraving moves in red with arrows
-        for line_segment in engraving_lines:
+        for i, line_segment in enumerate(engraving_lines):
             start, end = line_segment
             ax.plot(
                 [start[0], end[0]], [start[1], end[1]], "r-", linewidth=2, alpha=0.8
             )
+
+            # Add arrow only every few segments for circles (reduce clutter)
+            # For short segments (likely circles), show arrows every 8th segment
+            segment_length = (
+                (end[0] - start[0]) ** 2 + (end[1] - start[1]) ** 2
+            ) ** 0.5
+            if segment_length < 5:  # Likely a circle segment
+                if i % 8 != 0:  # Skip most arrows for circles
+                    continue
+            else:  # Regular line segments - show all arrows
+                pass
 
             # Add arrow in the middle of the line segment
             mid_x = (start[0] + end[0]) / 2
@@ -1492,8 +1931,14 @@ Origin offset: ({self.origin_offset[0]:.1f}, {self.origin_offset[1]:.1f})"""
                 dx_norm = dx / length
                 dy_norm = dy / length
 
-                # Arrow length (proportional to line length, much smaller for small circles)
+                # Arrow length (proportional to line length, scaled for small circles)
                 arrow_length = max(0.3, length * 0.15)
+
+                # If this is part of a circle (short segments), scale arrow length down
+                if length < 5:  # Likely a circle segment
+                    arrow_length = max(
+                        0.2, length * 0.3
+                    )  # Shorter arrows for small segments
 
                 # Draw arrow
                 ax.annotate(
@@ -1518,8 +1963,7 @@ Origin offset: ({self.origin_offset[0]:.1f}, {self.origin_offset[1]:.1f})"""
 
         # Add start point marker
         if positioning_lines or engraving_lines:
-            ax.plot(0, 0, "go", markersize=8, label="Start")
-            ax.legend()
+            ax.plot(0, 0, "go", markersize=8)
 
     def open_settings(self):
         """Open the G-code settings window"""
@@ -1615,7 +2059,7 @@ Origin offset: ({self.origin_offset[0]:.1f}, {self.origin_offset[1]:.1f})"""
 
         # Max Workspace Y
         max_y_frame = ttk.Frame(settings_frame)
-        max_y_frame.pack(fill="x")
+        max_y_frame.pack(fill="x", pady=(0, 5))
         ttk.Label(max_y_frame, text="Max Workspace Y (mm):").pack(side="left")
         max_y_spinbox = ttk.Spinbox(
             max_y_frame,
@@ -1626,6 +2070,14 @@ Origin offset: ({self.origin_offset[0]:.1f}, {self.origin_offset[1]:.1f})"""
             textvariable=max_y_var,
         )
         max_y_spinbox.pack(side="right")
+
+        # Raise laser between paths checkbox
+        raise_laser_var = tk.BooleanVar(
+            value=self.gcode_settings.get("raise_laser_between_paths", False)
+        )
+        ttk.Checkbutton(
+            settings_frame, text="Raise laser between paths", variable=raise_laser_var
+        ).pack(anchor="w", pady=(5, 0))
 
         # Buttons
         button_frame = ttk.Frame(main_frame)
@@ -1640,6 +2092,7 @@ Origin offset: ({self.origin_offset[0]:.1f}, {self.origin_offset[1]:.1f})"""
             self.gcode_settings["feedrate"] = feedrate_var.get()
             self.gcode_settings["max_workspace_x"] = max_x_var.get()
             self.gcode_settings["max_workspace_y"] = max_y_var.get()
+            self.gcode_settings["raise_laser_between_paths"] = raise_laser_var.get()
             settings_window.destroy()
 
         ttk.Button(button_frame, text="Save", command=save_settings).pack(
