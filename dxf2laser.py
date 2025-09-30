@@ -531,77 +531,188 @@ Colors:
         """Calculate Euclidean distance between two points"""
         return math.sqrt((point1[0] - point2[0]) ** 2 + (point1[1] - point2[1]) ** 2)
 
+    def are_points_connected(self, point1, point2, tolerance=0.01):
+        """Check if two points are connected (within tolerance)"""
+        return self.calculate_distance(point1, point2) < tolerance
+
+    def find_connected_chains(self, elements_by_id):
+        """Group connected elements into chains before optimization"""
+        # Create a list of elements with their endpoints
+        elements_list = list(elements_by_id.items())
+        visited = set()
+        chains = []
+
+        print(f"Finding connected chains among {len(elements_list)} elements...")
+
+        for start_idx, (element_id, element_info) in enumerate(elements_list):
+            if element_id in visited:
+                continue
+
+            # Start a new chain
+            chain = [(element_id, element_info)]
+            visited.add(element_id)
+
+            # Try to extend the chain in both directions
+            changed = True
+            while changed:
+                changed = False
+                chain_start_point = self.get_element_start_point(
+                    chain[0][0], chain[0][1]
+                )
+                chain_end_point = self.get_element_end_point(chain[-1][0], chain[-1][1])
+
+                # Look for elements that connect to either end of the chain
+                for element_id, element_info in elements_list:
+                    if element_id in visited:
+                        continue
+
+                    elem_start = self.get_element_start_point(element_id, element_info)
+                    elem_end = self.get_element_end_point(element_id, element_info)
+
+                    # Check if this element connects to the end of the chain
+                    if self.are_points_connected(chain_end_point, elem_start):
+                        chain.append((element_id, element_info))
+                        visited.add(element_id)
+                        changed = True
+                        break
+                    elif self.are_points_connected(chain_end_point, elem_end):
+                        # Need to reverse this element
+                        elem_info_copy = element_info.copy()
+                        geom_type = elem_info_copy["geom_type"]
+                        if geom_type in [
+                            "LINE",
+                            "LWPOLYLINE",
+                            "POLYLINE",
+                            "ELLIPSE",
+                            "SPLINE",
+                        ]:
+                            points = elem_info_copy["points"]
+                            elem_info_copy["points"] = list(reversed(points))
+                            elem_info_copy["_reverse_path"] = True
+                        chain.append((element_id, elem_info_copy))
+                        visited.add(element_id)
+                        changed = True
+                        break
+
+                    # Check if this element connects to the start of the chain
+                    elif self.are_points_connected(chain_start_point, elem_end):
+                        chain.insert(0, (element_id, element_info))
+                        visited.add(element_id)
+                        changed = True
+                        break
+                    elif self.are_points_connected(chain_start_point, elem_start):
+                        # Need to reverse this element
+                        elem_info_copy = element_info.copy()
+                        geom_type = elem_info_copy["geom_type"]
+                        if geom_type in [
+                            "LINE",
+                            "LWPOLYLINE",
+                            "POLYLINE",
+                            "ELLIPSE",
+                            "SPLINE",
+                        ]:
+                            points = elem_info_copy["points"]
+                            elem_info_copy["points"] = list(reversed(points))
+                            elem_info_copy["_reverse_path"] = True
+                        chain.insert(0, (element_id, elem_info_copy))
+                        visited.add(element_id)
+                        changed = True
+                        break
+
+            chains.append(chain)
+
+        # Report chaining results
+        multi_element_chains = [c for c in chains if len(c) > 1]
+        if multi_element_chains:
+            print(f"  Found {len(multi_element_chains)} connected chains:")
+            for i, chain in enumerate(multi_element_chains):
+                print(f"    Chain {i+1}: {len(chain)} connected elements")
+        else:
+            print(f"  No connected chains found - all elements are disconnected")
+
+        return chains
+
     def optimize_toolpath(self, elements_by_id, start_x, start_y):
-        """Optimize toolpath using nearest neighbor algorithm with path reversal to minimize travel distance"""
+        """Optimize toolpath using nearest neighbor algorithm with path chaining and reversal"""
         if not elements_by_id:
             return []
 
-        # Convert to list for easier manipulation
         elements_list = list(elements_by_id.items())
+
+        # First, find connected chains
+        chains = self.find_connected_chains(elements_by_id)
+
+        print(
+            f"Optimizing toolpath for {len(chains)} chains (from {len(elements_list)} elements)..."
+        )
+
+        # Now optimize the order of chains (not individual elements)
         optimized = []
-        remaining = elements_list.copy()
+        remaining_chains = chains.copy()
         current_pos = (start_x, start_y)
 
-        print(f"Optimizing toolpath for {len(elements_list)} elements...")
-
-        # Use nearest neighbor algorithm with path reversal consideration
-        while remaining:
-            # Find the element with the closest entry point (start or end) to current position
+        # Use nearest neighbor algorithm on chains
+        while remaining_chains:
+            # Find the chain with the closest entry point to current position
             min_distance = float("inf")
             closest_index = 0
-            should_reverse = False
+            should_reverse_chain = False
 
-            for i, (element_id, element_info) in enumerate(remaining):
-                geom_type = element_info["geom_type"]
+            for i, chain in enumerate(remaining_chains):
+                # Get start and end points of the entire chain
+                chain_start = self.get_element_start_point(chain[0][0], chain[0][1])
+                chain_end = self.get_element_end_point(chain[-1][0], chain[-1][1])
 
-                # Get start and end points
-                start_point = self.get_element_start_point(element_id, element_info)
-                end_point = self.get_element_end_point(element_id, element_info)
+                # Calculate distance to both ends of the chain
+                distance_to_start = self.calculate_distance(current_pos, chain_start)
+                distance_to_end = self.calculate_distance(current_pos, chain_end)
 
-                # Calculate distance to start point
-                distance_to_start = self.calculate_distance(current_pos, start_point)
-
-                # For reversible elements, also consider distance to end point
-                if geom_type in ["LINE", "LWPOLYLINE", "POLYLINE", "ELLIPSE", "SPLINE"]:
-                    distance_to_end = self.calculate_distance(current_pos, end_point)
-
-                    # Choose the closer entry point
-                    if distance_to_end < distance_to_start:
-                        distance = distance_to_end
-                        reverse = True
-                    else:
-                        distance = distance_to_start
-                        reverse = False
+                # Choose the closer entry point (chains can be reversed)
+                if distance_to_end < distance_to_start:
+                    distance = distance_to_end
+                    reverse_chain = True
                 else:
-                    # Circles and arcs - don't reverse (direction matters for G2/G3)
                     distance = distance_to_start
-                    reverse = False
+                    reverse_chain = False
 
                 if distance < min_distance:
                     min_distance = distance
                     closest_index = i
-                    should_reverse = reverse
+                    should_reverse_chain = reverse_chain
 
-            # Add the closest element to optimized list
-            closest_element = remaining.pop(closest_index)
-            element_id, element_info = closest_element
+            # Add the closest chain to optimized list
+            closest_chain = remaining_chains.pop(closest_index)
 
-            # Create a copy of element_info to avoid modifying shared data
-            element_info = element_info.copy()
+            # If chain should be reversed, reverse the order and flip each element
+            if should_reverse_chain:
+                closest_chain = list(reversed(closest_chain))
+                # Also need to reverse each element in the chain
+                reversed_chain = []
+                for element_id, element_info in closest_chain:
+                    elem_info_copy = element_info.copy()
+                    geom_type = elem_info_copy["geom_type"]
+                    if geom_type in [
+                        "LINE",
+                        "LWPOLYLINE",
+                        "POLYLINE",
+                        "ELLIPSE",
+                        "SPLINE",
+                    ]:
+                        points = elem_info_copy["points"]
+                        elem_info_copy["points"] = list(reversed(points))
+                        elem_info_copy["_reverse_path"] = not elem_info_copy.get(
+                            "_reverse_path", False
+                        )
+                    reversed_chain.append((element_id, elem_info_copy))
+                closest_chain = reversed_chain
 
-            # Mark if this element should be reversed and reverse points
-            if should_reverse:
-                element_info["_reverse_path"] = True
-                geom_type = element_info["geom_type"]
-                if geom_type in ["LINE", "LWPOLYLINE", "POLYLINE", "ELLIPSE", "SPLINE"]:
-                    # Reverse the points list in the copy
-                    points = element_info["points"]
-                    element_info["points"] = list(reversed(points))
+            # Add all elements from this chain to optimized
+            for element_id, element_info in closest_chain:
+                optimized.append((element_id, element_info))
 
-            optimized.append((element_id, element_info))
-
-            # Update current position using helper function
-            current_pos = self.get_element_end_point(element_id, element_info)
+            # Update current position to the end of this chain
+            last_element_id, last_element_info = closest_chain[-1]
+            current_pos = self.get_element_end_point(last_element_id, last_element_info)
 
         # Calculate total optimized travel distance
         optimized_distance = 0.0
