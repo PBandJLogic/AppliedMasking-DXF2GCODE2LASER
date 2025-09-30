@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Interactive DXF Viewer and Editor
+Interactive DXF 2 Laser Editor
 Allows loading DXF files, adjusting origin, and marking elements for engraving or removal.
 Must install libraries: pip3 install matplotlib numpy ezdxf Pillow
 """
@@ -20,7 +20,7 @@ import threading
 class DXFGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("Interactive DXF 2 Template Editor")
+        self.root.title("Interactive DXF 2 Laser Editor")
         self.root.geometry("1400x900")
 
         # Data storage
@@ -45,8 +45,8 @@ class DXFGUI:
 
         # G-code settings
         self.gcode_settings = {
-            "preamble": "G21 ; Set units to millimeters\nG90 ; Absolute positioning\nG0 X0, Y0, Z-5 ; Go to zero position\n",
-            "postscript": "G0 Z-5 ; Raise Z\nM5 ; Turn off laser\nG0 X0 Y0 ; Return to origin\n",
+            "preamble": "G21 ; Set units to millimeters\nG90 ; Absolute positioning\nG0 X0, Y0, Z-3 ; Go to zero position\nM4 S0 ; laser on at zero power\n",
+            "postscript": "G0 Z-3 ; Raise Z\nM5 ; Turn off laser\nG0 X0 Y375 ; Send to unload position\n",
             "laser_power": 1000,
             "cutting_z": -30,
             "feedrate": 1500,
@@ -128,7 +128,7 @@ class DXFGUI:
 
         # Title
         title_label = ttk.Label(
-            header_frame, text="DXF to\nTemplate\nEditor", font=("Arial", 16, "bold")
+            header_frame, text="DXF to\nLaser\nEditor", font=("Arial", 16, "bold")
         )
         title_label.pack(side="left", pady=10)
 
@@ -376,7 +376,15 @@ Colors:
             coord_count = 0
 
             for entity in msp:
-                if entity.dxftype() in ["LINE", "CIRCLE", "ARC", "LWPOLYLINE"]:
+                if entity.dxftype() in [
+                    "LINE",
+                    "CIRCLE",
+                    "ARC",
+                    "LWPOLYLINE",
+                    "POLYLINE",
+                    "ELLIPSE",
+                    "SPLINE",
+                ]:
                     if entity.dxftype() == "LINE":
                         start = entity.dxf.start
                         end = entity.dxf.end
@@ -475,8 +483,46 @@ Colors:
                     return (start_x, start_y)
             # Fallback to right side of arc
             return (cx + radius, cy)
-        elif geom_type == "LWPOLYLINE" and len(points) >= 1:
+        elif (
+            geom_type in ["LWPOLYLINE", "POLYLINE", "ELLIPSE", "SPLINE"]
+            and len(points) >= 1
+        ):
             return points[0]  # First point of polyline
+
+        # Fallback
+        return (0.0, 0.0)
+
+    def get_element_end_point(self, element_id, element_info):
+        """Get the end point of an element for path optimization"""
+        geom_type = element_info["geom_type"]
+        points = element_info["points"]
+        radius = element_info["radius"]
+
+        if geom_type == "LINE" and len(points) >= 2:
+            return points[1]  # End of line
+        elif geom_type == "CIRCLE" and len(points) >= 1:
+            # Circle ends where it starts (full circle)
+            cx, cy = points[0]
+            return (cx + radius, cy)  # Right side of circle
+        elif geom_type == "ARC" and len(points) >= 1:
+            # End at the arc's end angle
+            cx, cy = points[0]
+            element_data = self.element_data.get(element_id)
+            if element_data and len(element_data) >= 5:
+                _, _, _, _, original_data = element_data
+                if len(original_data) >= 6:
+                    _, _, _, _, end_angle, _ = original_data
+                    end_rad = math.radians(end_angle)
+                    end_x = cx + radius * math.cos(end_rad)
+                    end_y = cy + radius * math.sin(end_rad)
+                    return (end_x, end_y)
+            # Fallback
+            return (cx + radius, cy)
+        elif (
+            geom_type in ["LWPOLYLINE", "POLYLINE", "ELLIPSE", "SPLINE"]
+            and len(points) >= 1
+        ):
+            return points[-1]  # Last point of polyline
 
         # Fallback
         return (0.0, 0.0)
@@ -486,7 +532,7 @@ Colors:
         return math.sqrt((point1[0] - point2[0]) ** 2 + (point1[1] - point2[1]) ** 2)
 
     def optimize_toolpath(self, elements_by_id, start_x, start_y):
-        """Optimize toolpath using nearest neighbor algorithm to minimize travel distance"""
+        """Optimize toolpath using nearest neighbor algorithm with path reversal to minimize travel distance"""
         if not elements_by_id:
             return []
 
@@ -498,93 +544,93 @@ Colors:
 
         print(f"Optimizing toolpath for {len(elements_list)} elements...")
 
-        # Use nearest neighbor algorithm
+        # Use nearest neighbor algorithm with path reversal consideration
         while remaining:
-            # Find the element with the closest start point to current position
+            # Find the element with the closest entry point (start or end) to current position
             min_distance = float("inf")
             closest_index = 0
+            should_reverse = False
 
             for i, (element_id, element_info) in enumerate(remaining):
+                geom_type = element_info["geom_type"]
+
+                # Get start and end points
                 start_point = self.get_element_start_point(element_id, element_info)
-                distance = self.calculate_distance(current_pos, start_point)
+                end_point = self.get_element_end_point(element_id, element_info)
+
+                # Calculate distance to start point
+                distance_to_start = self.calculate_distance(current_pos, start_point)
+
+                # For reversible elements, also consider distance to end point
+                if geom_type in ["LINE", "LWPOLYLINE", "POLYLINE", "ELLIPSE", "SPLINE"]:
+                    distance_to_end = self.calculate_distance(current_pos, end_point)
+
+                    # Choose the closer entry point
+                    if distance_to_end < distance_to_start:
+                        distance = distance_to_end
+                        reverse = True
+                    else:
+                        distance = distance_to_start
+                        reverse = False
+                else:
+                    # Circles and arcs - don't reverse (direction matters for G2/G3)
+                    distance = distance_to_start
+                    reverse = False
 
                 if distance < min_distance:
                     min_distance = distance
                     closest_index = i
+                    should_reverse = reverse
 
             # Add the closest element to optimized list
             closest_element = remaining.pop(closest_index)
-            optimized.append(closest_element)
-
-            # Update current position to the end of this element
             element_id, element_info = closest_element
-            geom_type = element_info["geom_type"]
-            points = element_info["points"]
 
-            if geom_type == "LINE" and len(points) >= 2:
-                current_pos = points[1]  # End of line
-            elif geom_type == "CIRCLE" and len(points) >= 1:
-                # End at 360 degrees (same as start for full circle)
-                current_pos = points[0]  # Back to start
-            elif geom_type == "ARC" and len(points) >= 1:
-                # End at the arc's end angle
-                cx, cy = points[0]
-                radius = element_info["radius"]
-                element_data = self.element_data.get(element_id)
-                if element_data and len(element_data) >= 5:
-                    _, _, _, _, original_data = element_data
-                    if len(original_data) >= 6:
-                        _, _, _, _, end_angle, _ = original_data
-                        end_rad = math.radians(end_angle)
-                        end_x = cx + radius * math.cos(end_rad)
-                        end_y = cy + radius * math.sin(end_rad)
-                        current_pos = (end_x, end_y)
-                    else:
-                        current_pos = points[0]
-                else:
-                    current_pos = points[0]
-            elif geom_type == "LWPOLYLINE" and len(points) >= 1:
-                current_pos = points[-1]  # Last point of polyline
-            else:
-                current_pos = points[0] if points else (0.0, 0.0)
+            # Create a copy of element_info to avoid modifying shared data
+            element_info = element_info.copy()
 
-        # Calculate total travel distance for comparison
-        total_distance = 0.0
+            # Mark if this element should be reversed and reverse points
+            if should_reverse:
+                element_info["_reverse_path"] = True
+                geom_type = element_info["geom_type"]
+                if geom_type in ["LINE", "LWPOLYLINE", "POLYLINE", "ELLIPSE", "SPLINE"]:
+                    # Reverse the points list in the copy
+                    points = element_info["points"]
+                    element_info["points"] = list(reversed(points))
+
+            optimized.append((element_id, element_info))
+
+            # Update current position using helper function
+            current_pos = self.get_element_end_point(element_id, element_info)
+
+        # Calculate total optimized travel distance
+        optimized_distance = 0.0
         current_pos = (start_x, start_y)
         for element_id, element_info in optimized:
             start_point = self.get_element_start_point(element_id, element_info)
-            total_distance += self.calculate_distance(current_pos, start_point)
+            optimized_distance += self.calculate_distance(current_pos, start_point)
 
-            # Update current position to end of element
-            geom_type = element_info["geom_type"]
-            points = element_info["points"]
-            if geom_type == "LINE" and len(points) >= 2:
-                current_pos = points[1]
-            elif geom_type == "CIRCLE" and len(points) >= 1:
-                current_pos = points[0]
-            elif geom_type == "ARC" and len(points) >= 1:
-                cx, cy = points[0]
-                radius = element_info["radius"]
-                element_data = self.element_data.get(element_id)
-                if element_data and len(element_data) >= 5:
-                    _, _, _, _, original_data = element_data
-                    if len(original_data) >= 6:
-                        _, _, _, _, end_angle, _ = original_data
-                        end_rad = math.radians(end_angle)
-                        end_x = cx + radius * math.cos(end_rad)
-                        end_y = cy + radius * math.sin(end_rad)
-                        current_pos = (end_x, end_y)
-                    else:
-                        current_pos = points[0]
-                else:
-                    current_pos = points[0]
-            elif geom_type == "LWPOLYLINE" and len(points) >= 1:
-                current_pos = points[-1]
-            else:
-                current_pos = points[0] if points else (0.0, 0.0)
+            # Update current position to end of element (using modified points if reversed)
+            current_pos = self.get_element_end_point(element_id, element_info)
+
+        # Calculate unoptimized distance for comparison
+        unoptimized_distance = 0.0
+        current_pos = (start_x, start_y)
+        for element_id, element_info in elements_list:
+            start_point = self.get_element_start_point(element_id, element_info)
+            unoptimized_distance += self.calculate_distance(current_pos, start_point)
+            current_pos = self.get_element_end_point(element_id, element_info)
+
+        savings = unoptimized_distance - optimized_distance
+        savings_percent = (
+            (savings / unoptimized_distance * 100) if unoptimized_distance > 0 else 0
+        )
 
         print(
-            f"Toolpath optimization complete. Total travel distance: {total_distance:.2f} mm"
+            f"Toolpath optimization complete:\n"
+            f"  Original order travel: {unoptimized_distance:.2f} mm\n"
+            f"  Optimized travel: {optimized_distance:.2f} mm\n"
+            f"  Savings: {savings:.2f} mm ({savings_percent:.1f}%)"
         )
 
         return optimized
@@ -813,6 +859,292 @@ Colors:
                     "ARC",
                     (center.x, center.y, radius, start_angle, end_angle, "ARC"),
                 )
+
+            elif entity_type == "LWPOLYLINE":
+                # Extract LWPOLYLINE points (top-level, not in block)
+                polyline_points = self.extract_lwpolyline_geometry(entity)
+                element_id = self.get_next_element_id()
+
+                # Store all polyline points with the same element ID
+                for tx, ty in polyline_points:
+                    all_points.append((tx, ty, 0, "LWPOLYLINE", element_id))
+
+                # Store polyline data with all points
+                self.element_data[element_id] = (
+                    [pt[0] for pt in polyline_points],  # X coordinates
+                    [pt[1] for pt in polyline_points],  # Y coordinates
+                    0,
+                    "LWPOLYLINE",
+                    polyline_points,
+                )
+
+            elif entity_type == "POLYLINE":
+                # POLYLINE (heavy polyline) - similar to LWPOLYLINE but legacy format
+                polyline_points = []
+                is_closed = entity.is_closed
+
+                # Get vertices from the polyline
+                for vertex in entity.vertices:
+                    x, y = vertex.dxf.location.x, vertex.dxf.location.y
+                    # Convert units to mm
+                    x = self.convert_units(x)
+                    y = self.convert_units(y)
+                    polyline_points.append((x, y))
+
+                # Close the polyline if needed
+                if is_closed and len(polyline_points) > 2:
+                    polyline_points.append(polyline_points[0])
+
+                element_id = self.get_next_element_id()
+
+                # Store all polyline points with the same element ID
+                for tx, ty in polyline_points:
+                    all_points.append((tx, ty, 0, "POLYLINE", element_id))
+
+                # Store polyline data with all points
+                self.element_data[element_id] = (
+                    [pt[0] for pt in polyline_points],  # X coordinates
+                    [pt[1] for pt in polyline_points],  # Y coordinates
+                    0,
+                    "POLYLINE",
+                    polyline_points,
+                )
+
+            elif entity_type == "ELLIPSE":
+                # Flatten ELLIPSE to polyline approximation
+                try:
+                    # Use ezdxf's flattening method to convert to line segments
+                    flattened_points = []
+                    for point in entity.flattening(distance=0.1):  # 0.1mm segments
+                        x, y = point.x, point.y
+                        # Convert units to mm
+                        x = self.convert_units(x)
+                        y = self.convert_units(y)
+                        flattened_points.append((x, y))
+
+                    element_id = self.get_next_element_id()
+
+                    # Store all points with the same element ID
+                    for tx, ty in flattened_points:
+                        all_points.append((tx, ty, 0, "ELLIPSE", element_id))
+
+                    # Store data with all points
+                    self.element_data[element_id] = (
+                        [pt[0] for pt in flattened_points],  # X coordinates
+                        [pt[1] for pt in flattened_points],  # Y coordinates
+                        0,
+                        "ELLIPSE",
+                        flattened_points,
+                    )
+                    print(f"  Converted ELLIPSE to {len(flattened_points)} segments")
+                except Exception as e:
+                    print(f"  WARNING: Could not process ELLIPSE: {e}")
+
+            elif entity_type == "SPLINE":
+                # Flatten SPLINE to polyline approximation
+                try:
+                    # Use ezdxf's flattening method to convert to line segments
+                    flattened_points = []
+                    for point in entity.flattening(distance=0.1):  # 0.1mm segments
+                        x, y = point.x, point.y
+                        # Convert units to mm
+                        x = self.convert_units(x)
+                        y = self.convert_units(y)
+                        flattened_points.append((x, y))
+
+                    element_id = self.get_next_element_id()
+
+                    # Store all points with the same element ID
+                    for tx, ty in flattened_points:
+                        all_points.append((tx, ty, 0, "SPLINE", element_id))
+
+                    # Store data with all points
+                    self.element_data[element_id] = (
+                        [pt[0] for pt in flattened_points],  # X coordinates
+                        [pt[1] for pt in flattened_points],  # Y coordinates
+                        0,
+                        "SPLINE",
+                        flattened_points,
+                    )
+                    print(f"  Converted SPLINE to {len(flattened_points)} segments")
+                except Exception as e:
+                    print(f"  WARNING: Could not process SPLINE: {e}")
+
+            elif entity_type in ["TEXT", "MTEXT"]:
+                # Convert TEXT/MTEXT to geometric primitives (vector paths)
+                try:
+                    from ezdxf.disassemble import to_primitives
+
+                    # Get text properties for logging
+                    if entity_type == "TEXT":
+                        text_content = entity.dxf.get("text", "")
+                        insert_point = entity.dxf.get("insert", None)
+                    else:  # MTEXT
+                        text_content = (
+                            entity.text
+                        )  # MTEXT uses .text property, not .dxf.text
+                        insert_point = entity.dxf.get("insert", None)
+
+                    pos_str = (
+                        f"at ({insert_point.x:.2f}, {insert_point.y:.2f})"
+                        if insert_point
+                        else ""
+                    )
+                    print(
+                        f"  Processing {entity_type}: '{text_content[:30]}...' {pos_str}"
+                    )
+
+                    # Convert text to primitive geometric paths
+                    primitives = list(to_primitives([entity]))
+
+                    if not primitives:
+                        print(
+                            f"    WARNING: Text '{text_content[:30]}' has no geometry (not exploded in CAD)"
+                        )
+                        # Store as a marker point so user knows text exists
+                        if insert_point:
+                            x = self.convert_units(insert_point.x)
+                            y = self.convert_units(insert_point.y)
+                            element_id = self.get_next_element_id()
+                            all_points.append((x, y, 0, "TEXT_MARKER", element_id))
+                            self.element_data[element_id] = (
+                                x,
+                                y,
+                                0,
+                                "TEXT_MARKER",
+                                {"content": text_content, "type": entity_type},
+                            )
+                    else:
+                        # Process each primitive from the text
+                        primitives_processed = 0
+                        for primitive in primitives:
+                            if primitive.type == "line":
+                                # Extract line geometry from text outline
+                                start_x = self.convert_units(primitive.start.x)
+                                start_y = self.convert_units(primitive.start.y)
+                                end_x = self.convert_units(primitive.end.x)
+                                end_y = self.convert_units(primitive.end.y)
+
+                                element_id = self.get_next_element_id()
+                                all_points.append(
+                                    (start_x, start_y, 0, "LINE", element_id)
+                                )
+                                all_points.append((end_x, end_y, 0, "LINE", element_id))
+
+                                self.element_data[element_id] = (
+                                    (start_x, end_x),
+                                    (start_y, end_y),
+                                    0,
+                                    "LINE",
+                                    ((start_x, start_y), (end_x, end_y), "TEXT_LINE"),
+                                )
+                                primitives_processed += 1
+
+                            elif primitive.type == "polyline":
+                                # Extract polyline geometry from text outline
+                                polyline_points = []
+                                for vertex in primitive.vertices:
+                                    x = self.convert_units(vertex.x)
+                                    y = self.convert_units(vertex.y)
+                                    polyline_points.append((x, y))
+
+                                if len(polyline_points) >= 2:
+                                    element_id = self.get_next_element_id()
+                                    for tx, ty in polyline_points:
+                                        all_points.append(
+                                            (tx, ty, 0, "LWPOLYLINE", element_id)
+                                        )
+
+                                    self.element_data[element_id] = (
+                                        [pt[0] for pt in polyline_points],
+                                        [pt[1] for pt in polyline_points],
+                                        0,
+                                        "LWPOLYLINE",
+                                        polyline_points,
+                                    )
+                                    primitives_processed += 1
+
+                            elif primitive.type == "arc":
+                                # Extract arc geometry from text outline
+                                cx = self.convert_units(primitive.center.x)
+                                cy = self.convert_units(primitive.center.y)
+                                radius = self.convert_units(primitive.radius)
+                                start_angle = primitive.start_angle
+                                end_angle = primitive.end_angle
+
+                                element_id = self.get_next_element_id()
+                                all_points.append((cx, cy, radius, "ARC", element_id))
+                                self.element_data[element_id] = (
+                                    cx,
+                                    cy,
+                                    radius,
+                                    "ARC",
+                                    (
+                                        cx,
+                                        cy,
+                                        radius,
+                                        start_angle,
+                                        end_angle,
+                                        "TEXT_ARC",
+                                    ),
+                                )
+                                primitives_processed += 1
+
+                            elif primitive.type == "spline":
+                                # Flatten spline from text outline
+                                spline_points = []
+                                for point in primitive.flattening(distance=0.1):
+                                    x = self.convert_units(point.x)
+                                    y = self.convert_units(point.y)
+                                    spline_points.append((x, y))
+
+                                if len(spline_points) >= 2:
+                                    element_id = self.get_next_element_id()
+                                    for tx, ty in spline_points:
+                                        all_points.append(
+                                            (tx, ty, 0, "SPLINE", element_id)
+                                        )
+
+                                    self.element_data[element_id] = (
+                                        [pt[0] for pt in spline_points],
+                                        [pt[1] for pt in spline_points],
+                                        0,
+                                        "SPLINE",
+                                        spline_points,
+                                    )
+                                    primitives_processed += 1
+
+                        print(
+                            f"    Converted to {primitives_processed} geometric primitives"
+                        )
+
+                except Exception as e:
+                    print(f"  WARNING: Could not process {entity_type}: {e}")
+                    # Try to at least mark where the text is
+                    try:
+                        if entity_type == "TEXT":
+                            insert_point = entity.dxf.get("insert", None)
+                        else:
+                            insert_point = entity.dxf.get("insert", None)
+
+                        if insert_point:
+                            x = self.convert_units(insert_point.x)
+                            y = self.convert_units(insert_point.y)
+                            element_id = self.get_next_element_id()
+                            all_points.append((x, y, 0, "TEXT_MARKER", element_id))
+                            self.element_data[element_id] = (
+                                x,
+                                y,
+                                0,
+                                "TEXT_MARKER",
+                                {
+                                    "content": "TEXT",
+                                    "type": entity_type,
+                                    "error": str(e),
+                                },
+                            )
+                    except:
+                        pass  # If even marker creation fails, just skip
 
         # Debug: Print entity information
         print(f"DXF File Analysis:")
@@ -1056,7 +1388,10 @@ Colors:
                         and center_y - radius <= rect_top
                         and center_y + radius >= rect_bottom
                     )
-                elif geom_type in ["LINE", "LWPOLYLINE"] and len(points) >= 1:
+                elif (
+                    geom_type in ["LINE", "LWPOLYLINE", "POLYLINE", "ELLIPSE", "SPLINE"]
+                    and len(points) >= 1
+                ):
                     # Check if any point is within rectangle
                     for point in points:
                         px, py = point
@@ -1200,7 +1535,7 @@ Colors:
                             # Lines have lower priority (2)
                             candidates.append((distance, 2, element_id))
 
-            elif geom_type == "LWPOLYLINE":
+            elif geom_type in ["LWPOLYLINE", "POLYLINE", "ELLIPSE", "SPLINE"]:
                 if len(points) >= 2:
                     # Check distance to polyline segments
                     for i in range(len(points) - 1):
@@ -1292,14 +1627,20 @@ Colors:
                 self.selected_info_var.set(
                     f"Line: ({start_x:.1f}, {start_y:.1f}) to ({end_x:.1f}, {end_y:.1f})"
                 )
-            elif geom_type == "LWPOLYLINE":
-                # For polylines, x and y are lists of coordinates
+            elif geom_type in ["LWPOLYLINE", "POLYLINE", "ELLIPSE", "SPLINE"]:
+                # For polylines and flattened curves, x and y are lists of coordinates
                 if len(x) > 0:
+                    type_name = {
+                        "LWPOLYLINE": "LW Polyline",
+                        "POLYLINE": "Polyline",
+                        "ELLIPSE": "Ellipse",
+                        "SPLINE": "Spline",
+                    }.get(geom_type, geom_type)
                     self.selected_info_var.set(
-                        f"Polyline: {len(x)} points, first=({x[0]:.1f}, {y[0]:.1f})"
+                        f"{type_name}: {len(x)} points, first=({x[0]:.1f}, {y[0]:.1f})"
                     )
                 else:
-                    self.selected_info_var.set("Polyline: no points")
+                    self.selected_info_var.set(f"{geom_type}: no points")
             elif geom_type == "ARC":
                 # For arcs, x and y are center coordinates, radius is the radius
                 # Get arc parameters from original data
@@ -1317,6 +1658,18 @@ Colors:
                 else:
                     self.selected_info_var.set(
                         f"Arc: center=({x:.1f}, {y:.1f}), radius={radius:.1f}mm"
+                    )
+            elif geom_type == "TEXT_MARKER":
+                # For text markers, show the text content
+                if len(element_data) >= 5 and isinstance(element_data[4], dict):
+                    text_content = element_data[4].get("content", "TEXT")
+                    text_type = element_data[4].get("type", "TEXT")
+                    self.selected_info_var.set(
+                        f"{text_type} Marker: '{text_content[:30]}' at ({x:.1f}, {y:.1f}) [Not cuttable]"
+                    )
+                else:
+                    self.selected_info_var.set(
+                        f"Text Marker at ({x:.1f}, {y:.1f}) [Not cuttable]"
                     )
             else:
                 # For other geometry types, just show the type
@@ -1477,7 +1830,7 @@ Colors:
                     if not circle_in_workspace:
                         self.clipped_elements.add(element_id)
 
-            elif geom_type == "LWPOLYLINE":
+            elif geom_type in ["LWPOLYLINE", "POLYLINE", "ELLIPSE", "SPLINE"]:
                 if len(points) >= 2:
                     polyline_in_workspace = False
                     for x, y in points:
@@ -1616,7 +1969,7 @@ Colors:
                             )
                             self.ax.add_patch(arc)
 
-            elif geom_type == "LWPOLYLINE":
+            elif geom_type in ["LWPOLYLINE", "POLYLINE", "ELLIPSE", "SPLINE"]:
                 if len(points) >= 2:
                     x_coords = [p[0] for p in points]
                     y_coords = [p[1] for p in points]
@@ -1632,14 +1985,52 @@ Colors:
                     )
                     # Draw markers at vertices
                     marker_size = 15 if is_selected else 5
+                    marker_shape = (
+                        "s" if geom_type in ["LWPOLYLINE", "POLYLINE"] else "o"
+                    )
                     self.ax.scatter(
                         x_coords,
                         y_coords,
                         c=marker_color,
                         s=marker_size,
-                        marker="s",
+                        marker=marker_shape,
                         alpha=alpha,
                     )
+
+            elif geom_type == "TEXT_MARKER":
+                # Render text markers for text that couldn't be exploded
+                if len(points) >= 1:
+                    x, y = points[0]
+                    # Draw an X marker
+                    self.ax.plot(
+                        x,
+                        y,
+                        "x",
+                        color="orange",
+                        markersize=12,
+                        markeredgewidth=2,
+                        alpha=0.8,
+                    )
+                    # Add text label if available
+                    element_data = self.element_data.get(element_id)
+                    if (
+                        element_data
+                        and len(element_data) >= 5
+                        and isinstance(element_data[4], dict)
+                    ):
+                        text_content = element_data[4].get("content", "TEXT")
+                        # Truncate long text
+                        if len(text_content) > 20:
+                            text_content = text_content[:17] + "..."
+                        self.ax.text(
+                            x,
+                            y + 1,
+                            text_content,
+                            fontsize=7,
+                            color="orange",
+                            alpha=0.7,
+                            ha="center",
+                        )
 
         # Set equal aspect ratio and auto-scale
         self.ax.set_aspect("equal")
@@ -1821,18 +2212,10 @@ DXF Units: {self.dxf_units}"""
                                 f"G0 X{clipped_start_x:.3f} Y{clipped_start_y:.3f} Z{self.gcode_settings['cutting_z']:.3f}"
                             )
 
-                        # Turn on laser
+                        # Engrave to clipped end point combined laser power into move
                         gcode.append(
-                            f"M3 S{self.gcode_settings['laser_power']} ; Turn on laser"
+                            f"G1 X{clipped_end_x:.3f} Y{clipped_end_y:.3f} F{self.gcode_settings['feedrate']} S{self.gcode_settings['laser_power']}  ; Engrave line"
                         )
-
-                        # Engrave to clipped end point
-                        gcode.append(
-                            f"G1 X{clipped_end_x:.3f} Y{clipped_end_y:.3f} F{self.gcode_settings['feedrate']} ; Engrave line"
-                        )
-
-                        # Turn off laser
-                        gcode.append("M5 ; Turn off laser")
 
                         # Update current position
                         current_x, current_y = clipped_end_x, clipped_end_y
@@ -1878,71 +2261,95 @@ DXF Units: {self.dxf_units}"""
                                 f"G0 X{clipped_start_x:.3f} Y{clipped_start_y:.3f} Z{self.gcode_settings['cutting_z']:.3f}"
                             )
 
-                        # Turn on laser
-                        gcode.append(
-                            f"M3 S{self.gcode_settings['laser_power']} ; Turn on laser"
+                        # Generate full circle using two 180-degree G3 arcs (CCW)
+                        # A full circle requires two semicircular arcs because most controllers
+                        # can't handle a full 360-degree arc in one command
+
+                        # First semicircle: 0° to 180° (right side to left side)
+                        halfway_x = cx - radius  # Left side of circle
+                        halfway_y = cy
+
+                        # Second semicircle endpoint (back to start)
+                        end_x = cx + radius
+                        end_y = cy
+
+                        # Check if circle is entirely within workspace
+                        # Simple check: if center +/- radius is within bounds
+                        circle_fully_inside = (
+                            self.is_within_workspace(cx + radius, cy)
+                            and self.is_within_workspace(cx - radius, cy)
+                            and self.is_within_workspace(cx, cy + radius)
+                            and self.is_within_workspace(cx, cy - radius)
                         )
 
-                        # Generate circular path (360 degrees in 5-degree steps for precision)
-                        # Start at 0 degrees (right side of circle) and go to 355 degrees, then add 360 to close
-                        angles = list(range(0, 360, 5))  # [0, 5, 10, ..., 355]
-                        angles.append(
-                            360
-                        )  # Add 360 degrees (same as 0 degrees) to close the circle
-
-                        # Generate circle segments with proper intersection-based clipping
-                        # Start from the actual 0-degree point, not the clipped position
-                        prev_x, prev_y = (
-                            start_x,
-                            start_y,
-                        )  # Use actual 0-degree point, not clipped
-                        for i in angles:
-                            angle = math.radians(i)
-                            x = cx + radius * math.cos(angle)
-                            y = cy + radius * math.sin(angle)
-
-                            # Check if the original segment intersects the workspace
-                            clipped_line = self.clip_line_to_workspace(
-                                prev_x, prev_y, x, y
+                        if circle_fully_inside:
+                            # Entire circle is inside - use two clean G3 arcs
+                            # First semicircle: start -> halfway (0° to 180°)
+                            i_offset1 = (
+                                cx - start_x
+                            )  # -radius (going from right to center)
+                            j_offset1 = cy - start_y  # 0
+                            gcode.append(
+                                f"G3 X{halfway_x:.3f} Y{halfway_y:.3f} I{i_offset1:.3f} J{j_offset1:.3f} "
+                                f"F{self.gcode_settings['feedrate']} S{self.gcode_settings['laser_power']}  ; Circle 1st half"
                             )
 
-                            if clipped_line:
-                                (
-                                    seg_start_x,
-                                    seg_start_y,
-                                    seg_end_x,
-                                    seg_end_y,
-                                ) = clipped_line
+                            # Second semicircle: halfway -> end (180° to 360°)
+                            i_offset2 = (
+                                cx - halfway_x
+                            )  # radius (going from left to center)
+                            j_offset2 = cy - halfway_y  # 0
+                            gcode.append(
+                                f"G3 X{end_x:.3f} Y{end_y:.3f} I{i_offset2:.3f} J{j_offset2:.3f} "
+                                f"F{self.gcode_settings['feedrate']} S{self.gcode_settings['laser_power']}  ; Circle 2nd half"
+                            )
+                        else:
+                            # Circle partially outside workspace - use segmented arcs
+                            # Break into 45-degree arc segments for better clipping
+                            num_segments = 8  # 45 degrees each
+                            angle_step = 2 * math.pi / num_segments
 
-                                # Determine the intersection case based on original segment points
-                                start_inside = self.is_within_workspace(prev_x, prev_y)
-                                end_inside = self.is_within_workspace(x, y)
+                            prev_x, prev_y = start_x, start_y
+                            for i in range(1, num_segments + 1):
+                                angle = i * angle_step
+                                seg_end_x = cx + radius * math.cos(angle)
+                                seg_end_y = cy + radius * math.sin(angle)
 
-                                if not start_inside and end_inside:
-                                    # Start outside, end inside: G0 to intersection, then G1 to end
-                                    gcode.append(
-                                        f"G0 X{seg_start_x:.3f} Y{seg_start_y:.3f} Z{self.gcode_settings['cutting_z']:.3f} ; Move to intersection"
-                                    )
-                                    gcode.append(
-                                        f"G1 X{seg_end_x:.3f} Y{seg_end_y:.3f} F{self.gcode_settings['feedrate']} ; Engrave circle"
-                                    )
-                                elif start_inside and not end_inside:
-                                    # Start inside, end outside: G1 to intersection, then move to next segment
-                                    gcode.append(
-                                        f"G1 X{seg_end_x:.3f} Y{seg_end_y:.3f} F{self.gcode_settings['feedrate']} ; Engrave to boundary"
-                                    )
-                                elif start_inside and end_inside:
-                                    # Both inside: normal G1 engraving
-                                    gcode.append(
-                                        f"G1 X{seg_end_x:.3f} Y{seg_end_y:.3f} F{self.gcode_settings['feedrate']} ; Engrave circle"
-                                    )
-                                # If both outside, no G-code is generated (clipped_line would be None)
+                                prev_inside = self.is_within_workspace(prev_x, prev_y)
+                                end_inside = self.is_within_workspace(
+                                    seg_end_x, seg_end_y
+                                )
 
-                            # Update previous point for next segment
-                            prev_x, prev_y = x, y
+                                if prev_inside and end_inside:
+                                    # Both inside - use G3 arc
+                                    i_seg = cx - prev_x
+                                    j_seg = cy - prev_y
+                                    gcode.append(
+                                        f"G3 X{seg_end_x:.3f} Y{seg_end_y:.3f} I{i_seg:.3f} J{j_seg:.3f} "
+                                        f"F{self.gcode_settings['feedrate']} S{self.gcode_settings['laser_power']}  ; Circle segment"
+                                    )
+                                elif prev_inside and not end_inside:
+                                    # Exits workspace
+                                    i_seg = cx - prev_x
+                                    j_seg = cy - prev_y
+                                    gcode.append(
+                                        f"G3 X{seg_end_x:.3f} Y{seg_end_y:.3f} I{i_seg:.3f} J{j_seg:.3f} "
+                                        f"F{self.gcode_settings['feedrate']} S{self.gcode_settings['laser_power']}  ; Circle to boundary"
+                                    )
+                                elif not prev_inside and end_inside:
+                                    # Enters workspace
+                                    gcode.append(
+                                        f"G0 X{prev_x:.3f} Y{prev_y:.3f} "
+                                        f"Z{self.gcode_settings['cutting_z']:.3f} ; Move to entry"
+                                    )
+                                    i_seg = cx - prev_x
+                                    j_seg = cy - prev_y
+                                    gcode.append(
+                                        f"G3 X{seg_end_x:.3f} Y{seg_end_y:.3f} I{i_seg:.3f} J{j_seg:.3f} "
+                                        f"F{self.gcode_settings['feedrate']} S{self.gcode_settings['laser_power']}  ; Circle from boundary"
+                                    )
 
-                        # Turn off laser
-                        gcode.append("M5 ; Turn off laser")
+                                prev_x, prev_y = seg_end_x, seg_end_y
 
                         # Update current position to end of circle
                         end_angle = math.radians(360)
@@ -2054,71 +2461,85 @@ DXF Units: {self.dxf_units}"""
                                             f"G0 X{start_x:.3f} Y{start_y:.3f} Z{self.gcode_settings['cutting_z']:.3f}"
                                         )
 
-                                # Turn on laser
-                                gcode.append(
-                                    f"M3 S{self.gcode_settings['laser_power']} ; Turn on laser"
-                                )
+                                # Generate G2/G3 arc command instead of linear segments
+                                # DXF arcs are always counterclockwise (CCW), use G3
+                                # G3 format: G3 X[end] Y[end] I[dx to center] J[dy to center]
 
-                                # Generate arc segments with proper intersection-based clipping
-                                # Calculate number of segments based on arc length
+                                # Calculate arc span and check if it's a full circle
                                 arc_span = end_rad - start_rad
                                 if arc_span < 0:
                                     arc_span += 2 * math.pi
 
-                                # Use 5-degree steps for precision
-                                num_segments = max(1, int(arc_span / math.radians(5)))
-                                angle_step = arc_span / num_segments
+                                # Check if arc needs to be split for workspace clipping
+                                # For now, if entire arc is within workspace, use single G3
+                                start_in = self.is_within_workspace(start_x, start_y)
+                                end_in = self.is_within_workspace(end_x, end_y)
 
-                                prev_x, prev_y = start_x, start_y
-                                for i in range(1, num_segments + 1):
-                                    angle = start_rad + i * angle_step
-                                    x = cx + radius * math.cos(angle)
-                                    y = cy + radius * math.sin(angle)
+                                # Calculate I and J offsets from start point to center
+                                i_offset = cx - start_x
+                                j_offset = cy - start_y
 
-                                    # Check if the original segment intersects the workspace
-                                    clipped_line = self.clip_line_to_workspace(
-                                        prev_x, prev_y, x, y
+                                if start_in and end_in:
+                                    # Both endpoints inside - simple G3 arc
+                                    gcode.append(
+                                        f"G3 X{end_x:.3f} Y{end_y:.3f} I{i_offset:.3f} J{j_offset:.3f} "
+                                        f"F{self.gcode_settings['feedrate']} S{self.gcode_settings['laser_power']}  ; Arc CCW"
                                     )
+                                else:
+                                    # Arc crosses workspace boundary - need to handle clipping
+                                    # For complex cases, fall back to segmented approach
+                                    # This ensures proper handling of arcs that partially exit workspace
 
-                                    if clipped_line:
-                                        (
-                                            seg_start_x,
-                                            seg_start_y,
-                                            seg_end_x,
-                                            seg_end_y,
-                                        ) = clipped_line
+                                    # Use smaller segments for clipped arcs (10-degree steps)
+                                    num_segments = max(
+                                        1, int(arc_span / math.radians(10))
+                                    )
+                                    angle_step = arc_span / num_segments
 
-                                        # Determine the intersection case based on original segment points
-                                        start_inside = self.is_within_workspace(
+                                    prev_x, prev_y = start_x, start_y
+                                    for i in range(1, num_segments + 1):
+                                        angle = start_rad + i * angle_step
+                                        seg_end_x = cx + radius * math.cos(angle)
+                                        seg_end_y = cy + radius * math.sin(angle)
+
+                                        # Check if segment endpoints are in workspace
+                                        prev_inside = self.is_within_workspace(
                                             prev_x, prev_y
                                         )
-                                        end_inside = self.is_within_workspace(x, y)
+                                        end_inside = self.is_within_workspace(
+                                            seg_end_x, seg_end_y
+                                        )
 
-                                        if not start_inside and end_inside:
-                                            # Start outside, end inside: G0 to intersection, then G1 to end
+                                        if prev_inside and end_inside:
+                                            # Both inside - use G3 arc segment
+                                            i_seg = cx - prev_x
+                                            j_seg = cy - prev_y
                                             gcode.append(
-                                                f"G0 X{seg_start_x:.3f} Y{seg_start_y:.3f} Z{self.gcode_settings['cutting_z']:.3f} ; Move to intersection"
+                                                f"G3 X{seg_end_x:.3f} Y{seg_end_y:.3f} I{i_seg:.3f} J{j_seg:.3f} "
+                                                f"F{self.gcode_settings['feedrate']} S{self.gcode_settings['laser_power']}  ; Arc segment"
                                             )
+                                        elif prev_inside and not end_inside:
+                                            # Exits workspace - use G3 to approximate boundary
+                                            i_seg = cx - prev_x
+                                            j_seg = cy - prev_y
                                             gcode.append(
-                                                f"G1 X{seg_end_x:.3f} Y{seg_end_y:.3f} F{self.gcode_settings['feedrate']} ; Engrave arc"
+                                                f"G3 X{seg_end_x:.3f} Y{seg_end_y:.3f} I{i_seg:.3f} J{j_seg:.3f} "
+                                                f"F{self.gcode_settings['feedrate']} S{self.gcode_settings['laser_power']}  ; Arc to boundary"
                                             )
-                                        elif start_inside and not end_inside:
-                                            # Start inside, end outside: G1 to intersection, then move to next segment
+                                        elif not prev_inside and end_inside:
+                                            # Enters workspace - move to start then arc
                                             gcode.append(
-                                                f"G1 X{seg_end_x:.3f} Y{seg_end_y:.3f} F{self.gcode_settings['feedrate']} ; Engrave to boundary"
+                                                f"G0 X{prev_x:.3f} Y{prev_y:.3f} "
+                                                f"Z{self.gcode_settings['cutting_z']:.3f} ; Move to entry"
                                             )
-                                        elif start_inside and end_inside:
-                                            # Both inside: normal G1 engraving
+                                            i_seg = cx - prev_x
+                                            j_seg = cy - prev_y
                                             gcode.append(
-                                                f"G1 X{seg_end_x:.3f} Y{seg_end_y:.3f} F{self.gcode_settings['feedrate']} ; Engrave arc"
+                                                f"G3 X{seg_end_x:.3f} Y{seg_end_y:.3f} I{i_seg:.3f} J{j_seg:.3f} "
+                                                f"F{self.gcode_settings['feedrate']} S{self.gcode_settings['laser_power']}  ; Arc from boundary"
                                             )
-                                        # If both outside, no G-code is generated (clipped_line would be None)
 
-                                    # Update previous point for next segment
-                                    prev_x, prev_y = x, y
-
-                                # Turn off laser
-                                gcode.append("M5 ; Turn off laser")
+                                        prev_x, prev_y = seg_end_x, seg_end_y
 
                                 # Update current position to end of arc
                                 current_x, current_y = end_x, end_y
@@ -2134,7 +2555,7 @@ DXF Units: {self.dxf_units}"""
                                 # Update position for next element but don't generate any G-code
                                 current_x, current_y = cx, cy
 
-            elif geom_type == "LWPOLYLINE":
+            elif geom_type in ["LWPOLYLINE", "POLYLINE", "ELLIPSE", "SPLINE"]:
                 # Use the offset coordinates from current_points (already includes X/Y offsets)
                 polyline_points = element_info["points"]
                 if len(polyline_points) >= 2:
@@ -2147,7 +2568,7 @@ DXF Units: {self.dxf_units}"""
 
                     if polyline_in_workspace:
                         # Only add header if we're actually going to engrave
-                        gcode.append("; === POLYLINE GEOMETRY ===")
+                        gcode.append(f"; === {geom_type} GEOMETRY ===")
                         # Process polyline segments with proper clipping
                         first_x, first_y = polyline_points[0]
 
@@ -2156,11 +2577,6 @@ DXF Units: {self.dxf_units}"""
                             gcode.append(
                                 f"G0 X{first_x:.3f} Y{first_y:.3f} Z{self.gcode_settings['cutting_z']:.3f}"
                             )
-
-                        # Turn on laser
-                        gcode.append(
-                            f"M3 S{self.gcode_settings['laser_power']} ; Turn on laser"
-                        )
 
                         # Engrave polyline segments with proper clipping
                         for i in range(1, len(polyline_points)):
@@ -2182,11 +2598,8 @@ DXF Units: {self.dxf_units}"""
 
                                 # Engrave to clipped end point
                                 gcode.append(
-                                    f"G1 X{clipped_end_x:.3f} Y{clipped_end_y:.3f} F{self.gcode_settings['feedrate']} ; Engrave polyline"
+                                    f"G1 X{clipped_end_x:.3f} Y{clipped_end_y:.3f} F{self.gcode_settings['feedrate']} S{self.gcode_settings['laser_power']}  ; Engrave polyline"
                                 )
-
-                        # Turn off laser
-                        gcode.append("M5 ; Turn off laser")
 
                         # Update current position to end of polyline
                         last_x, last_y = polyline_points[-1]
@@ -2592,6 +3005,85 @@ DXF Units: {self.dxf_units}"""
 
                 # Draw engraving move
                 engraving_lines.append([(last_x, last_y), (current_x, current_y)])
+                last_x = current_x
+                last_y = current_y
+
+            # Parse G2 (clockwise arc) and G3 (counterclockwise arc) moves
+            elif line_upper.startswith("G2") or line_upper.startswith("G3"):
+                x_pos = None
+                y_pos = None
+                i_offset = None
+                j_offset = None
+
+                # Extract X, Y, I, J coordinates (handle commas)
+                parts = line_upper.replace(",", " ").split()
+                for part in parts:
+                    if part.startswith("X"):
+                        x_pos = float(part[1:])
+                    elif part.startswith("Y"):
+                        y_pos = float(part[1:])
+                    elif part.startswith("I"):
+                        i_offset = float(part[1:])
+                    elif part.startswith("J"):
+                        j_offset = float(part[1:])
+
+                if x_pos is not None:
+                    current_x = x_pos
+                if y_pos is not None:
+                    current_y = y_pos
+
+                # Calculate arc if we have I and J offsets
+                if i_offset is not None and j_offset is not None:
+                    # Calculate center of arc
+                    center_x = last_x + i_offset
+                    center_y = last_y + j_offset
+
+                    # Calculate start and end angles
+                    start_angle = math.atan2(last_y - center_y, last_x - center_x)
+                    end_angle = math.atan2(current_y - center_y, current_x - center_x)
+
+                    # Calculate radius
+                    radius = math.sqrt(i_offset**2 + j_offset**2)
+
+                    # Determine arc direction (G2 = CW, G3 = CCW)
+                    is_ccw = line_upper.startswith("G3")
+
+                    # Calculate arc span
+                    if is_ccw:
+                        # Counterclockwise
+                        if end_angle <= start_angle:
+                            end_angle += 2 * math.pi
+                        arc_span = end_angle - start_angle
+                    else:
+                        # Clockwise
+                        if end_angle >= start_angle:
+                            end_angle -= 2 * math.pi
+                        arc_span = start_angle - end_angle
+
+                    # Break arc into segments for visualization (use 5-degree steps)
+                    num_segments = max(8, int(abs(arc_span) / math.radians(5)))
+                    angle_step = (end_angle - start_angle) / num_segments
+
+                    # Generate arc segments
+                    prev_arc_x = last_x
+                    prev_arc_y = last_y
+
+                    for i in range(1, num_segments + 1):
+                        angle = start_angle + i * angle_step
+                        arc_x = center_x + radius * math.cos(angle)
+                        arc_y = center_y + radius * math.sin(angle)
+
+                        # Add segment to engraving lines
+                        engraving_lines.append(
+                            [(prev_arc_x, prev_arc_y), (arc_x, arc_y)]
+                        )
+
+                        prev_arc_x = arc_x
+                        prev_arc_y = arc_y
+                else:
+                    # No I/J offsets, treat as straight line (fallback)
+                    engraving_lines.append([(last_x, last_y), (current_x, current_y)])
+
                 last_x = current_x
                 last_y = current_y
 
