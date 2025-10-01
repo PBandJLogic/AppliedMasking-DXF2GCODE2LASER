@@ -2943,6 +2943,7 @@ Colors:
             # Also restore original element_data
             if hasattr(self, "original_element_data"):
                 import copy
+
                 self.element_data = copy.deepcopy(self.original_element_data)
             self.update_plot()
             self.update_statistics()
@@ -3958,8 +3959,8 @@ DXF Units: {self.dxf_units}"""
                         # Process polyline segments with proper clipping
                         first_x, first_y = polyline_points[0][0], polyline_points[0][1]
 
-                        # G0 move to start point if not already there
-                        if (current_x, current_y) != (first_x, first_y):
+                        # G0 move to start point if not already there and it's within workspace
+                        if (current_x, current_y) != (first_x, first_y) and self.is_within_workspace(first_x, first_y):
                             gcode.append(
                                 f"G0 X{first_x:.3f} Y{first_y:.3f} Z{self.gcode_settings['cutting_z']:.3f}"
                             )
@@ -3979,17 +3980,6 @@ DXF Units: {self.dxf_units}"""
                                     curr_point[3:8]
                                 )
 
-                                # Check if we need to move to arc start point
-                                if (current_x, current_y) != (prev_x, prev_y):
-                                    print(
-                                        f"    WARNING: Tool not at arc start! Current: ({current_x:.3f}, {current_y:.3f}), Arc start: ({prev_x:.3f}, {prev_y:.3f})"
-                                    )
-                                    # Add G1 move to arc start point
-                                    gcode.append(
-                                        f"G1 X{prev_x:.3f} Y{prev_y:.3f} S{self.gcode_settings['laser_power']}"
-                                    )
-                                    current_x, current_y = prev_x, prev_y
-
                                 # Use unified arc G-code generation
                                 arc_gcode, new_x, new_y = self.generate_arc_gcode(
                                     prev_x,
@@ -4006,8 +3996,24 @@ DXF Units: {self.dxf_units}"""
                                     current_y,
                                 )
 
-                                gcode.extend(arc_gcode)
-                                current_x, current_y = new_x, new_y
+                                # Only add arc G-code if it generated something
+                                if arc_gcode:
+                                    # Check if we need to move to arc start point
+                                    if (current_x, current_y) != (prev_x, prev_y) and self.is_within_workspace(prev_x, prev_y):
+                                        print(
+                                            f"    WARNING: Tool not at arc start! Current: ({current_x:.3f}, {current_y:.3f}), Arc start: ({prev_x:.3f}, {prev_y:.3f})"
+                                        )
+                                        # Add G1 move to arc start point only if it's within workspace
+                                        gcode.append(
+                                            f"G1 X{prev_x:.3f} Y{prev_y:.3f} S{self.gcode_settings['laser_power']}"
+                                        )
+                                        current_x, current_y = prev_x, prev_y
+                                    
+                                    gcode.extend(arc_gcode)
+                                    current_x, current_y = new_x, new_y
+                                else:
+                                    # Arc was completely outside workspace, update position but don't generate G-code
+                                    current_x, current_y = curr_x, curr_y
                             else:
                                 # This is a straight line segment
                                 prev_x, prev_y = prev_point[0], prev_point[1]
