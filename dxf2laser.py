@@ -1982,6 +1982,7 @@ Colors:
                 print(f"Processing element {element_id} for offset application")
                 # Handle different element_data structures
                 print(f"  Element {element_id} has {len(element_info)} components")
+                print(f"  Element type: {element_info[3] if len(element_info) > 3 else 'unknown'}")
                 if len(element_info) == 4:
                     # Old format: (x, y, radius, geom_type)
                     x, y, radius, geom_type = element_info
@@ -2041,6 +2042,12 @@ Colors:
                         continue
                     new_x_coords.append(fx + x_offset)
                     new_y_coords.append(fy + y_offset)
+                
+                # If no valid coordinates were found, keep the original ones
+                if not new_x_coords or not new_y_coords:
+                    print(f"  Warning: No valid coordinates after offset for element {element_id}, keeping original")
+                    new_x_coords = x_coords
+                    new_y_coords = y_coords
 
                 # Apply offset to detailed points (includes arc data)
                 new_detailed_points = []
@@ -2262,6 +2269,20 @@ Colors:
                     print(f"  Final ARC_END count: {arc_final_count}")
 
                 # Store the updated element data (moved outside the else block)
+                # For closed polylines, ensure the closure is maintained
+                if geom_type in ["LWPOLYLINE", "POLYLINE"] and len(new_x_coords) > 2:
+                    # Check if the original polyline was closed (first and last points were the same)
+                    if len(x_coords) > 2 and abs(x_coords[0] - x_coords[-1]) < 0.001 and abs(y_coords[0] - y_coords[-1]) < 0.001:
+                        # Ensure the new polyline is also closed
+                        if abs(new_x_coords[0] - new_x_coords[-1]) > 0.001 or abs(new_y_coords[0] - new_y_coords[-1]) > 0.001:
+                            print(f"  Closing polyline for element {element_id}")
+                            new_x_coords.append(new_x_coords[0])
+                            new_y_coords.append(new_y_coords[0])
+                            # Also close the detailed points if they exist
+                            if new_detailed_points and len(new_detailed_points) > 0:
+                                if isinstance(new_detailed_points, list):
+                                    new_detailed_points.append(new_detailed_points[0])
+                
                 self.element_data[element_id] = (
                     new_x_coords,
                     new_y_coords,
@@ -4544,37 +4565,46 @@ DXF Units: {self.dxf_units}"""
         file_path = filedialog.asksaveasfilename(
             defaultextension=".json",
             filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
-            title="Save G-code Settings"
+            title="Save G-code Settings",
         )
         if file_path:
             try:
-                with open(file_path, 'w') as f:
+                with open(file_path, "w") as f:
                     json.dump(self.gcode_settings, f, indent=2)
                 messagebox.showinfo("Success", f"Settings saved to {file_path}")
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to save settings: {str(e)}")
-    
+
     def load_settings_from_file(self):
         """Load G-code settings from a JSON file"""
         file_path = filedialog.askopenfilename(
             filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
-            title="Load G-code Settings"
+            title="Load G-code Settings",
         )
         if file_path:
             try:
-                with open(file_path, 'r') as f:
+                with open(file_path, "r") as f:
                     loaded_settings = json.load(f)
-                
+
                 # Validate that it contains expected keys
-                required_keys = ["preamble", "postscript", "laser_power", "cutting_z", "feedrate"]
+                required_keys = [
+                    "preamble",
+                    "postscript",
+                    "laser_power",
+                    "cutting_z",
+                    "feedrate",
+                ]
                 if not all(key in loaded_settings for key in required_keys):
-                    messagebox.showwarning("Warning", "File may not contain all required settings. Using defaults for missing values.")
-                
+                    messagebox.showwarning(
+                        "Warning",
+                        "File may not contain all required settings. Using defaults for missing values.",
+                    )
+
                 # Update settings, keeping defaults for any missing keys
                 for key, value in loaded_settings.items():
                     if key in self.gcode_settings:
                         self.gcode_settings[key] = value
-                
+
                 messagebox.showinfo("Success", f"Settings loaded from {file_path}")
                 # Update the plot if workspace bounds changed
                 self.update_plot()
@@ -4789,7 +4819,7 @@ DXF Units: {self.dxf_units}"""
         # File operations frame
         file_frame = ttk.Frame(main_frame)
         file_frame.pack(fill="x", pady=(10, 0))
-        
+
         def save_to_file():
             """Save current form values to a file"""
             # First update the settings from the form
@@ -4811,7 +4841,7 @@ DXF Units: {self.dxf_units}"""
             self.gcode_settings["optimize_toolpath"] = optimize_toolpath_var.get()
             # Now save to file
             self.save_settings_to_file()
-        
+
         def load_from_file():
             """Load settings from a file and update the form"""
             self.load_settings_from_file()
@@ -4832,12 +4862,16 @@ DXF Units: {self.dxf_units}"""
             wpos_home_x_var.set(self.gcode_settings["wpos_home_x"])
             wpos_home_y_var.set(self.gcode_settings["wpos_home_y"])
             wpos_home_z_var.set(self.gcode_settings["wpos_home_z"])
-            raise_laser_var.set(self.gcode_settings.get("raise_laser_between_paths", False))
-            optimize_toolpath_var.set(self.gcode_settings.get("optimize_toolpath", True))
-        
-        ttk.Button(file_frame, text="Load Settings from File", command=load_from_file).pack(
-            side="left", padx=(0, 5)
-        )
+            raise_laser_var.set(
+                self.gcode_settings.get("raise_laser_between_paths", False)
+            )
+            optimize_toolpath_var.set(
+                self.gcode_settings.get("optimize_toolpath", True)
+            )
+
+        ttk.Button(
+            file_frame, text="Load Settings from File", command=load_from_file
+        ).pack(side="left", padx=(0, 5))
         ttk.Button(file_frame, text="Save Settings to File", command=save_to_file).pack(
             side="left"
         )
