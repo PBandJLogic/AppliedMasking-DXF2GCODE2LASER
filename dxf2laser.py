@@ -2379,34 +2379,41 @@ Colors:
 
     def on_click(self, event):
         """Handle mouse clicks on the plot - store position for click_release"""
-        # Check if Ctrl/Cmd key is held for selection rectangle
-        if event.button == 1:  # Left mouse button
-            if event.key == "control" or event.key == "cmd":
-                # Start selection rectangle mode
-                if (
-                    event.inaxes == self.ax
-                    and event.xdata is not None
-                    and event.ydata is not None
-                ):
-                    self.selection_mode = True
-                    self.selection_start = (event.xdata, event.ydata)
-                    self.last_click_pos = None  # Don't do single selection
-                    return
-
-        # Store click position for potential single selection
+        # Check if zoom or pan tool is active
+        if self.toolbar.mode != '':
+            # Toolbar is in zoom or pan mode, don't interfere
+            self.selection_mode = False
+            self.last_click_pos = None
+            return
+            
+        # Only handle left mouse button for selection
+        if event.button != 1:  # Not left mouse button
+            return
+            
+        # Start selection mode if clicking in the plot area
         if (
             event.inaxes == self.ax
             and event.xdata is not None
             and event.ydata is not None
         ):
+            # Always start selection rectangle mode for click-and-drag
+            self.selection_mode = True
+            self.selection_start = (event.xdata, event.ydata)
             self.last_click_pos = (event.xdata, event.ydata)
-            self.selection_mode = False
+            
+            # Clear selection if not holding shift (for multi-select)
+            if event.key != "shift":
+                self.selected_element_ids.clear()
         else:
             self.last_click_pos = None
             self.selection_mode = False
 
     def on_motion(self, event):
         """Handle mouse motion for selection rectangle"""
+        # Don't do selection if toolbar is active
+        if self.toolbar.mode != '':
+            return
+            
         if not self.selection_mode or event.inaxes != self.ax:
             return
 
@@ -2417,31 +2424,45 @@ Colors:
         if self.selection_start:
             start_x, start_y = self.selection_start
             end_x, end_y = event.xdata, event.ydata
+            
+            # Only show rectangle if we've moved enough (avoid tiny rectangles from clicks)
+            min_drag_distance = 2.0  # Minimum pixels to consider it a drag
+            if abs(end_x - start_x) < min_drag_distance and abs(end_y - start_y) < min_drag_distance:
+                if self.selection_rect:
+                    self.selection_rect.remove()
+                    self.selection_rect = None
+                    self.canvas.draw_idle()
+                return
 
             # Remove previous rectangle
             if self.selection_rect:
                 self.selection_rect.remove()
 
-            # Create new rectangle
+            # Create new rectangle with improved visibility
             from matplotlib.patches import Rectangle
 
             width = end_x - start_x
             height = end_y - start_y
             self.selection_rect = Rectangle(
-                (start_x, start_y),
-                width,
-                height,
-                fill=False,
-                edgecolor="blue",
-                linestyle="--",
+                (min(start_x, end_x), min(start_y, end_y)),
+                abs(width),
+                abs(height),
+                fill=True,
+                facecolor="yellow",
+                edgecolor="green",
                 linewidth=2,
-                alpha=0.7,
+                linestyle="-",
+                alpha=0.3,
             )
             self.ax.add_patch(self.selection_rect)
             self.canvas.draw_idle()
 
     def on_click_release(self, event):
         """Handle mouse click release - this works better with navigation toolbar"""
+        # Don't handle if toolbar is active
+        if self.toolbar.mode != '':
+            return
+            
         if event.inaxes != self.ax:
             # End selection mode if mouse leaves plot
             if self.selection_mode:
@@ -2455,22 +2476,29 @@ Colors:
         if event.xdata is None or event.ydata is None:
             return
 
-        # Handle selection rectangle completion
+        # Handle selection completion
         if self.selection_mode and self.selection_start:
             start_x, start_y = self.selection_start
             end_x, end_y = event.xdata, event.ydata
+            
+            # Check if this was a click (no drag) or a drag selection
+            min_drag_distance = 2.0
+            is_click = abs(end_x - start_x) < min_drag_distance and abs(end_y - start_y) < min_drag_distance
+            
+            if not is_click:
+                # Handle rectangle selection only if we dragged
+                # Don't clear if shift is held (for multi-select)
+                if event.key != "shift":
+                    self.selected_element_ids.clear()
+                    
+                # Find elements within rectangle
+                rect_left = min(start_x, end_x)
+                rect_right = max(start_x, end_x)
+                rect_bottom = min(start_y, end_y)
+                rect_top = max(start_y, end_y)
 
-            # Clear previous selection
-            self.selected_element_ids.clear()
-
-            # Find elements within rectangle
-            rect_left = min(start_x, end_x)
-            rect_right = max(start_x, end_x)
-            rect_bottom = min(start_y, end_y)
-            rect_top = max(start_y, end_y)
-
-            # Get unique elements for selection
-            unique_elements = {}
+                # Get unique elements for selection
+                unique_elements = {}
             for x, y, radius, geom_type, element_id in self.current_points:
                 if element_id not in unique_elements:
                     unique_elements[element_id] = {
@@ -2480,8 +2508,8 @@ Colors:
                     }
                 unique_elements[element_id]["points"].append((x, y))
 
-            # Select elements within rectangle
-            for element_id, element_info in unique_elements.items():
+                # Select elements within rectangle
+                for element_id, element_info in unique_elements.items():
                 if element_id in self.removed_elements:
                     continue
 
@@ -2514,8 +2542,8 @@ Colors:
                             in_rect = True
                             break
 
-                if in_rect:
-                    self.selected_element_ids.add(element_id)
+                    if in_rect:
+                        self.selected_element_ids.add(element_id)
 
             # Clean up selection rectangle
             if self.selection_rect:
