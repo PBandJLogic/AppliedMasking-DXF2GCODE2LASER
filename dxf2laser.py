@@ -2432,14 +2432,21 @@ Colors:
                 and abs(end_y - start_y) < min_drag_distance
             ):
                 if self.selection_rect:
-                    self.selection_rect.remove()
+                    try:
+                        self.selection_rect.remove()
+                    except:
+                        self.selection_rect.set_visible(False)
                     self.selection_rect = None
                     self.canvas.draw_idle()
                 return
 
             # Remove previous rectangle
             if self.selection_rect:
-                self.selection_rect.remove()
+                try:
+                    self.selection_rect.remove()
+                except:
+                    # If remove fails, try to set it invisible
+                    self.selection_rect.set_visible(False)
 
             # Create new rectangle with improved visibility
             from matplotlib.patches import Rectangle
@@ -2471,7 +2478,10 @@ Colors:
             if self.selection_mode:
                 self.selection_mode = False
                 if self.selection_rect:
-                    self.selection_rect.remove()
+                    try:
+                        self.selection_rect.remove()
+                    except:
+                        self.selection_rect.set_visible(False)
                     self.selection_rect = None
                     self.canvas.draw()
             return
@@ -2534,6 +2544,17 @@ Colors:
                             and center_y - radius <= rect_top
                             and center_y + radius >= rect_bottom
                         )
+                    elif geom_type == "ARC" and len(points) >= 1:
+                        center_x, center_y = points[0]
+                        radius = element_info["radius"]
+                        # Check if arc intersects with rectangle
+                        # For simplicity, check if the arc's bounding circle intersects
+                        in_rect = (
+                            center_x - radius <= rect_right
+                            and center_x + radius >= rect_left
+                            and center_y - radius <= rect_top
+                            and center_y + radius >= rect_bottom
+                        )
                     elif (
                         geom_type
                         in ["LINE", "LWPOLYLINE", "POLYLINE", "ELLIPSE", "SPLINE"]
@@ -2554,7 +2575,10 @@ Colors:
 
             # Clean up selection rectangle
             if self.selection_rect:
-                self.selection_rect.remove()
+                try:
+                    self.selection_rect.remove()
+                except:
+                    self.selection_rect.set_visible(False)
                 self.selection_rect = None
 
             self.selection_mode = False
