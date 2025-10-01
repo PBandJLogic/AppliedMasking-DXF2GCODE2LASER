@@ -2921,7 +2921,7 @@ Colors:
             self.engraved_elements.discard(
                 element_id
             )  # Remove from engraving if it was there
-        
+
         # Clear selection since elements are now removed
         self.selected_element_ids.clear()
         self.update_plot_preserve_zoom()
@@ -2940,6 +2940,10 @@ Colors:
 
         if self.original_points:
             self.current_points = self.original_points.copy()
+            # Also restore original element_data
+            if hasattr(self, "original_element_data"):
+                import copy
+                self.element_data = copy.deepcopy(self.original_element_data)
             self.update_plot()
             self.update_statistics()
         else:
@@ -4009,38 +4013,38 @@ DXF Units: {self.dxf_units}"""
                                 prev_x, prev_y = prev_point[0], prev_point[1]
                                 curr_x, curr_y = curr_point[0], curr_point[1]
 
-                            # Clip line segment to workspace
-                            clipped_line = self.clip_line_to_workspace(
-                                prev_x, prev_y, curr_x, curr_y
-                            )
+                                # Clip line segment to workspace
+                                clipped_line = self.clip_line_to_workspace(
+                                    prev_x, prev_y, curr_x, curr_y
+                                )
 
-                            if clipped_line:
-                                (
-                                    clipped_start_x,
-                                    clipped_start_y,
-                                    clipped_end_x,
-                                    clipped_end_y,
-                                ) = clipped_line
-
-                                # Move to clipped start if not already there
-                                if (current_x, current_y) != (
-                                    clipped_start_x,
-                                    clipped_start_y,
-                                ):
-                                    # Need to move to start of clipped segment
-                                    gcode.append(
-                                        f"G0 X{clipped_start_x:.3f} Y{clipped_start_y:.3f} Z{self.gcode_settings['cutting_z']:.3f}"
-                                    )
-                                    current_x, current_y = (
+                                if clipped_line:
+                                    (
                                         clipped_start_x,
                                         clipped_start_y,
-                                    )
+                                        clipped_end_x,
+                                        clipped_end_y,
+                                    ) = clipped_line
 
-                                # Engrave to clipped end point
-                                gcode.append(
-                                    f"G1 X{clipped_end_x:.3f} Y{clipped_end_y:.3f} S{self.gcode_settings['laser_power']}"
-                                )
-                                current_x, current_y = clipped_end_x, clipped_end_y
+                                    # Move to clipped start if not already there
+                                    if (current_x, current_y) != (
+                                        clipped_start_x,
+                                        clipped_start_y,
+                                    ):
+                                        # Need to move to start of clipped segment
+                                        gcode.append(
+                                            f"G0 X{clipped_start_x:.3f} Y{clipped_start_y:.3f} Z{self.gcode_settings['cutting_z']:.3f}"
+                                        )
+                                        current_x, current_y = (
+                                            clipped_start_x,
+                                            clipped_start_y,
+                                        )
+
+                                    # Engrave to clipped end point
+                                    gcode.append(
+                                        f"G1 X{clipped_end_x:.3f} Y{clipped_end_y:.3f} S{self.gcode_settings['laser_power']}"
+                                    )
+                                    current_x, current_y = clipped_end_x, clipped_end_y
 
                         # Update current position to end of polyline
                         last_x, last_y = polyline_points[-1][
