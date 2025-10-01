@@ -2380,16 +2380,16 @@ Colors:
     def on_click(self, event):
         """Handle mouse clicks on the plot - store position for click_release"""
         # Check if zoom or pan tool is active
-        if self.toolbar.mode != '':
+        if self.toolbar.mode != "":
             # Toolbar is in zoom or pan mode, don't interfere
             self.selection_mode = False
             self.last_click_pos = None
             return
-            
+
         # Only handle left mouse button for selection
         if event.button != 1:  # Not left mouse button
             return
-            
+
         # Start selection mode if clicking in the plot area
         if (
             event.inaxes == self.ax
@@ -2400,7 +2400,7 @@ Colors:
             self.selection_mode = True
             self.selection_start = (event.xdata, event.ydata)
             self.last_click_pos = (event.xdata, event.ydata)
-            
+
             # Clear selection if not holding shift (for multi-select)
             if event.key != "shift":
                 self.selected_element_ids.clear()
@@ -2411,9 +2411,9 @@ Colors:
     def on_motion(self, event):
         """Handle mouse motion for selection rectangle"""
         # Don't do selection if toolbar is active
-        if self.toolbar.mode != '':
+        if self.toolbar.mode != "":
             return
-            
+
         if not self.selection_mode or event.inaxes != self.ax:
             return
 
@@ -2424,10 +2424,13 @@ Colors:
         if self.selection_start:
             start_x, start_y = self.selection_start
             end_x, end_y = event.xdata, event.ydata
-            
+
             # Only show rectangle if we've moved enough (avoid tiny rectangles from clicks)
             min_drag_distance = 2.0  # Minimum pixels to consider it a drag
-            if abs(end_x - start_x) < min_drag_distance and abs(end_y - start_y) < min_drag_distance:
+            if (
+                abs(end_x - start_x) < min_drag_distance
+                and abs(end_y - start_y) < min_drag_distance
+            ):
                 if self.selection_rect:
                     self.selection_rect.remove()
                     self.selection_rect = None
@@ -2460,9 +2463,9 @@ Colors:
     def on_click_release(self, event):
         """Handle mouse click release - this works better with navigation toolbar"""
         # Don't handle if toolbar is active
-        if self.toolbar.mode != '':
+        if self.toolbar.mode != "":
             return
-            
+
         if event.inaxes != self.ax:
             # End selection mode if mouse leaves plot
             if self.selection_mode:
@@ -2480,17 +2483,20 @@ Colors:
         if self.selection_mode and self.selection_start:
             start_x, start_y = self.selection_start
             end_x, end_y = event.xdata, event.ydata
-            
+
             # Check if this was a click (no drag) or a drag selection
             min_drag_distance = 2.0
-            is_click = abs(end_x - start_x) < min_drag_distance and abs(end_y - start_y) < min_drag_distance
-            
+            is_click = (
+                abs(end_x - start_x) < min_drag_distance
+                and abs(end_y - start_y) < min_drag_distance
+            )
+
             if not is_click:
                 # Handle rectangle selection only if we dragged
                 # Don't clear if shift is held (for multi-select)
                 if event.key != "shift":
                     self.selected_element_ids.clear()
-                    
+
                 # Find elements within rectangle
                 rect_left = min(start_x, end_x)
                 rect_right = max(start_x, end_x)
@@ -2510,37 +2516,38 @@ Colors:
 
                 # Select elements within rectangle
                 for element_id, element_info in unique_elements.items():
-                if element_id in self.removed_elements:
-                    continue
+                    if element_id in self.removed_elements:
+                        continue
 
-                geom_type = element_info["geom_type"]
-                points = element_info["points"]
+                    geom_type = element_info["geom_type"]
+                    points = element_info["points"]
 
-                # Check if element is within rectangle
-                in_rect = False
-                if geom_type == "CIRCLE" and len(points) >= 1:
-                    center_x, center_y = points[0]
-                    radius = element_info["radius"]
-                    # Check if circle intersects with rectangle
-                    in_rect = (
-                        center_x - radius <= rect_right
-                        and center_x + radius >= rect_left
-                        and center_y - radius <= rect_top
-                        and center_y + radius >= rect_bottom
-                    )
-                elif (
-                    geom_type in ["LINE", "LWPOLYLINE", "POLYLINE", "ELLIPSE", "SPLINE"]
-                    and len(points) >= 1
-                ):
-                    # Check if any point is within rectangle
-                    for point in points:
-                        px, py = point
-                        if (
-                            rect_left <= px <= rect_right
-                            and rect_bottom <= py <= rect_top
-                        ):
-                            in_rect = True
-                            break
+                    # Check if element is within rectangle
+                    in_rect = False
+                    if geom_type == "CIRCLE" and len(points) >= 1:
+                        center_x, center_y = points[0]
+                        radius = element_info["radius"]
+                        # Check if circle intersects with rectangle
+                        in_rect = (
+                            center_x - radius <= rect_right
+                            and center_x + radius >= rect_left
+                            and center_y - radius <= rect_top
+                            and center_y + radius >= rect_bottom
+                        )
+                    elif (
+                        geom_type
+                        in ["LINE", "LWPOLYLINE", "POLYLINE", "ELLIPSE", "SPLINE"]
+                        and len(points) >= 1
+                    ):
+                        # Check if any point is within rectangle
+                        for point in points:
+                            px, py = point
+                            if (
+                                rect_left <= px <= rect_right
+                                and rect_bottom <= py <= rect_top
+                            ):
+                                in_rect = True
+                                break
 
                     if in_rect:
                         self.selected_element_ids.add(element_id)
