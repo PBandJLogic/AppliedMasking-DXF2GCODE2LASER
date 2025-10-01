@@ -65,7 +65,6 @@ class DXFGUI:
             "wpos_home_z": -74.9,
             "raise_laser_between_paths": False,
             "optimize_toolpath": True,  # Enable toolpath optimization by default
-            "force_ccw_arcs": True,  # Force all arcs to be counterclockwise (G3)
         }
 
         # Unit conversion settings
@@ -3871,11 +3870,6 @@ DXF Units: {self.dxf_units}"""
                                 # DXF ARC entities are ALWAYS counterclockwise from start_angle to end_angle
                                 # This is a fundamental property of DXF format
                                 ccw = True
-                                
-                                # Override arc direction if force_ccw_arcs is enabled
-                                arc_direction = ccw
-                                if self.gcode_settings.get("force_ccw_arcs", False):
-                                    arc_direction = True  # Force counterclockwise
 
                                 print(
                                     f"\nG-code generation for ARC element {element_id}:"
@@ -3891,7 +3885,9 @@ DXF Units: {self.dxf_units}"""
                                 )
                                 print(f"  Start point: ({start_x:.3f}, {start_y:.3f})")
                                 print(f"  End point: ({end_x:.3f}, {end_y:.3f})")
-                                print(f"  Direction: {'CCW' if arc_direction else 'CW'}")
+                                print(
+                                    f"  Direction: {'CCW' if ccw else 'CW'}"
+                                )
 
                                 # Use unified arc G-code generation
                                 arc_gcode, new_x, new_y = self.generate_arc_gcode(
@@ -3904,7 +3900,7 @@ DXF Units: {self.dxf_units}"""
                                     radius,
                                     start_rad,
                                     end_rad,
-                                    arc_direction,
+                                    ccw,
                                     current_x,
                                     current_y,
                                 )
@@ -3989,11 +3985,6 @@ DXF Units: {self.dxf_units}"""
                                     curr_point[3:8]
                                 )
 
-                                # Override arc direction if force_ccw_arcs is enabled
-                                arc_direction = ccw
-                                if self.gcode_settings.get("force_ccw_arcs", False):
-                                    arc_direction = True  # Force counterclockwise
-
                                 # Use unified arc G-code generation
                                 arc_gcode, new_x, new_y = self.generate_arc_gcode(
                                     prev_x,
@@ -4005,7 +3996,7 @@ DXF Units: {self.dxf_units}"""
                                     radius,
                                     start_angle,
                                     end_angle,
-                                    arc_direction,
+                                    ccw,
                                     current_x,
                                     current_y,
                                 )
@@ -4968,15 +4959,6 @@ DXF Units: {self.dxf_units}"""
             text="Optimize toolpath (reduce travel distance)",
             variable=optimize_toolpath_var,
         ).pack(anchor="w", pady=(5, 0))
-        
-        force_ccw_arcs_var = tk.BooleanVar(
-            value=self.gcode_settings.get("force_ccw_arcs", True)
-        )
-        ttk.Checkbutton(
-            settings_frame,
-            text="Force all arcs counterclockwise (G3)",
-            variable=force_ccw_arcs_var,
-        ).pack(anchor="w", pady=(5, 0))
 
         # File operations frame
         file_frame = ttk.Frame(main_frame)
@@ -5001,7 +4983,6 @@ DXF Units: {self.dxf_units}"""
             self.gcode_settings["wpos_home_z"] = wpos_home_z_var.get()
             self.gcode_settings["raise_laser_between_paths"] = raise_laser_var.get()
             self.gcode_settings["optimize_toolpath"] = optimize_toolpath_var.get()
-            self.gcode_settings["force_ccw_arcs"] = force_ccw_arcs_var.get()
             # Now save to file
             self.save_settings_to_file()
 
@@ -5031,9 +5012,7 @@ DXF Units: {self.dxf_units}"""
             optimize_toolpath_var.set(
                 self.gcode_settings.get("optimize_toolpath", True)
             )
-            force_ccw_arcs_var.set(
-                self.gcode_settings.get("force_ccw_arcs", True)
-            )
+            force_ccw_arcs_var.set(self.gcode_settings.get("force_ccw_arcs", True))
 
         ttk.Button(
             file_frame, text="Load Settings from File", command=load_from_file
@@ -5065,7 +5044,6 @@ DXF Units: {self.dxf_units}"""
             self.gcode_settings["wpos_home_z"] = wpos_home_z_var.get()
             self.gcode_settings["raise_laser_between_paths"] = raise_laser_var.get()
             self.gcode_settings["optimize_toolpath"] = optimize_toolpath_var.get()
-            self.gcode_settings["force_ccw_arcs"] = force_ccw_arcs_var.get()
             # Update plot to reflect new workspace bounds
             self.update_plot()
             settings_window.destroy()
