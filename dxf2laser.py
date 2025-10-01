@@ -15,6 +15,7 @@ import ezdxf
 import math
 from typing import List, Tuple, Dict, Any
 import threading
+import json
 
 
 class DXFGUI:
@@ -4538,6 +4539,50 @@ DXF Units: {self.dxf_units}"""
         if positioning_lines or engraving_lines:
             ax.plot(0, 0, "go", markersize=8)
 
+    def save_settings_to_file(self):
+        """Save G-code settings to a JSON file"""
+        file_path = filedialog.asksaveasfilename(
+            defaultextension=".json",
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+            title="Save G-code Settings"
+        )
+        if file_path:
+            try:
+                with open(file_path, 'w') as f:
+                    json.dump(self.gcode_settings, f, indent=2)
+                messagebox.showinfo("Success", f"Settings saved to {file_path}")
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to save settings: {str(e)}")
+    
+    def load_settings_from_file(self):
+        """Load G-code settings from a JSON file"""
+        file_path = filedialog.askopenfilename(
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+            title="Load G-code Settings"
+        )
+        if file_path:
+            try:
+                with open(file_path, 'r') as f:
+                    loaded_settings = json.load(f)
+                
+                # Validate that it contains expected keys
+                required_keys = ["preamble", "postscript", "laser_power", "cutting_z", "feedrate"]
+                if not all(key in loaded_settings for key in required_keys):
+                    messagebox.showwarning("Warning", "File may not contain all required settings. Using defaults for missing values.")
+                
+                # Update settings, keeping defaults for any missing keys
+                for key, value in loaded_settings.items():
+                    if key in self.gcode_settings:
+                        self.gcode_settings[key] = value
+                
+                messagebox.showinfo("Success", f"Settings loaded from {file_path}")
+                # Update the plot if workspace bounds changed
+                self.update_plot()
+            except json.JSONDecodeError:
+                messagebox.showerror("Error", "Invalid JSON file format")
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to load settings: {str(e)}")
+
     def open_settings(self):
         """Open the G-code settings window"""
         settings_window = tk.Toplevel(self.root)
@@ -4741,6 +4786,62 @@ DXF Units: {self.dxf_units}"""
             variable=optimize_toolpath_var,
         ).pack(anchor="w", pady=(5, 0))
 
+        # File operations frame
+        file_frame = ttk.Frame(main_frame)
+        file_frame.pack(fill="x", pady=(10, 0))
+        
+        def save_to_file():
+            """Save current form values to a file"""
+            # First update the settings from the form
+            self.gcode_settings["preamble"] = preamble_text.get("1.0", "end-1c")
+            self.gcode_settings["postscript"] = postscript_text.get("1.0", "end-1c")
+            self.gcode_settings["laser_power"] = laser_power_var.get()
+            self.gcode_settings["cutting_z"] = cutting_z_var.get()
+            self.gcode_settings["feedrate"] = feedrate_var.get()
+            self.gcode_settings["mpos_home_x"] = mpos_home_x_var.get()
+            self.gcode_settings["mpos_home_y"] = mpos_home_y_var.get()
+            self.gcode_settings["mpos_home_z"] = mpos_home_z_var.get()
+            self.gcode_settings["max_travel_x"] = max_travel_x_var.get()
+            self.gcode_settings["max_travel_y"] = max_travel_y_var.get()
+            self.gcode_settings["max_travel_z"] = max_travel_z_var.get()
+            self.gcode_settings["wpos_home_x"] = wpos_home_x_var.get()
+            self.gcode_settings["wpos_home_y"] = wpos_home_y_var.get()
+            self.gcode_settings["wpos_home_z"] = wpos_home_z_var.get()
+            self.gcode_settings["raise_laser_between_paths"] = raise_laser_var.get()
+            self.gcode_settings["optimize_toolpath"] = optimize_toolpath_var.get()
+            # Now save to file
+            self.save_settings_to_file()
+        
+        def load_from_file():
+            """Load settings from a file and update the form"""
+            self.load_settings_from_file()
+            # Update all form variables with loaded settings
+            preamble_text.delete("1.0", "end")
+            preamble_text.insert("1.0", self.gcode_settings["preamble"])
+            postscript_text.delete("1.0", "end")
+            postscript_text.insert("1.0", self.gcode_settings["postscript"])
+            laser_power_var.set(self.gcode_settings["laser_power"])
+            cutting_z_var.set(self.gcode_settings["cutting_z"])
+            feedrate_var.set(self.gcode_settings["feedrate"])
+            mpos_home_x_var.set(self.gcode_settings["mpos_home_x"])
+            mpos_home_y_var.set(self.gcode_settings["mpos_home_y"])
+            mpos_home_z_var.set(self.gcode_settings["mpos_home_z"])
+            max_travel_x_var.set(self.gcode_settings["max_travel_x"])
+            max_travel_y_var.set(self.gcode_settings["max_travel_y"])
+            max_travel_z_var.set(self.gcode_settings["max_travel_z"])
+            wpos_home_x_var.set(self.gcode_settings["wpos_home_x"])
+            wpos_home_y_var.set(self.gcode_settings["wpos_home_y"])
+            wpos_home_z_var.set(self.gcode_settings["wpos_home_z"])
+            raise_laser_var.set(self.gcode_settings.get("raise_laser_between_paths", False))
+            optimize_toolpath_var.set(self.gcode_settings.get("optimize_toolpath", True))
+        
+        ttk.Button(file_frame, text="Load Settings from File", command=load_from_file).pack(
+            side="left", padx=(0, 5)
+        )
+        ttk.Button(file_frame, text="Save Settings to File", command=save_to_file).pack(
+            side="left"
+        )
+
         # Buttons
         button_frame = ttk.Frame(main_frame)
         button_frame.pack(fill="x", pady=(20, 0))
@@ -4768,7 +4869,7 @@ DXF Units: {self.dxf_units}"""
             self.update_plot()
             settings_window.destroy()
 
-        ttk.Button(button_frame, text="Save", command=save_settings).pack(
+        ttk.Button(button_frame, text="Apply", command=save_settings).pack(
             side="right", padx=(5, 0)
         )
         ttk.Button(button_frame, text="Cancel", command=settings_window.destroy).pack(
