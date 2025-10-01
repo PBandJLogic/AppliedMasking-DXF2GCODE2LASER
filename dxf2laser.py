@@ -318,6 +318,9 @@ Colors:
 
         # Connect motion event for selection rectangle
         self.canvas.mpl_connect("motion_notify_event", self.on_motion)
+        
+        # Connect key press event for escape to clear selection
+        self.canvas.mpl_connect("key_press_event", self.on_key_press)
 
         # Selection rectangle variables
         self.selection_rect = None
@@ -2377,6 +2380,22 @@ Colors:
                 f"Failed to reset offset: {e}",
             )
 
+    def on_key_press(self, event):
+        """Handle keyboard events for selection"""
+        if event.key == 'escape':
+            # Clear selection with escape key
+            self.selected_element_ids.clear()
+            self.selection_mode = False
+            self.last_click_pos = None
+            if self.selection_rect:
+                try:
+                    self.selection_rect.remove()
+                except:
+                    self.selection_rect.set_visible(False)
+                self.selection_rect = None
+            self.update_plot_preserve_zoom()
+            self.update_selection_info()
+    
     def on_click(self, event):
         """Handle mouse clicks on the plot - store position for click_release"""
         # Check if zoom or pan tool is active
@@ -2384,6 +2403,15 @@ Colors:
             # Toolbar is in zoom or pan mode, don't interfere
             self.selection_mode = False
             self.last_click_pos = None
+            return
+
+        # Right-click clears selection
+        if event.button == 3:  # Right mouse button
+            self.selected_element_ids.clear()
+            self.selection_mode = False
+            self.last_click_pos = None
+            self.update_plot_preserve_zoom()
+            self.update_selection_info()
             return
 
         # Only handle left mouse button for selection
@@ -2515,14 +2543,14 @@ Colors:
 
                 # Get unique elements for selection
                 unique_elements = {}
-            for x, y, radius, geom_type, element_id in self.current_points:
-                if element_id not in unique_elements:
-                    unique_elements[element_id] = {
-                        "geom_type": geom_type,
-                        "radius": radius,
-                        "points": [],
-                    }
-                unique_elements[element_id]["points"].append((x, y))
+                for x, y, radius, geom_type, element_id in self.current_points:
+                    if element_id not in unique_elements:
+                        unique_elements[element_id] = {
+                            "geom_type": geom_type,
+                            "radius": radius,
+                            "points": [],
+                        }
+                    unique_elements[element_id]["points"].append((x, y))
 
                 # Select elements within rectangle
                 for element_id, element_info in unique_elements.items():
