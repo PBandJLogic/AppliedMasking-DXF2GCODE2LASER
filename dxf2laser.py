@@ -1773,19 +1773,19 @@ Colors:
 
             # For arc direction, we need to handle the angle span correctly
             # The DXF arc goes from start_angle to end_angle in the specified direction
-            angle_span = end_angle - start_angle
-
-            # Normalize angle span based on direction
+            # For CW arcs, the actual arc path is from start to end going clockwise
+            # which means we traverse in the negative angular direction
+            
             if not ccw:  # Clockwise
-                # For CW, we go in the negative direction
-                # If span is positive, subtract 360° to make it negative
-                if angle_span > 0:
-                    angle_span = angle_span - 2 * math.pi
-                # Note: For CW arc from 138° to 42°, span = 42° - 138° = -96°
-                # This is correct - we go CW from 138° through 90° to 42°
-                # We should NOT force it to go the long way around
+                # For CW, calculate the angle we need to traverse clockwise
+                angle_span = start_angle - end_angle
+                # Normalize to be positive (we'll handle direction in the loop)
+                if angle_span < 0:
+                    angle_span += 2 * math.pi
             else:  # Counter-clockwise
-                # For CCW, if span is negative, add 360°
+                # For CCW, calculate the angle we need to traverse counter-clockwise
+                angle_span = end_angle - start_angle
+                # Normalize to be positive
                 if angle_span < 0:
                     angle_span += 2 * math.pi
 
@@ -1800,9 +1800,8 @@ Colors:
 
             # Use many more segments for better resolution
             num_segments = 100  # More segments for accuracy
-            # For angle_step, we always want the absolute value divided by num_segments
-            # The direction is handled in the loop
-            angle_step = abs(angle_span) / num_segments
+            # angle_span is now always positive, so we can use it directly
+            angle_step = angle_span / num_segments
 
             segments_added = 0
             segments_checked = 0
