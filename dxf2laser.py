@@ -45,13 +45,23 @@ class DXFGUI:
 
         # G-code settings
         self.gcode_settings = {
-            "preamble": "G21 ; Set units to millimeters\nG90 ; Absolute positioning\nG0 X0, Y0, Z-3 ; Go to zero position\nM4 S0 ; laser on at zero power\n",
+            "preamble": "G21 ; Set units to millimeters\nG90 ; Absolute positioning\nG54 ; Use work coordinate system\nG0 X0, Y0, Z-3 ; Go to zero position\nM4 S0 ; laser on at zero power\n",
             "postscript": "G0 Z-3 ; Raise Z\nM5 ; Turn off laser\nG0 X0 Y375 ; Send to unload position\n",
             "laser_power": 1000,
             "cutting_z": -30,
             "feedrate": 1500,
-            "max_workspace_x": 800.0 - 10.0,
-            "max_workspace_y": 400.0 - 10.0,
+            # Machine Position (MPos) - Absolute machine coordinates
+            "mpos_home_x": -797.0,
+            "mpos_home_y": -397.0,
+            "mpos_home_z": -3.0,
+            # Max Travel from MPos Home
+            "max_travel_x": 794.0,
+            "max_travel_y": 394.0,
+            "max_travel_z": -92.0,
+            # Work Position (WPos) Home in MPos coordinates
+            "wpos_home_x": -519.0,
+            "wpos_home_y": -396.1,
+            "wpos_home_z": -74.9,
             "raise_laser_between_paths": False,
             "optimize_toolpath": True,  # Enable toolpath optimization by default
         }
@@ -61,6 +71,26 @@ class DXFGUI:
         self.unit_conversion_factor = 1.0  # Factor to convert to mm
 
         self.setup_ui()
+
+    def wpos_to_mpos(self, wpos_x, wpos_y, wpos_z=None):
+        """Convert Work Position (WPos) to Machine Position (MPos)
+        MPos = WPos + WPos_Home"""
+        mpos_x = wpos_x + self.gcode_settings["wpos_home_x"]
+        mpos_y = wpos_y + self.gcode_settings["wpos_home_y"]
+        if wpos_z is not None:
+            mpos_z = wpos_z + self.gcode_settings["wpos_home_z"]
+            return mpos_x, mpos_y, mpos_z
+        return mpos_x, mpos_y
+
+    def mpos_to_wpos(self, mpos_x, mpos_y, mpos_z=None):
+        """Convert Machine Position (MPos) to Work Position (WPos)
+        WPos = MPos - WPos_Home"""
+        wpos_x = mpos_x - self.gcode_settings["wpos_home_x"]
+        wpos_y = mpos_y - self.gcode_settings["wpos_home_y"]
+        if mpos_z is not None:
+            wpos_z = mpos_z - self.gcode_settings["wpos_home_z"]
+            return wpos_x, wpos_y, wpos_z
+        return wpos_x, wpos_y
 
     def generate_and_display_gcode(self):
         """Generate G-code and show preview window"""
@@ -177,6 +207,9 @@ class DXFGUI:
         self.y_entry.bind("<FocusOut>", lambda e: None)
 
         ttk.Button(origin_frame, text="Apply Offset", command=self.apply_offset).pack(
+            fill="x", pady=(0, 5)
+        )
+        ttk.Button(origin_frame, text="Reset Offset", command=self.reset_offset).pack(
             fill="x"
         )
 
@@ -855,7 +888,8 @@ Colors:
                         )
                         element_id = self.get_next_element_id()
                         # Store all polyline points with the same element ID
-                        for tx, ty in polyline_points:
+                        for point in polyline_points:
+                            tx, ty = point[0], point[1]  # Extract x, y from point tuple
                             all_points.append((tx, ty, 0, "LWPOLYLINE", element_id))
 
                         # Store polyline data with all points
@@ -973,11 +1007,13 @@ Colors:
 
             elif entity_type == "LWPOLYLINE":
                 # Extract LWPOLYLINE points (top-level, not in block)
+                print(f"Processing LWPOLYLINE entity: {entity.dxf.handle}")
                 polyline_points = self.extract_lwpolyline_geometry(entity)
                 element_id = self.get_next_element_id()
 
                 # Store all polyline points with the same element ID
-                for tx, ty in polyline_points:
+                for point in polyline_points:
+                    tx, ty = point[0], point[1]  # Extract x, y from point tuple
                     all_points.append((tx, ty, 0, "LWPOLYLINE", element_id))
 
                 # Store polyline data with all points
@@ -1161,7 +1197,11 @@ Colors:
 
                                 if len(polyline_points) >= 2:
                                     element_id = self.get_next_element_id()
-                                    for tx, ty in polyline_points:
+                                    for point in polyline_points:
+                                        tx, ty = (
+                                            point[0],
+                                            point[1],
+                                        )  # Extract x, y from point tuple
                                         all_points.append(
                                             (tx, ty, 0, "LWPOLYLINE", element_id)
                                         )
@@ -1290,12 +1330,141 @@ Colors:
     def extract_lwpolyline_geometry(
         self, entity, insert_pos=None, scale=None, rotation=None
     ):
-        """Extract LWPOLYLINE points"""
+        """Extract LWPOLYLINE points with bulge handling for curved segments"""
         points = []
+
+        # Debug: Check what type of LWPOLYLINE we have
+        print(
+            f"  LWPOLYLINE: Closed={entity.closed}, Points={len(list(entity.get_points()))}"
+        )
+
+        # Check bulge values using the correct method
+        has_bulge = False
+        bulge_values = []
+        for i, point in enumerate(entity):
+            # Each point is a tuple: (x, y, start_width, end_width, bulge)
+            if len(point) >= 5:
+                bulge = point[4]  # Bulge is the 5th element
+            else:
+                bulge = 0.0  # No bulge if not present
+            bulge_values.append(bulge)
+            if abs(bulge) > 1e-6:
+                has_bulge = True
+                print(f"  LWPOLYLINE: Found bulge value {bulge:.6f} at vertex {i}")
+
+        if not has_bulge:
+            print(
+                f"  LWPOLYLINE: No bulge values found - this is a straight-line polyline"
+            )
+        else:
+            print(
+                f"  LWPOLYLINE: Found {sum(1 for b in bulge_values if abs(b) > 1e-6)} curved segments out of {len(bulge_values)} total"
+            )
+
+        # Manual bulge processing using ezdxf.math.bulge_to_arc
+        try:
+            from ezdxf.math import bulge_to_arc
+            import math
+
+            # Get points with bulge values
+            polyline_points = list(entity.get_points("xyb"))  # x, y, bulge
+            is_closed = entity.closed
+
+            print(f"  LWPOLYLINE: Processing {len(polyline_points)} vertices manually")
+
+            for i in range(len(polyline_points)):
+                start_point = polyline_points[i]
+                # Get next point (wrap around if closed)
+                if i < len(polyline_points) - 1:
+                    end_point = polyline_points[i + 1]
+                elif is_closed:
+                    end_point = polyline_points[0]
+                else:
+                    break  # Last point of open polyline
+
+                start_x, start_y, bulge = start_point
+                end_x, end_y = end_point[:2]
+
+                # Transform coordinates if needed
+                if insert_pos and scale and rotation is not None:
+                    start_tx, start_ty = self.transform_point(
+                        start_x, start_y, insert_pos, scale, rotation
+                    )
+                    end_tx, end_ty = self.transform_point(
+                        end_x, end_y, insert_pos, scale, rotation
+                    )
+                else:
+                    start_tx, start_ty = start_x, start_y
+                    end_tx, end_ty = end_x, end_y
+
+                # Convert units to mm
+                start_tx = self.convert_units(start_tx)
+                start_ty = self.convert_units(start_ty)
+                end_tx = self.convert_units(end_tx)
+                end_ty = self.convert_units(end_ty)
+
+                if abs(bulge) > 1e-6:  # Curved segment
+                    print(f"    Processing curved segment {i}: bulge={bulge:.6f}")
+
+                    # Use ezdxf's bulge_to_arc function
+                    # Returns: (center, start_angle, end_angle, radius)
+                    arc = bulge_to_arc((start_tx, start_ty), (end_tx, end_ty), bulge)
+                    center, start_angle, end_angle, radius = arc
+
+                    # Direction is implicit in bulge sign:
+                    # bulge > 0 → counterclockwise (ccw = True)
+                    # bulge < 0 → clockwise (ccw = False)
+                    ccw = bulge > 0
+
+                    print(
+                        f"      Arc: center=({center.x:.3f}, {center.y:.3f}), radius={radius:.3f}, ccw={ccw}"
+                    )
+
+                    # For now, add start and end points, but mark as arc
+                    if i == 0:  # Add start point for first segment
+                        points.append((start_tx, start_ty, "ARC_START"))
+                    points.append(
+                        (
+                            end_tx,
+                            end_ty,
+                            "ARC_END",
+                            center,
+                            radius,
+                            start_angle,
+                            end_angle,
+                            ccw,
+                        )
+                    )
+
+                    print(
+                        f"      Stored arc: center=({center.x:.3f}, {center.y:.3f}), radius={radius:.3f}"
+                    )
+                else:  # Straight segment
+                    # Add the end point for straight segments
+                    if i == 0:  # Add start point for first segment
+                        points.append((start_tx, start_ty, "LINE_START"))
+                    points.append((end_tx, end_ty, "LINE_END"))
+
+            print(f"  LWPOLYLINE: Manual processing generated {len(points)} points")
+            return points
+
+        except Exception as e:
+            print(
+                f"  LWPOLYLINE: Manual bulge processing failed: {e}, using simple points"
+            )
+
+        # Fallback to manual processing if ezdxf flattening fails
         polyline_points = list(entity.get_points())
         is_closed = entity.closed
 
-        for x, y, *_ in polyline_points:
+        # Process each segment (vertex + bulge)
+        for i, point_data in enumerate(polyline_points):
+            # Handle variable number of values from get_points()
+            if len(point_data) >= 3:
+                x, y, bulge = point_data[0], point_data[1], point_data[2]
+            else:
+                x, y = point_data[0], point_data[1]
+                bulge = 0.0  # Default to straight line if no bulge
             if insert_pos and scale and rotation is not None:
                 tx, ty = self.transform_point(x, y, insert_pos, scale, rotation)
             else:
@@ -1305,17 +1474,415 @@ Colors:
             tx = self.convert_units(tx)
             ty = self.convert_units(ty)
 
-            points.append((tx, ty))
+            # If this segment has a bulge (curved), flatten it to line segments
+            if abs(bulge) > 1e-6:  # Non-zero bulge indicates an arc
+                print(f"  Processing curved segment: bulge={bulge:.6f}")
+                # Get the next vertex for the arc
+                next_i = (i + 1) % len(polyline_points)
+                next_point_data = polyline_points[next_i]
+                next_x, next_y = next_point_data[0], next_point_data[1]
+
+                if insert_pos and scale and rotation is not None:
+                    next_tx, next_ty = self.transform_point(
+                        next_x, next_y, insert_pos, scale, rotation
+                    )
+                else:
+                    next_tx, next_ty = next_x, next_y
+
+                # Convert units to mm
+                next_tx = self.convert_units(next_tx)
+                next_ty = self.convert_units(next_ty)
+
+                # Calculate arc parameters
+                start_point = (tx, ty)
+                end_point = (next_tx, next_ty)
+
+                # Calculate arc center and radius from bulge
+                # Bulge = tan(angle/4) where angle is the arc angle
+                angle = 4 * math.atan(abs(bulge))
+
+                # Calculate chord length
+                chord_length = math.sqrt((next_tx - tx) ** 2 + (next_ty - ty) ** 2)
+
+                # Calculate radius from chord and angle
+                if angle > 1e-6:  # Avoid division by zero
+                    radius = chord_length / (2 * math.sin(angle / 2))
+
+                    # Calculate arc center
+                    mid_x = (tx + next_tx) / 2
+                    mid_y = (ty + next_ty) / 2
+
+                    # Perpendicular distance from chord to center
+                    perp_distance = radius * math.cos(angle / 2)
+
+                    # Direction perpendicular to chord
+                    chord_dx = next_tx - tx
+                    chord_dy = next_ty - ty
+                    chord_length_actual = math.sqrt(chord_dx**2 + chord_dy**2)
+
+                    if chord_length_actual > 1e-6:
+                        # Unit perpendicular vector
+                        perp_x = -chord_dy / chord_length_actual
+                        perp_y = chord_dx / chord_length_actual
+
+                        # Apply bulge direction
+                        if bulge < 0:
+                            perp_x = -perp_x
+                            perp_y = -perp_y
+
+                        center_x = mid_x + perp_x * perp_distance
+                        center_y = mid_y + perp_y * perp_distance
+
+                        # Flatten arc to line segments (use 5-degree steps)
+                        num_segments = max(4, int(abs(angle) / math.radians(5)))
+                        angle_step = angle / num_segments
+
+                        # Calculate start angle
+                        start_angle = math.atan2(ty - center_y, tx - center_x)
+
+                        # Generate arc segments
+                        for j in range(1, num_segments + 1):
+                            segment_angle = start_angle + j * angle_step
+                            seg_x = center_x + radius * math.cos(segment_angle)
+                            seg_y = center_y + radius * math.sin(segment_angle)
+                            points.append((seg_x, seg_y))
+                        print(f"    Generated {num_segments} arc segments")
+                    else:
+                        # Degenerate case - just add the end point
+                        points.append((next_tx, next_ty))
+                else:
+                    # No arc - just add the end point
+                    points.append((next_tx, next_ty))
+            else:
+                # No bulge - straight line segment
+                points.append((tx, ty))
 
         if is_closed and len(points) > 2:
             points.append(points[0])
 
+        print(f"  LWPOLYLINE: Generated {len(points)} total points")
         return points
 
     def get_next_element_id(self):
         """Get next unique element ID"""
         self.element_counter += 1
         return self.element_counter
+
+    def _draw_simple_polyline(
+        self,
+        x_coords,
+        y_coords,
+        line_color,
+        line_width,
+        alpha,
+        linestyle,
+        marker_color,
+        marker_size,
+        is_selected,
+        geom_type,
+    ):
+        """Draw a simple polyline without arcs"""
+        # Draw connected polyline
+        self.ax.plot(
+            x_coords,
+            y_coords,
+            color=line_color,
+            linewidth=line_width,
+            alpha=alpha,
+            linestyle=linestyle,
+        )
+        # Draw markers at vertices
+        marker_shape = "s" if geom_type in ["LWPOLYLINE", "POLYLINE"] else "o"
+        self.ax.scatter(
+            x_coords,
+            y_coords,
+            c=marker_color,
+            s=marker_size,
+            marker=marker_shape,
+            alpha=alpha,
+        )
+
+    def _draw_lwpolyline_with_arcs(
+        self,
+        detailed_points,
+        line_color,
+        line_width,
+        alpha,
+        linestyle,
+        marker_color,
+        marker_size,
+        is_selected,
+        element_id,
+    ):
+        """Draw LWPOLYLINE with proper arc visualization"""
+        import math
+        from matplotlib.patches import Arc
+
+        # Process each segment
+        for i in range(len(detailed_points) - 1):
+            current_point = detailed_points[i]
+            next_point = detailed_points[i + 1]
+
+            start_x, start_y = current_point[0], current_point[1]
+            end_x, end_y = next_point[0], next_point[1]
+
+            # Check if this is an arc segment
+            if len(next_point) > 3 and next_point[2] == "ARC_END":
+                # This is an arc segment
+                center, radius, start_angle, end_angle, ccw = next_point[3:8]
+
+                # Calculate arc span
+                angle_diff = end_angle - start_angle
+                if not ccw and angle_diff > 0:
+                    angle_diff -= 2 * math.pi
+                elif ccw and angle_diff < 0:
+                    angle_diff += 2 * math.pi
+
+                # Convert to degrees for matplotlib
+                start_deg = math.degrees(start_angle)
+                end_deg = math.degrees(end_angle)
+                angle_span = math.degrees(angle_diff)
+
+                # Create arc patch
+                arc = Arc(
+                    (center.x, center.y),
+                    2 * radius,
+                    2 * radius,
+                    angle=0,
+                    theta1=start_deg,
+                    theta2=end_deg,
+                    color=line_color,
+                    linewidth=line_width,
+                    alpha=alpha,
+                    linestyle=linestyle,
+                )
+                self.ax.add_patch(arc)
+            else:
+                # This is a straight line segment
+                self.ax.plot(
+                    [start_x, end_x],
+                    [start_y, end_y],
+                    color=line_color,
+                    linewidth=line_width,
+                    alpha=alpha,
+                    linestyle=linestyle,
+                )
+
+        # Draw markers at vertices
+        x_coords = [p[0] for p in detailed_points]
+        y_coords = [p[1] for p in detailed_points]
+        self.ax.scatter(
+            x_coords,
+            y_coords,
+            c=marker_color,
+            s=marker_size,
+            marker="s",
+            alpha=alpha,
+        )
+
+    def generate_arc_gcode(
+        self,
+        start_x,
+        start_y,
+        end_x,
+        end_y,
+        center_x,
+        center_y,
+        radius,
+        start_angle,
+        end_angle,
+        ccw,
+        current_x,
+        current_y,
+    ):
+        """
+        Generate G2/G3 arc G-code with consistent logic
+
+        Args:
+            start_x, start_y: Arc start point
+            end_x, end_y: Arc end point
+            center_x, center_y: Arc center
+            radius: Arc radius
+            start_angle, end_angle: Arc angles in radians
+            ccw: True for counterclockwise, False for clockwise
+            current_x, current_y: Current tool position
+
+        Returns:
+            tuple: (gcode_lines, new_x, new_y) - G-code lines and new position
+        """
+        gcode_lines = []
+
+        # Determine G2 (clockwise) or G3 (counterclockwise)
+        g_command = "G3" if ccw else "G2"
+
+        # Debug output
+        print(f"    generate_arc_gcode: {g_command}")
+        print(f"      Start: ({start_x:.3f}, {start_y:.3f})")
+        print(f"      End: ({end_x:.3f}, {end_y:.3f})")
+        print(f"      Center: ({center_x:.3f}, {center_y:.3f})")
+        print(f"      Radius: {radius:.3f}")
+
+        # Check if both start and end points are within workspace
+        start_inside = self.is_within_workspace(start_x, start_y)
+        end_inside = self.is_within_workspace(end_x, end_y)
+
+        if start_inside and end_inside:
+            # Both points inside - generate full arc
+            i_offset = center_x - start_x
+            j_offset = center_y - start_y
+            print(f"      I,J: ({i_offset:.3f}, {j_offset:.3f})")
+
+            gcode_lines.append(
+                f"{g_command} X{end_x:.3f} Y{end_y:.3f} I{i_offset:.3f} J{j_offset:.3f} S{self.gcode_settings['laser_power']}"
+            )
+            return gcode_lines, end_x, end_y
+
+        elif (
+            start_inside
+            or end_inside
+            or self.arc_passes_through_workspace(
+                center_x, center_y, radius, start_angle, end_angle
+            )
+        ):
+            # Arc partially inside workspace - need to clip it
+            # For now, approximate with multiple line segments that can be clipped
+            # This ensures partial arcs are still cut even if not as perfect arcs
+
+            print("      Arc partially outside - using segmented approximation")
+            print(
+                f"      Start angle: {math.degrees(start_angle):.1f}°, End angle: {math.degrees(end_angle):.1f}°"
+            )
+            print(
+                f"      Center: ({center_x:.1f}, {center_y:.1f}), Radius: {radius:.1f}"
+            )
+
+            # Get workspace bounds for reference
+            mpos_min_x = self.gcode_settings["mpos_home_x"]
+            mpos_min_y = self.gcode_settings["mpos_home_y"]
+            mpos_max_x = mpos_min_x + self.gcode_settings["max_travel_x"]
+            mpos_max_y = mpos_min_y + self.gcode_settings["max_travel_y"]
+            wpos_min_x, wpos_min_y = self.mpos_to_wpos(mpos_min_x, mpos_min_y)
+            wpos_max_x, wpos_max_y = self.mpos_to_wpos(mpos_max_x, mpos_max_y)
+            print(
+                f"      Workspace Y bounds (WPos): [{wpos_min_y:.1f}, {wpos_max_y:.1f}]"
+            )
+
+            # For arc direction, we need to handle the angle span correctly
+            # The DXF arc goes from start_angle to end_angle in the specified direction
+            angle_span = end_angle - start_angle
+
+            # Normalize angle span based on direction
+            if not ccw:  # Clockwise
+                # For CW, we go in the negative direction
+                # If span is positive, subtract 360° to make it negative
+                if angle_span > 0:
+                    angle_span = angle_span - 2 * math.pi
+                # Note: For CW arc from 138° to 42°, span = 42° - 138° = -96°
+                # This is correct - we go CW from 138° through 90° to 42°
+                # We should NOT force it to go the long way around
+            else:  # Counter-clockwise
+                # For CCW, if span is negative, add 360°
+                if angle_span < 0:
+                    angle_span += 2 * math.pi
+
+            print(
+                f"      Angle span: {math.degrees(angle_span):.1f}° ({'CCW' if ccw else 'CW'})"
+            )
+
+            # Debug: show what angles we'll be sampling
+            print(
+                f"      Will sample from {math.degrees(start_angle):.1f}° in {'CW' if not ccw else 'CCW'} direction"
+            )
+
+            # Use many more segments for better resolution
+            num_segments = 100  # More segments for accuracy
+            angle_step = angle_span / num_segments
+
+            segments_added = 0
+            segments_checked = 0
+            last_inside = False
+            first_inside_idx = -1
+
+            # Sample the arc and collect inside points
+            inside_points = []
+            debug_every = 10  # Debug every 10th point
+
+            for i in range(num_segments + 1):
+                # Calculate point on arc
+                angle = start_angle + i * angle_step
+                pt_x = center_x + radius * math.cos(angle)
+                pt_y = center_y + radius * math.sin(angle)
+
+                # Check if point is inside workspace
+                pt_inside = self.is_within_workspace(pt_x, pt_y)
+                segments_checked += 1
+
+                # Debug output for some points
+                if i % debug_every == 0 or i == num_segments:
+                    angle_deg = math.degrees(angle)
+                    # Normalize angle to 0-360 for display
+                    while angle_deg < 0:
+                        angle_deg += 360
+                    while angle_deg >= 360:
+                        angle_deg -= 360
+                    print(
+                        f"        Point {i:3d}: angle={angle_deg:6.1f}°, Y={pt_y:7.1f}, inside={pt_inside}"
+                    )
+
+                if pt_inside:
+                    inside_points.append((pt_x, pt_y))
+                    if first_inside_idx < 0:
+                        first_inside_idx = i
+
+            print(
+                f"      Found {len(inside_points)} points inside workspace out of {segments_checked} checked"
+            )
+
+            # Generate G-code for inside points
+            if inside_points:
+                # Move to first inside point
+                first_x, first_y = inside_points[0]
+                gcode_lines.append(
+                    f"G0 X{first_x:.3f} Y{first_y:.3f} Z{self.gcode_settings['cutting_z']:.3f}"
+                )
+                segments_added = 1
+
+                # Cut through remaining inside points
+                for pt_x, pt_y in inside_points[1:]:
+                    gcode_lines.append(
+                        f"G1 X{pt_x:.3f} Y{pt_y:.3f} S{self.gcode_settings['laser_power']}"
+                    )
+                    segments_added += 1
+
+            print(f"      Generated {segments_added} G-code segments")
+
+            # Return the last position we moved to
+            if inside_points:
+                final_x, final_y = inside_points[-1]
+            else:
+                final_x, final_y = current_x, current_y
+
+            return gcode_lines, final_x, final_y
+        else:
+            # Arc completely outside workspace
+            print("      Arc completely outside workspace")
+            return gcode_lines, current_x, current_y
+
+    def arc_passes_through_workspace(self, cx, cy, radius, start_angle, end_angle):
+        """Check if any part of an arc passes through the workspace"""
+        # Sample points along the arc
+        num_samples = 36  # Check every 10 degrees
+        angle_span = end_angle - start_angle
+        if angle_span < 0:
+            angle_span += 2 * math.pi
+
+        for i in range(num_samples + 1):
+            angle = start_angle + (angle_span * i / num_samples)
+            x = cx + radius * math.cos(angle)
+            y = cy + radius * math.sin(angle)
+            if self.is_within_workspace(x, y):
+                return True
+        return False
 
     def save_state(self):
         """Save current state for undo functionality"""
@@ -1350,10 +1917,31 @@ Colors:
 
     def apply_offset(self):
         """Apply origin offset to all points"""
+        # First, parse inputs robustly and fail early if invalid
         try:
-            x_offset = float(self.x_offset_var.get())
-            y_offset = float(self.y_offset_var.get())
 
+            def _normalize_number(text):
+                s = str(text) if text is not None else "0"
+                s = s.strip()
+                # Replace unicode minus with ASCII minus
+                s = s.replace("\u2212", "-")
+                # Remove thousands separators
+                s = s.replace(",", "")
+                return s
+
+            raw_x = self.x_offset_var.get()
+            raw_y = self.y_offset_var.get()
+            x_offset = float(_normalize_number(raw_x))
+            y_offset = float(_normalize_number(raw_y))
+        except ValueError:
+            messagebox.showerror(
+                "Error",
+                f"Please enter valid numbers for X and Y offsets.\n"
+                f"Got X='{self.x_offset_var.get()}', Y='{self.y_offset_var.get()}'",
+            )
+            return
+
+        try:
             self.origin_offset = (x_offset, y_offset)
 
             # Update current points with offset
@@ -1365,15 +1953,373 @@ Colors:
                     (new_x, new_y, radius, geom_type, element_id)
                 )
 
+            # Update element_data with offset (critical for LWPOLYLINE arcs!)
+            # Store original element_data if not already stored
+            if not hasattr(self, "original_element_data"):
+                import copy
+
+                self.original_element_data = copy.deepcopy(self.element_data)
+                print(
+                    f"Created backup of original element_data with {len(self.original_element_data)} elements"
+                )
+            else:
+                print(
+                    f"Using existing backup with {len(self.original_element_data)} elements"
+                )
+
+            # Apply offset to element_data
+            import copy
+
+            print(
+                f"Original element_data has {len(self.original_element_data)} elements"
+            )
+            for eid in self.original_element_data.keys():
+                print(f"  Element {eid} in original_element_data")
+
+            self.element_data = {}
+            for element_id, element_info in self.original_element_data.items():
+                print(f"Processing element {element_id} for offset application")
+                # Handle different element_data structures
+                print(f"  Element {element_id} has {len(element_info)} components")
+                if len(element_info) == 4:
+                    # Old format: (x, y, radius, geom_type)
+                    x, y, radius, geom_type = element_info
+                    x_coords = [x]
+                    y_coords = [y]
+                    detailed_points = None
+                    print(
+                        f"  Element {element_id}: Using old format, detailed_points = None"
+                    )
+                elif len(element_info) == 5:
+                    # New format: (x_coords, y_coords, radius, geom_type, detailed_points)
+                    x_coords, y_coords, radius, geom_type, detailed_points = (
+                        element_info
+                    )
+                    print(
+                        f"  Element {element_id}: Using new format, detailed_points = {detailed_points is not None}"
+                    )
+                else:
+                    print(
+                        f"Warning: Unexpected element_data structure for {element_id}: {len(element_info)} elements"
+                    )
+                    continue
+
+                # Apply offset to coordinate lists (robust to strings / numpy scalars)
+                def _to_float(value):
+                    try:
+                        return float(value)
+                    except Exception:
+                        return None
+
+                # Ensure coordinate containers are iterable (wrap scalars)
+                def _as_iterable(coords):
+                    try:
+                        from numpy import ndarray  # type: ignore
+
+                        if isinstance(coords, ndarray):
+                            return coords.tolist()
+                    except Exception:
+                        pass
+                    if isinstance(coords, (list, tuple)):
+                        return list(coords)
+                    # Treat anything else (including scalars) as single-value list
+                    return [coords]
+
+                x_coords = _as_iterable(x_coords)
+                y_coords = _as_iterable(y_coords)
+
+                new_x_coords = []
+                new_y_coords = []
+                for ox, oy in zip(x_coords, y_coords):
+                    fx = _to_float(ox)
+                    fy = _to_float(oy)
+                    if fx is None or fy is None:
+                        print(
+                            f"Warning: skipping non-numeric coordinate pair ({ox}, {oy}) for element {element_id}"
+                        )
+                        continue
+                    new_x_coords.append(fx + x_offset)
+                    new_y_coords.append(fy + y_offset)
+
+                # Apply offset to detailed points (includes arc data)
+                new_detailed_points = []
+                print(
+                    f"  Element {element_id}: geom_type={geom_type}, detailed_points is {detailed_points is not None}, type: {type(detailed_points)}"
+                )
+
+                # Handle different detailed_points formats based on geometry type
+                print(
+                    f"    Checking geom_type={geom_type}, has detailed_points={detailed_points is not None}"
+                )
+                if geom_type == "CIRCLE" and detailed_points:
+                    # CIRCLE format: (x, y, radius, 'CIRCLE')
+                    print(f"    CIRCLE detailed_points: {detailed_points}")
+                    if len(detailed_points) == 4:
+                        cx, cy, radius, marker = detailed_points
+                        fx = _to_float(cx)
+                        fy = _to_float(cy)
+                        if fx is not None and fy is not None:
+                            new_detailed_points = (
+                                fx + x_offset,
+                                fy + y_offset,
+                                radius,
+                                marker,
+                            )
+                        else:
+                            new_detailed_points = detailed_points
+                    else:
+                        new_detailed_points = detailed_points
+                elif geom_type == "ARC" and detailed_points:
+                    # ARC format: (x, y, radius, start_angle, end_angle, 'ARC')
+                    print(f"    ARC detailed_points: {detailed_points}")
+                    if len(detailed_points) == 6:
+                        cx, cy, radius, start_angle, end_angle, marker = detailed_points
+                        fx = _to_float(cx)
+                        fy = _to_float(cy)
+                        if fx is not None and fy is not None:
+                            new_detailed_points = (
+                                fx + x_offset,
+                                fy + y_offset,
+                                radius,
+                                start_angle,
+                                end_angle,
+                                marker,
+                            )
+                        else:
+                            new_detailed_points = detailed_points
+                    else:
+                        new_detailed_points = detailed_points
+                elif geom_type == "LINE" and detailed_points:
+                    # LINE format: ((x1, y1), (x2, y2), 'LINE')
+                    print(f"    LINE detailed_points: {detailed_points}")
+                    new_detailed_points = []
+                    for item in detailed_points:
+                        if isinstance(item, (tuple, list)) and len(item) == 2:
+                            # This is a point
+                            x, y = item
+                            fx = _to_float(x)
+                            fy = _to_float(y)
+                            if fx is not None and fy is not None:
+                                new_detailed_points.append(
+                                    (fx + x_offset, fy + y_offset)
+                                )
+                            else:
+                                new_detailed_points.append(item)
+                        else:
+                            # This is a marker or other data
+                            new_detailed_points.append(item)
+                    new_detailed_points = tuple(new_detailed_points)
+                else:
+                    # Handle LWPOLYLINE and other entity types with detailed arc data
+                    if not detailed_points:
+                        new_detailed_points = detailed_points
+                    else:
+                        print(
+                            f"  Processing {len(detailed_points)} detailed_points for element {element_id}"
+                        )
+                        arc_count = 0
+                        try:
+                            for point in detailed_points:
+                                # Skip non-tuple/list points (e.g., raw floats)
+                                if not isinstance(point, (tuple, list)):
+                                    print(f"    Skipping non-tuple point: {point}")
+                                    continue
+
+                                if len(point) > 3 and point[2] == "ARC_END":
+                                    # This is an arc point - offset x, y, and center
+                                    arc_count += 1
+                                    print(
+                                        f"    Found ARC_END point {arc_count}: {point[:3]}"
+                                    )
+                                    (
+                                        x,
+                                        y,
+                                        marker,
+                                        center,
+                                        radius,
+                                        start_angle,
+                                        end_angle,
+                                        ccw,
+                                    ) = point
+
+                                    # Create new center with offset
+                                    class Point:
+                                        def __init__(self, x, y):
+                                            self.x = x
+                                            self.y = y
+
+                                    cx = _to_float(center.x)
+                                    cy = _to_float(center.y)
+                                    sx = _to_float(x)
+                                    sy = _to_float(y)
+                                    if (
+                                        cx is None
+                                        or cy is None
+                                        or sx is None
+                                        or sy is None
+                                    ):
+                                        print(
+                                            f"Warning: skipping non-numeric arc point {point} for element {element_id}"
+                                        )
+                                        continue
+                                    new_center = Point(cx + x_offset, cy + y_offset)
+                                    new_detailed_points.append(
+                                        (
+                                            sx + x_offset,
+                                            sy + y_offset,
+                                            marker,
+                                            new_center,
+                                            radius,
+                                            start_angle,
+                                            end_angle,
+                                            ccw,
+                                        )
+                                    )
+                                elif len(point) > 2:
+                                    # This is a line point with marker - handle variable length
+                                    try:
+                                        if len(point) == 3:
+                                            x, y, marker = point
+                                            fx = _to_float(x)
+                                            fy = _to_float(y)
+                                            if fx is not None and fy is not None:
+                                                new_detailed_points.append(
+                                                    (
+                                                        fx + x_offset,
+                                                        fy + y_offset,
+                                                        marker,
+                                                    )
+                                                )
+                                            else:
+                                                # Keep original point if conversion fails
+                                                new_detailed_points.append(point)
+                                        else:
+                                            # Point has more than 3 elements, just take first 3
+                                            x, y, marker = point[0], point[1], point[2]
+                                            fx = _to_float(x)
+                                            fy = _to_float(y)
+                                            if fx is not None and fy is not None:
+                                                new_detailed_points.append(
+                                                    (
+                                                        fx + x_offset,
+                                                        fy + y_offset,
+                                                        marker,
+                                                    )
+                                                )
+                                            else:
+                                                # Keep original point if conversion fails
+                                                new_detailed_points.append(point)
+                                    except Exception as e:
+                                        print(f"Error unpacking point {point}: {e}")
+                                        # Fallback: just take first two elements
+                                        x, y = point[0], point[1]
+                                        fx = _to_float(x)
+                                        fy = _to_float(y)
+                                        if fx is None or fy is None:
+                                            print(
+                                                f"Warning: skipping non-numeric line point {point} for element {element_id}"
+                                            )
+                                        else:
+                                            new_detailed_points.append(
+                                                (fx + x_offset, fy + y_offset)
+                                            )
+                                else:
+                                    # Simple point
+                                    x, y = point
+                                    fx = _to_float(x)
+                                    fy = _to_float(y)
+                                    if fx is None or fy is None:
+                                        print(
+                                            f"Warning: skipping non-numeric simple point {point} for element {element_id}"
+                                        )
+                                    else:
+                                        new_detailed_points.append(
+                                            (fx + x_offset, fy + y_offset)
+                                        )
+                        except Exception as e:
+                            print(
+                                f"  ERROR processing detailed_points for element {element_id}: {e}"
+                            )
+                            import traceback
+
+                            traceback.print_exc()
+                            new_detailed_points = (
+                                detailed_points  # Fallback to original
+                            )
+
+                print(
+                    f"  Final new_detailed_points count: {len(new_detailed_points) if new_detailed_points else 0}"
+                )
+                if new_detailed_points:
+                    arc_final_count = sum(
+                        1
+                        for p in new_detailed_points
+                        if isinstance(p, (tuple, list))
+                        and len(p) > 3
+                        and p[2] == "ARC_END"
+                    )
+                    print(f"  Final ARC_END count: {arc_final_count}")
+
+                # Store the updated element data (moved outside the else block)
+                self.element_data[element_id] = (
+                    new_x_coords,
+                    new_y_coords,
+                    radius,
+                    geom_type,
+                    new_detailed_points,
+                )
+
+            print(f"Applied offset: ({x_offset}, {y_offset})")
+            print(f"Updated {len(self.element_data)} elements in element_data")
+
             self.update_plot()
             self.update_statistics()
 
             # Ensure input fields remain active after applying offset
             self.ensure_input_fields_active()
 
-        except ValueError:
+        except Exception as e:
+            import traceback
+
+            traceback.print_exc()
             messagebox.showerror(
-                "Error", "Please enter valid numbers for X and Y offsets"
+                "Error",
+                f"Failed to apply offset: {e}",
+            )
+
+    def reset_offset(self):
+        """Reset offset to zero and restore original data"""
+        try:
+            # Reset offset values
+            self.origin_offset = (0.0, 0.0)
+            self.x_offset_var.set("0.0")
+            self.y_offset_var.set("0.0")
+
+            # Restore original points
+            self.current_points = self.original_points.copy()
+
+            # Restore original element_data if backup exists
+            if hasattr(self, "original_element_data"):
+                import copy
+
+                self.element_data = copy.deepcopy(self.original_element_data)
+                print(
+                    f"Restored original element_data with {len(self.element_data)} elements"
+                )
+            else:
+                print("No backup found - cannot restore original data")
+
+            self.update_plot()
+            self.update_statistics()
+            print("Offset reset to zero")
+
+        except Exception as e:
+            import traceback
+
+            traceback.print_exc()
+            messagebox.showerror(
+                "Error",
+                f"Failed to reset offset: {e}",
             )
 
     def on_click(self, event):
@@ -1932,19 +2878,28 @@ Colors:
             elif geom_type == "CIRCLE":
                 if len(points) >= 1:
                     cx, cy = points[0]
-                    max_x = self.gcode_settings["max_workspace_x"]
-                    max_y = self.gcode_settings["max_workspace_y"]
+                    # Convert WPos to MPos for bounds checking
+                    mpos_cx, mpos_cy = self.wpos_to_mpos(cx, cy)
+                    mpos_min_x = self.gcode_settings["mpos_home_x"]
+                    mpos_min_y = self.gcode_settings["mpos_home_y"]
+                    mpos_max_x = mpos_min_x + self.gcode_settings["max_travel_x"]
+                    mpos_max_y = mpos_min_y + self.gcode_settings["max_travel_y"]
                     # Debug print removed for cleaner output
                     circle_in_workspace = (
-                        cx - radius <= max_x and cx + radius >= 0
-                    ) and (cy - radius <= max_y and cy + radius >= 0)
+                        mpos_cx - radius <= mpos_max_x
+                        and mpos_cx + radius >= mpos_min_x
+                    ) and (
+                        mpos_cy - radius <= mpos_max_y
+                        and mpos_cy + radius >= mpos_min_y
+                    )
                     if not circle_in_workspace:
                         self.clipped_elements.add(element_id)
 
             elif geom_type in ["LWPOLYLINE", "POLYLINE", "ELLIPSE", "SPLINE"]:
                 if len(points) >= 2:
                     polyline_in_workspace = False
-                    for x, y in points:
+                    for point in points:
+                        x, y = point[0], point[1]  # Extract x, y from point tuple
                         if self.is_within_workspace(x, y):
                             polyline_in_workspace = True
                             break
@@ -1955,8 +2910,6 @@ Colors:
             elif geom_type == "ARC":
                 if len(points) >= 1:
                     cx, cy = points[0]
-                    max_x = self.gcode_settings["max_workspace_x"]
-                    max_y = self.gcode_settings["max_workspace_y"]
 
                     # Check if arc intersects with workspace
                     # An arc intersects if its bounding box intersects with workspace
@@ -2046,6 +2999,9 @@ Colors:
             elif geom_type == "ARC":
                 if len(points) >= 1:
                     center_x, center_y = points[0]
+                    # Set linestyle and marker_size for ARC
+                    linestyle = "--" if element_id in self.clipped_elements else "-"
+                    marker_size = 15 if is_selected else 5
                     # Get arc parameters from element data
                     element_data = self.element_data.get(element_id)
                     if element_data and len(element_data) >= 5:
@@ -2057,56 +3013,133 @@ Colors:
                             start_rad = math.radians(start_angle)
                             end_rad = math.radians(end_angle)
 
-                            # Calculate arc span
-                            arc_span = end_rad - start_rad
-                            if arc_span < 0:
-                                arc_span += 2 * math.pi
+                            # DXF ARC entities are ALWAYS counterclockwise from start_angle to end_angle
+                            # matplotlib Arc also draws counterclockwise from theta1 to theta2
+                            # So we can use the angles directly
 
                             # Draw arc using matplotlib Arc
                             from matplotlib.patches import Arc
+
+                            display_theta1 = start_angle
+                            display_theta2 = end_angle
 
                             arc = Arc(
                                 (center_x, center_y),
                                 2 * radius,  # width
                                 2 * radius,  # height
                                 angle=0,  # rotation
-                                theta1=math.degrees(
-                                    start_rad
-                                ),  # start angle in degrees
-                                theta2=math.degrees(end_rad),  # end angle in degrees
+                                theta1=display_theta1,  # start angle in degrees
+                                theta2=display_theta2,  # end angle in degrees
                                 color=line_color,
                                 linewidth=line_width,
                                 alpha=alpha,
+                                linestyle=linestyle,
                             )
                             self.ax.add_patch(arc)
 
             elif geom_type in ["LWPOLYLINE", "POLYLINE", "ELLIPSE", "SPLINE"]:
                 if len(points) >= 2:
-                    x_coords = [p[0] for p in points]
-                    y_coords = [p[1] for p in points]
-                    # Draw connected polyline
+                    # Set linestyle and marker_size for polylines
                     linestyle = "--" if element_id in self.clipped_elements else "-"
-                    self.ax.plot(
-                        x_coords,
-                        y_coords,
-                        color=line_color,
-                        linewidth=line_width,
-                        alpha=alpha,
-                        linestyle=linestyle,
-                    )
-                    # Draw markers at vertices
                     marker_size = 15 if is_selected else 5
-                    marker_shape = (
-                        "s" if geom_type in ["LWPOLYLINE", "POLYLINE"] else "o"
-                    )
-                    self.ax.scatter(
-                        x_coords,
-                        y_coords,
-                        c=marker_color,
-                        s=marker_size,
-                        marker=marker_shape,
-                        alpha=alpha,
-                    )
+                    # For LWPOLYLINE, check if we have detailed arc information
+                    if geom_type == "LWPOLYLINE" and element_id in self.element_data:
+                        element_data = self.element_data[element_id]
+                        print(f"\nVisualization for LWPOLYLINE element {element_id}:")
+                        print(f"  element_data length: {len(element_data)}")
+                        if len(element_data) >= 5:
+                            # Get the detailed points with arc information
+                            detailed_points = element_data[
+                                4
+                            ]  # Original points with arc data
+                            print(
+                                f"  detailed_points: {detailed_points is not None}, count: {len(detailed_points) if detailed_points else 0}"
+                            )
+                            if detailed_points and len(detailed_points) > 0:
+                                # Check if this has arc segments
+                                has_arcs = any(
+                                    len(point) > 3 and point[2] == "ARC_END"
+                                    for point in detailed_points
+                                )
+                                print(f"  has_arcs: {has_arcs}")
+
+                                if has_arcs:
+                                    # Draw arcs and lines separately
+                                    self._draw_lwpolyline_with_arcs(
+                                        detailed_points,
+                                        line_color,
+                                        line_width,
+                                        alpha,
+                                        linestyle,
+                                        marker_color,
+                                        marker_size,
+                                        is_selected,
+                                        element_id,
+                                    )
+                                else:
+                                    # Draw as simple polyline
+                                    x_coords = [p[0] for p in detailed_points]
+                                    y_coords = [p[1] for p in detailed_points]
+                                    self._draw_simple_polyline(
+                                        x_coords,
+                                        y_coords,
+                                        line_color,
+                                        line_width,
+                                        alpha,
+                                        linestyle,
+                                        marker_color,
+                                        marker_size,
+                                        is_selected,
+                                        geom_type,
+                                    )
+                            else:
+                                # Fallback to simple points
+                                x_coords = [p[0] for p in points]
+                                y_coords = [p[1] for p in points]
+                                self._draw_simple_polyline(
+                                    x_coords,
+                                    y_coords,
+                                    line_color,
+                                    line_width,
+                                    alpha,
+                                    linestyle,
+                                    marker_color,
+                                    marker_size,
+                                    is_selected,
+                                    geom_type,
+                                )
+                        else:
+                            # Fallback to simple points
+                            x_coords = [p[0] for p in points]
+                            y_coords = [p[1] for p in points]
+                            self._draw_simple_polyline(
+                                x_coords,
+                                y_coords,
+                                line_color,
+                                line_width,
+                                alpha,
+                                linestyle,
+                                marker_color,
+                                marker_size,
+                                is_selected,
+                                geom_type,
+                            )
+                    else:
+                        # For other polyline types, use simple drawing
+                        x_coords = [p[0] for p in points]
+                        y_coords = [p[1] for p in points]
+                        self._draw_simple_polyline(
+                            x_coords,
+                            y_coords,
+                            line_color,
+                            line_width,
+                            alpha,
+                            linestyle,
+                            marker_color,
+                            marker_size,
+                            is_selected,
+                            geom_type,
+                        )
 
             elif geom_type == "TEXT_MARKER":
                 # Render text markers for text that couldn't be exploded
@@ -2143,12 +3176,99 @@ Colors:
                             ha="center",
                         )
 
+        # Draw MPos table area and WPos origin indicators
+        self.draw_coordinate_system_indicators()
+
         # Set equal aspect ratio and auto-scale
         self.ax.set_aspect("equal")
+        # Ensure axes limits reflect all newly drawn artists after offsets
+        self.ax.relim()
+        self.ax.autoscale_view()
         self.canvas.draw()
 
         # Ensure input fields remain interactive after plot updates
         self.ensure_input_fields_active()
+
+    def draw_coordinate_system_indicators(self):
+        """Draw visual indicators for MPos table area and WPos origin"""
+        from matplotlib.patches import Rectangle
+        from matplotlib.lines import Line2D
+
+        # Calculate MPos bounds in WPos coordinates
+        mpos_min_x = self.gcode_settings["mpos_home_x"]
+        mpos_min_y = self.gcode_settings["mpos_home_y"]
+        mpos_max_x = mpos_min_x + self.gcode_settings["max_travel_x"]
+        mpos_max_y = mpos_min_y + self.gcode_settings["max_travel_y"]
+
+        # Convert MPos bounds to WPos
+        wpos_min_x, wpos_min_y = self.mpos_to_wpos(mpos_min_x, mpos_min_y)
+        wpos_max_x, wpos_max_y = self.mpos_to_wpos(mpos_max_x, mpos_max_y)
+
+        # Draw MPos table area as a dashed rectangle
+        table_width = wpos_max_x - wpos_min_x
+        table_height = wpos_max_y - wpos_min_y
+        table_rect = Rectangle(
+            (wpos_min_x, wpos_min_y),
+            table_width,
+            table_height,
+            linewidth=2,
+            edgecolor="purple",
+            facecolor="none",
+            linestyle="--",
+            label="MPos Table Area",
+        )
+        self.ax.add_patch(table_rect)
+
+        # Draw WPos origin (0, 0) as crosshairs
+        crosshair_size = (
+            min(abs(table_width), abs(table_height)) * 0.05
+        )  # 5% of smaller dimension
+        # Horizontal line
+        self.ax.plot(
+            [-crosshair_size, crosshair_size],
+            [0, 0],
+            color="green",
+            linewidth=2,
+            linestyle="-",
+            label="WPos Origin",
+        )
+        # Vertical line
+        self.ax.plot(
+            [0, 0],
+            [-crosshair_size, crosshair_size],
+            color="green",
+            linewidth=2,
+            linestyle="-",
+        )
+        # Origin circle
+        self.ax.plot(0, 0, "go", markersize=8)
+
+        # Add labels
+        self.ax.text(
+            wpos_min_x + 5,
+            wpos_max_y - 5,
+            f"MPos Table\n({wpos_min_x:.0f}, {wpos_min_y:.0f}) to\n({wpos_max_x:.0f}, {wpos_max_y:.0f})",
+            fontsize=9,
+            color="purple",
+            verticalalignment="top",
+            bbox=dict(boxstyle="round", facecolor="white", alpha=0.8),
+        )
+
+        # Get MPos coordinates of WPos origin
+        wpos_origin_mpos_x = self.gcode_settings["wpos_home_x"]
+        wpos_origin_mpos_y = self.gcode_settings["wpos_home_y"]
+
+        self.ax.text(
+            crosshair_size + 2,
+            crosshair_size + 2,
+            f"WPos (0,0)\nMPos ({wpos_origin_mpos_x:.1f}, {wpos_origin_mpos_y:.1f})",
+            fontsize=9,
+            color="green",
+            bbox=dict(boxstyle="round", facecolor="white", alpha=0.8),
+        )
+
+        # Add legend
+        self.ax.legend(loc="upper right", fontsize=8)
 
     def on_canvas_click(self, event):
         """Handle canvas clicks to ensure input fields can still receive focus"""
@@ -2350,11 +3470,19 @@ DXF Units: {self.dxf_units}"""
                     radius = element_info["radius"]
 
                     # Check if circle intersects with workspace
-                    max_x = self.gcode_settings["max_workspace_x"]
-                    max_y = self.gcode_settings["max_workspace_y"]
+                    # Convert WPos to MPos for bounds checking
+                    mpos_cx, mpos_cy = self.wpos_to_mpos(cx, cy)
+                    mpos_min_x = self.gcode_settings["mpos_home_x"]
+                    mpos_min_y = self.gcode_settings["mpos_home_y"]
+                    mpos_max_x = mpos_min_x + self.gcode_settings["max_travel_x"]
+                    mpos_max_y = mpos_min_y + self.gcode_settings["max_travel_y"]
                     circle_in_workspace = (
-                        cx - radius <= max_x and cx + radius >= 0
-                    ) and (cy - radius <= max_y and cy + radius >= 0)
+                        mpos_cx - radius <= mpos_max_x
+                        and mpos_cx + radius >= mpos_min_x
+                    ) and (
+                        mpos_cy - radius <= mpos_max_y
+                        and mpos_cy + radius >= mpos_min_y
+                    )
 
                     if circle_in_workspace:
                         # Only add header if we're actually going to engrave
@@ -2415,52 +3543,66 @@ DXF Units: {self.dxf_units}"""
                                 f"F{self.gcode_settings['feedrate']} S{self.gcode_settings['laser_power']}  ; Circle 2nd half"
                             )
                         else:
-                            # Circle partially outside workspace - use segmented arcs
-                            # Break into 45-degree arc segments for better clipping
-                            num_segments = 8  # 45 degrees each
+                            # Circle partially outside workspace - use line segment approximation with clipping
+                            # Break into small segments for accurate clipping
+                            num_segments = 36  # 10 degrees each for smooth circles
                             angle_step = 2 * math.pi / num_segments
 
                             prev_x, prev_y = start_x, start_y
+                            segments_added = 0
+
                             for i in range(1, num_segments + 1):
                                 angle = i * angle_step
                                 seg_end_x = cx + radius * math.cos(angle)
                                 seg_end_y = cy + radius * math.sin(angle)
 
+                                # Check if segment is useful (at least one endpoint inside or passes through)
                                 prev_inside = self.is_within_workspace(prev_x, prev_y)
                                 end_inside = self.is_within_workspace(
                                     seg_end_x, seg_end_y
                                 )
+                                segment_useful = (
+                                    prev_inside
+                                    or end_inside
+                                    or self.line_intersects_workspace(
+                                        prev_x, prev_y, seg_end_x, seg_end_y
+                                    )
+                                )
 
-                                if prev_inside and end_inside:
-                                    # Both inside - use G3 arc
-                                    i_seg = cx - prev_x
-                                    j_seg = cy - prev_y
-                                    gcode.append(
-                                        f"G3 X{seg_end_x:.3f} Y{seg_end_y:.3f} I{i_seg:.3f} J{j_seg:.3f} "
-                                        f"F{self.gcode_settings['feedrate']} S{self.gcode_settings['laser_power']}  ; Circle segment"
+                                if segment_useful:
+                                    # Clip the segment to workspace boundaries
+                                    clipped = self.clip_line_to_workspace(
+                                        prev_x, prev_y, seg_end_x, seg_end_y
                                     )
-                                elif prev_inside and not end_inside:
-                                    # Exits workspace
-                                    i_seg = cx - prev_x
-                                    j_seg = cy - prev_y
-                                    gcode.append(
-                                        f"G3 X{seg_end_x:.3f} Y{seg_end_y:.3f} I{i_seg:.3f} J{j_seg:.3f} "
-                                        f"F{self.gcode_settings['feedrate']} S{self.gcode_settings['laser_power']}  ; Circle to boundary"
-                                    )
-                                elif not prev_inside and end_inside:
-                                    # Enters workspace
-                                    gcode.append(
-                                        f"G0 X{prev_x:.3f} Y{prev_y:.3f} "
-                                        f"Z{self.gcode_settings['cutting_z']:.3f} ; Move to entry"
-                                    )
-                                    i_seg = cx - prev_x
-                                    j_seg = cy - prev_y
-                                    gcode.append(
-                                        f"G3 X{seg_end_x:.3f} Y{seg_end_y:.3f} I{i_seg:.3f} J{j_seg:.3f} "
-                                        f"F{self.gcode_settings['feedrate']} S{self.gcode_settings['laser_power']}  ; Circle from boundary"
-                                    )
+                                    if clipped:
+                                        (
+                                            clip_start_x,
+                                            clip_start_y,
+                                            clip_end_x,
+                                            clip_end_y,
+                                        ) = clipped
+
+                                        # Move to start if not continuous
+                                        if segments_added == 0 or (
+                                            abs(current_x - clip_start_x) > 0.001
+                                            or abs(current_y - clip_start_y) > 0.001
+                                        ):
+                                            gcode.append(
+                                                f"G0 X{clip_start_x:.3f} Y{clip_start_y:.3f} "
+                                                f"Z{self.gcode_settings['cutting_z']:.3f}"
+                                            )
+
+                                        # Cut to end
+                                        gcode.append(
+                                            f"G1 X{clip_end_x:.3f} Y{clip_end_y:.3f} "
+                                            f"S{self.gcode_settings['laser_power']}"
+                                        )
+                                        current_x, current_y = clip_end_x, clip_end_y
+                                        segments_added += 1
 
                                 prev_x, prev_y = seg_end_x, seg_end_y
+
+                            print(f"  Circle: Generated {segments_added} segments")
 
                         # Update current position to end of circle
                         end_angle = math.radians(360)
@@ -2572,89 +3714,45 @@ DXF Units: {self.dxf_units}"""
                                             f"G0 X{start_x:.3f} Y{start_y:.3f} Z{self.gcode_settings['cutting_z']:.3f}"
                                         )
 
-                                # Generate G2/G3 arc command instead of linear segments
-                                # DXF arcs are always counterclockwise (CCW), use G3
-                                # G3 format: G3 X[end] Y[end] I[dx to center] J[dy to center]
+                                # DXF ARC entities are ALWAYS counterclockwise from start_angle to end_angle
+                                # This is a fundamental property of DXF format
+                                ccw = True
 
-                                # Calculate arc span and check if it's a full circle
-                                arc_span = end_rad - start_rad
-                                if arc_span < 0:
-                                    arc_span += 2 * math.pi
+                                print(
+                                    f"\nG-code generation for ARC element {element_id}:"
+                                )
+                                print(
+                                    f"  Center: ({cx:.3f}, {cy:.3f}), Radius: {radius:.3f}"
+                                )
+                                print(
+                                    f"  Start angle: {start_angle:.1f}° ({start_rad:.3f} rad)"
+                                )
+                                print(
+                                    f"  End angle: {end_angle:.1f}° ({end_rad:.3f} rad)"
+                                )
+                                print(f"  Start point: ({start_x:.3f}, {start_y:.3f})")
+                                print(f"  End point: ({end_x:.3f}, {end_y:.3f})")
+                                print(f"  Direction: {'CCW' if ccw else 'CW'}")
 
-                                # Check if arc needs to be split for workspace clipping
-                                # For now, if entire arc is within workspace, use single G3
-                                start_in = self.is_within_workspace(start_x, start_y)
-                                end_in = self.is_within_workspace(end_x, end_y)
+                                # Use unified arc G-code generation
+                                arc_gcode, new_x, new_y = self.generate_arc_gcode(
+                                    start_x,
+                                    start_y,
+                                    end_x,
+                                    end_y,
+                                    cx,
+                                    cy,
+                                    radius,
+                                    start_rad,
+                                    end_rad,
+                                    ccw,
+                                    current_x,
+                                    current_y,
+                                )
 
-                                # Calculate I and J offsets from start point to center
-                                i_offset = cx - start_x
-                                j_offset = cy - start_y
-
-                                if start_in and end_in:
-                                    # Both endpoints inside - simple G3 arc
-                                    gcode.append(
-                                        f"G3 X{end_x:.3f} Y{end_y:.3f} I{i_offset:.3f} J{j_offset:.3f} "
-                                        f"F{self.gcode_settings['feedrate']} S{self.gcode_settings['laser_power']}  ; Arc CCW"
-                                    )
-                                else:
-                                    # Arc crosses workspace boundary - need to handle clipping
-                                    # For complex cases, fall back to segmented approach
-                                    # This ensures proper handling of arcs that partially exit workspace
-
-                                    # Use smaller segments for clipped arcs (10-degree steps)
-                                    num_segments = max(
-                                        1, int(arc_span / math.radians(10))
-                                    )
-                                    angle_step = arc_span / num_segments
-
-                                    prev_x, prev_y = start_x, start_y
-                                    for i in range(1, num_segments + 1):
-                                        angle = start_rad + i * angle_step
-                                        seg_end_x = cx + radius * math.cos(angle)
-                                        seg_end_y = cy + radius * math.sin(angle)
-
-                                        # Check if segment endpoints are in workspace
-                                        prev_inside = self.is_within_workspace(
-                                            prev_x, prev_y
-                                        )
-                                        end_inside = self.is_within_workspace(
-                                            seg_end_x, seg_end_y
-                                        )
-
-                                        if prev_inside and end_inside:
-                                            # Both inside - use G3 arc segment
-                                            i_seg = cx - prev_x
-                                            j_seg = cy - prev_y
-                                            gcode.append(
-                                                f"G3 X{seg_end_x:.3f} Y{seg_end_y:.3f} I{i_seg:.3f} J{j_seg:.3f} "
-                                                f"F{self.gcode_settings['feedrate']} S{self.gcode_settings['laser_power']}  ; Arc segment"
-                                            )
-                                        elif prev_inside and not end_inside:
-                                            # Exits workspace - use G3 to approximate boundary
-                                            i_seg = cx - prev_x
-                                            j_seg = cy - prev_y
-                                            gcode.append(
-                                                f"G3 X{seg_end_x:.3f} Y{seg_end_y:.3f} I{i_seg:.3f} J{j_seg:.3f} "
-                                                f"F{self.gcode_settings['feedrate']} S{self.gcode_settings['laser_power']}  ; Arc to boundary"
-                                            )
-                                        elif not prev_inside and end_inside:
-                                            # Enters workspace - move to start then arc
-                                            gcode.append(
-                                                f"G0 X{prev_x:.3f} Y{prev_y:.3f} "
-                                                f"Z{self.gcode_settings['cutting_z']:.3f} ; Move to entry"
-                                            )
-                                            i_seg = cx - prev_x
-                                            j_seg = cy - prev_y
-                                            gcode.append(
-                                                f"G3 X{seg_end_x:.3f} Y{seg_end_y:.3f} I{i_seg:.3f} J{j_seg:.3f} "
-                                                f"F{self.gcode_settings['feedrate']} S{self.gcode_settings['laser_power']}  ; Arc from boundary"
-                                            )
-
-                                        prev_x, prev_y = seg_end_x, seg_end_y
-
-                                # Update current position to end of arc
-                                current_x, current_y = end_x, end_y
-                                last_engraved_x, last_engraved_y = end_x, end_y
+                                gcode.extend(arc_gcode)
+                                current_x, current_y = new_x, new_y
+                                last_engraved_x, last_engraved_y = new_x, new_y
 
                                 # Conditionally raise Z between paths
                                 if self.gcode_settings["raise_laser_between_paths"]:
@@ -2667,12 +3765,37 @@ DXF Units: {self.dxf_units}"""
                                 current_x, current_y = cx, cy
 
             elif geom_type in ["LWPOLYLINE", "POLYLINE", "ELLIPSE", "SPLINE"]:
-                # Use the offset coordinates from current_points (already includes X/Y offsets)
-                polyline_points = element_info["points"]
+                print(
+                    f"\n=== Processing {geom_type} element {element_id} for G-code ==="
+                )
+                print(
+                    f"  element_id in self.element_data: {element_id in self.element_data}"
+                )
+                # Get detailed points from element_data for LWPOLYLINE (includes arc info)
+                if geom_type == "LWPOLYLINE" and element_id in self.element_data:
+                    # Use detailed points from element_data for LWPOLYLINE (includes arc segments)
+                    _, _, _, _, polyline_points = self.element_data[element_id]
+                    print(f"\nG-code generation for LWPOLYLINE element {element_id}:")
+                    print(f"  Total points: {len(polyline_points)}")
+                    for idx, pt in enumerate(polyline_points):
+                        if len(pt) > 3 and pt[2] == "ARC_END":
+                            print(
+                                f"  Point {idx}: ARC_END at ({pt[0]:.3f}, {pt[1]:.3f}), center=({pt[3].x:.3f}, {pt[3].y:.3f}), radius={pt[4]:.3f}, ccw={pt[7]}"
+                            )
+                        elif len(pt) > 2:
+                            print(
+                                f"  Point {idx}: {pt[2]} at ({pt[0]:.3f}, {pt[1]:.3f})"
+                            )
+                        else:
+                            print(f"  Point {idx}: ({pt[0]:.3f}, {pt[1]:.3f})")
+                else:
+                    # Use the offset coordinates from current_points for other types
+                    polyline_points = element_info["points"]
                 if len(polyline_points) >= 2:
                     # Check if any part of polyline is within workspace
                     polyline_in_workspace = False
-                    for x, y in polyline_points:
+                    for point in polyline_points:
+                        x, y = point[0], point[1]  # Extract x, y from point tuple
                         if self.is_within_workspace(x, y):
                             polyline_in_workspace = True
                             break
@@ -2681,18 +3804,62 @@ DXF Units: {self.dxf_units}"""
                         # Only add header if we're actually going to engrave
                         gcode.append(f"; === {geom_type} GEOMETRY ===")
                         # Process polyline segments with proper clipping
-                        first_x, first_y = polyline_points[0]
+                        first_x, first_y = polyline_points[0][0], polyline_points[0][1]
 
                         # G0 move to start point if not already there
                         if (current_x, current_y) != (first_x, first_y):
                             gcode.append(
                                 f"G0 X{first_x:.3f} Y{first_y:.3f} Z{self.gcode_settings['cutting_z']:.3f}"
                             )
+                            current_x, current_y = first_x, first_y
 
                         # Engrave polyline segments with proper clipping
                         for i in range(1, len(polyline_points)):
-                            prev_x, prev_y = polyline_points[i - 1]
-                            curr_x, curr_y = polyline_points[i]
+                            prev_point = polyline_points[i - 1]
+                            curr_point = polyline_points[i]
+
+                            # Check if this is an arc segment
+                            if len(curr_point) > 3 and curr_point[2] == "ARC_END":
+                                # This is an arc segment - use unified arc processing
+                                prev_x, prev_y = prev_point[0], prev_point[1]
+                                curr_x, curr_y = curr_point[0], curr_point[1]
+                                center, radius, start_angle, end_angle, ccw = (
+                                    curr_point[3:8]
+                                )
+
+                                # Check if we need to move to arc start point
+                                if (current_x, current_y) != (prev_x, prev_y):
+                                    print(
+                                        f"    WARNING: Tool not at arc start! Current: ({current_x:.3f}, {current_y:.3f}), Arc start: ({prev_x:.3f}, {prev_y:.3f})"
+                                    )
+                                    # Add G1 move to arc start point
+                                    gcode.append(
+                                        f"G1 X{prev_x:.3f} Y{prev_y:.3f} S{self.gcode_settings['laser_power']}"
+                                    )
+                                    current_x, current_y = prev_x, prev_y
+
+                                # Use unified arc G-code generation
+                                arc_gcode, new_x, new_y = self.generate_arc_gcode(
+                                    prev_x,
+                                    prev_y,
+                                    curr_x,
+                                    curr_y,
+                                    center.x,
+                                    center.y,
+                                    radius,
+                                    start_angle,
+                                    end_angle,
+                                    ccw,
+                                    current_x,
+                                    current_y,
+                                )
+
+                                gcode.extend(arc_gcode)
+                                current_x, current_y = new_x, new_y
+                            else:
+                                # This is a straight line segment
+                                prev_x, prev_y = prev_point[0], prev_point[1]
+                                curr_x, curr_y = curr_point[0], curr_point[1]
 
                             # Clip line segment to workspace
                             clipped_line = self.clip_line_to_workspace(
@@ -2707,13 +3874,30 @@ DXF Units: {self.dxf_units}"""
                                     clipped_end_y,
                                 ) = clipped_line
 
+                                # Move to clipped start if not already there
+                                if (current_x, current_y) != (
+                                    clipped_start_x,
+                                    clipped_start_y,
+                                ):
+                                    # Need to move to start of clipped segment
+                                    gcode.append(
+                                        f"G0 X{clipped_start_x:.3f} Y{clipped_start_y:.3f} Z{self.gcode_settings['cutting_z']:.3f}"
+                                    )
+                                    current_x, current_y = (
+                                        clipped_start_x,
+                                        clipped_start_y,
+                                    )
+
                                 # Engrave to clipped end point
                                 gcode.append(
-                                    f"G1 X{clipped_end_x:.3f} Y{clipped_end_y:.3f} F{self.gcode_settings['feedrate']} S{self.gcode_settings['laser_power']}  ; Engrave polyline"
+                                    f"G1 X{clipped_end_x:.3f} Y{clipped_end_y:.3f} S{self.gcode_settings['laser_power']}"
                                 )
+                                current_x, current_y = clipped_end_x, clipped_end_y
 
                         # Update current position to end of polyline
-                        last_x, last_y = polyline_points[-1]
+                        last_x, last_y = polyline_points[-1][
+                            :2
+                        ]  # Get x, y from last point
                         current_x, current_y = last_x, last_y
                         last_engraved_x, last_engraved_y = last_x, last_y
 
@@ -2736,16 +3920,29 @@ DXF Units: {self.dxf_units}"""
         return "\n".join(gcode)
 
     def is_within_workspace(self, x, y):
-        """Check if a point is within workspace limits"""
-        max_x = self.gcode_settings["max_workspace_x"]
-        max_y = self.gcode_settings["max_workspace_y"]
+        """Check if a point (in WPos) is within workspace limits (in MPos)
+        Converts WPos to MPos and checks against machine travel limits"""
+        # Convert WPos to MPos
+        mpos_x, mpos_y = self.wpos_to_mpos(x, y)
 
-        return 0.0 <= x <= max_x and 0.0 <= y <= max_y
+        # Get MPos bounds
+        mpos_min_x = self.gcode_settings["mpos_home_x"]
+        mpos_min_y = self.gcode_settings["mpos_home_y"]
+        mpos_max_x = mpos_min_x + self.gcode_settings["max_travel_x"]
+        mpos_max_y = mpos_min_y + self.gcode_settings["max_travel_y"]
+
+        return mpos_min_x <= mpos_x <= mpos_max_x and mpos_min_y <= mpos_y <= mpos_max_y
 
     def arc_intersects_workspace(self, cx, cy, radius, element_id):
-        """Check if an arc intersects with the workspace"""
-        max_x = self.gcode_settings["max_workspace_x"]
-        max_y = self.gcode_settings["max_workspace_y"]
+        """Check if an arc (in WPos) intersects with the workspace (in MPos)"""
+        # Convert arc center from WPos to MPos
+        mpos_cx, mpos_cy = self.wpos_to_mpos(cx, cy)
+
+        # Get MPos bounds
+        mpos_min_x = self.gcode_settings["mpos_home_x"]
+        mpos_min_y = self.gcode_settings["mpos_home_y"]
+        mpos_max_x = mpos_min_x + self.gcode_settings["max_travel_x"]
+        mpos_max_y = mpos_min_y + self.gcode_settings["max_travel_y"]
 
         # Get arc parameters
         element_data = self.element_data.get(element_id)
@@ -2762,13 +3959,13 @@ DXF Units: {self.dxf_units}"""
         start_rad = math.radians(start_angle)
         end_rad = math.radians(end_angle)
 
-        # First check if the arc's bounding box intersects with workspace
+        # First check if the arc's bounding box (in MPos) intersects with workspace
         # This is a quick rejection test
         if not (
-            cx - radius <= max_x
-            and cx + radius >= 0
-            and cy - radius <= max_y
-            and cy + radius >= 0
+            mpos_cx - radius <= mpos_max_x
+            and mpos_cx + radius >= mpos_min_x
+            and mpos_cy - radius <= mpos_max_y
+            and mpos_cy + radius >= mpos_min_y
         ):
             return False
 
@@ -2794,20 +3991,27 @@ DXF Units: {self.dxf_units}"""
         return False
 
     def clip_to_workspace(self, x, y):
-        """Clip coordinates to workspace limits"""
-        max_x = self.gcode_settings["max_workspace_x"]
-        max_y = self.gcode_settings["max_workspace_y"]
+        """Clip coordinates (in WPos) to workspace limits (in MPos)"""
+        # Convert WPos to MPos
+        mpos_x, mpos_y = self.wpos_to_mpos(x, y)
 
-        clipped_x = max(0.0, min(x, max_x))
-        clipped_y = max(0.0, min(y, max_y))
+        # Get MPos bounds
+        mpos_min_x = self.gcode_settings["mpos_home_x"]
+        mpos_min_y = self.gcode_settings["mpos_home_y"]
+        mpos_max_x = mpos_min_x + self.gcode_settings["max_travel_x"]
+        mpos_max_y = mpos_min_y + self.gcode_settings["max_travel_y"]
+
+        # Clip in MPos
+        clipped_mpos_x = max(mpos_min_x, min(mpos_x, mpos_max_x))
+        clipped_mpos_y = max(mpos_min_y, min(mpos_y, mpos_max_y))
+
+        # Convert back to WPos
+        clipped_x, clipped_y = self.mpos_to_wpos(clipped_mpos_x, clipped_mpos_y)
 
         return clipped_x, clipped_y
 
     def clip_line_to_workspace(self, start_x, start_y, end_x, end_y):
-        """Clip a line segment to workspace boundaries using intersection logic"""
-        max_x = self.gcode_settings["max_workspace_x"]
-        max_y = self.gcode_settings["max_workspace_y"]
-
+        """Clip a line segment (in WPos) to workspace boundaries (in MPos)"""
         # Check if both points are outside workspace
         start_out = not self.is_within_workspace(start_x, start_y)
         end_out = not self.is_within_workspace(end_x, end_y)
@@ -2844,16 +4048,24 @@ DXF Units: {self.dxf_units}"""
         return (clipped_start_x, clipped_start_y, clipped_end_x, clipped_end_y)
 
     def line_intersects_workspace(self, x1, y1, x2, y2):
-        """Check if a line segment intersects with the workspace rectangle"""
-        max_x = self.gcode_settings["max_workspace_x"]
-        max_y = self.gcode_settings["max_workspace_y"]
+        """Check if a line segment (in WPos) intersects with the workspace rectangle (in MPos)"""
+        # Convert WPos to MPos for bounds
+        # Get WPos bounds that correspond to MPos limits
+        mpos_min_x = self.gcode_settings["mpos_home_x"]
+        mpos_min_y = self.gcode_settings["mpos_home_y"]
+        mpos_max_x = mpos_min_x + self.gcode_settings["max_travel_x"]
+        mpos_max_y = mpos_min_y + self.gcode_settings["max_travel_y"]
 
-        # Check if line intersects with any of the four workspace boundaries
+        # Convert MPos bounds to WPos bounds for easier calculation
+        wpos_min_x, wpos_min_y = self.mpos_to_wpos(mpos_min_x, mpos_min_y)
+        wpos_max_x, wpos_max_y = self.mpos_to_wpos(mpos_max_x, mpos_max_y)
+
+        # Check if line intersects with any of the four workspace boundaries (in WPos)
         boundaries = [
-            (0, 0, max_x, 0),  # Bottom edge
-            (0, max_y, max_x, max_y),  # Top edge
-            (0, 0, 0, max_y),  # Left edge
-            (max_x, 0, max_x, max_y),  # Right edge
+            (wpos_min_x, wpos_min_y, wpos_max_x, wpos_min_y),  # Bottom edge
+            (wpos_min_x, wpos_max_y, wpos_max_x, wpos_max_y),  # Top edge
+            (wpos_min_x, wpos_min_y, wpos_min_x, wpos_max_y),  # Left edge
+            (wpos_max_x, wpos_min_y, wpos_max_x, wpos_max_y),  # Right edge
         ]
 
         for bx1, by1, bx2, by2 in boundaries:
@@ -2862,18 +4074,25 @@ DXF Units: {self.dxf_units}"""
         return False
 
     def find_line_workspace_intersection(self, x1, y1, x2, y2, target_x, target_y):
-        """Find intersection of line with workspace boundary closest to target point"""
-        max_x = self.gcode_settings["max_workspace_x"]
-        max_y = self.gcode_settings["max_workspace_y"]
+        """Find intersection of line (in WPos) with workspace boundary (in MPos) closest to target point"""
+        # Get WPos bounds that correspond to MPos limits
+        mpos_min_x = self.gcode_settings["mpos_home_x"]
+        mpos_min_y = self.gcode_settings["mpos_home_y"]
+        mpos_max_x = mpos_min_x + self.gcode_settings["max_travel_x"]
+        mpos_max_y = mpos_min_y + self.gcode_settings["max_travel_y"]
+
+        # Convert MPos bounds to WPos bounds
+        wpos_min_x, wpos_min_y = self.mpos_to_wpos(mpos_min_x, mpos_min_y)
+        wpos_max_x, wpos_max_y = self.mpos_to_wpos(mpos_max_x, mpos_max_y)
 
         intersections = []
 
-        # Check intersections with all four boundaries
+        # Check intersections with all four boundaries (in WPos)
         boundaries = [
-            (0, 0, max_x, 0),  # Bottom edge
-            (0, max_y, max_x, max_y),  # Top edge
-            (0, 0, 0, max_y),  # Left edge
-            (max_x, 0, max_x, max_y),  # Right edge
+            (wpos_min_x, wpos_min_y, wpos_max_x, wpos_min_y),  # Bottom edge
+            (wpos_min_x, wpos_max_y, wpos_max_x, wpos_max_y),  # Top edge
+            (wpos_min_x, wpos_min_y, wpos_min_x, wpos_max_y),  # Left edge
+            (wpos_max_x, wpos_min_y, wpos_max_x, wpos_max_y),  # Right edge
         ]
 
         for bx1, by1, bx2, by2 in boundaries:
@@ -3323,13 +4542,37 @@ DXF Units: {self.dxf_units}"""
         """Open the G-code settings window"""
         settings_window = tk.Toplevel(self.root)
         settings_window.title("G-code Settings")
-        settings_window.geometry("600x500")
+        settings_window.geometry("650x600")
         settings_window.transient(self.root)
         settings_window.grab_set()
 
-        # Main frame
-        main_frame = ttk.Frame(settings_window)
+        # Create canvas and scrollbar for scrolling
+        canvas = tk.Canvas(settings_window)
+        scrollbar = ttk.Scrollbar(
+            settings_window, orient="vertical", command=canvas.yview
+        )
+        scrollable_frame = ttk.Frame(canvas)
+
+        scrollable_frame.bind(
+            "<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        # Pack canvas and scrollbar
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        # Main frame inside scrollable area
+        main_frame = ttk.Frame(scrollable_frame)
         main_frame.pack(fill="both", expand=True, padx=20, pady=20)
+
+        # Enable mousewheel scrolling
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+        canvas.bind_all("<MouseWheel>", _on_mousewheel)
 
         # Variables for the form
         preamble_var = tk.StringVar(value=self.gcode_settings["preamble"])
@@ -3337,8 +4580,18 @@ DXF Units: {self.dxf_units}"""
         laser_power_var = tk.IntVar(value=self.gcode_settings["laser_power"])
         cutting_z_var = tk.DoubleVar(value=self.gcode_settings["cutting_z"])
         feedrate_var = tk.IntVar(value=self.gcode_settings["feedrate"])
-        max_x_var = tk.DoubleVar(value=self.gcode_settings["max_workspace_x"])
-        max_y_var = tk.DoubleVar(value=self.gcode_settings["max_workspace_y"])
+        # Machine Position (MPos) variables
+        mpos_home_x_var = tk.DoubleVar(value=self.gcode_settings["mpos_home_x"])
+        mpos_home_y_var = tk.DoubleVar(value=self.gcode_settings["mpos_home_y"])
+        mpos_home_z_var = tk.DoubleVar(value=self.gcode_settings["mpos_home_z"])
+        # Max Travel variables
+        max_travel_x_var = tk.DoubleVar(value=self.gcode_settings["max_travel_x"])
+        max_travel_y_var = tk.DoubleVar(value=self.gcode_settings["max_travel_y"])
+        max_travel_z_var = tk.DoubleVar(value=self.gcode_settings["max_travel_z"])
+        # Work Position (WPos) Home variables
+        wpos_home_x_var = tk.DoubleVar(value=self.gcode_settings["wpos_home_x"])
+        wpos_home_y_var = tk.DoubleVar(value=self.gcode_settings["wpos_home_y"])
+        wpos_home_z_var = tk.DoubleVar(value=self.gcode_settings["wpos_home_z"])
 
         # Preamble section
         ttk.Label(main_frame, text="G-code Preamble:", font=("Arial", 10, "bold")).pack(
@@ -3397,33 +4650,78 @@ DXF Units: {self.dxf_units}"""
         )
         feedrate_spinbox.pack(side="right")
 
-        # Max Workspace X
-        max_x_frame = ttk.Frame(settings_frame)
-        max_x_frame.pack(fill="x", pady=(0, 5))
-        ttk.Label(max_x_frame, text="Max Workspace X (mm):").pack(side="left")
-        max_x_spinbox = ttk.Spinbox(
-            max_x_frame,
-            from_=50.0,
-            to=1000.0,
-            increment=10.0,
-            width=10,
-            textvariable=max_x_var,
+        # Coordinate System Settings
+        coord_frame = ttk.LabelFrame(
+            main_frame, text="Coordinate System (MPos & WPos)", padding="10"
         )
-        max_x_spinbox.pack(side="right")
+        coord_frame.pack(fill="x", pady=(0, 20))
 
-        # Max Workspace Y
-        max_y_frame = ttk.Frame(settings_frame)
-        max_y_frame.pack(fill="x", pady=(0, 5))
-        ttk.Label(max_y_frame, text="Max Workspace Y (mm):").pack(side="left")
-        max_y_spinbox = ttk.Spinbox(
-            max_y_frame,
-            from_=50.0,
-            to=1000.0,
-            increment=10.0,
-            width=10,
-            textvariable=max_y_var,
-        )
-        max_y_spinbox.pack(side="right")
+        # MPos Home
+        ttk.Label(
+            coord_frame,
+            text="MPos Home (Machine Home Position):",
+            font=("Arial", 9, "bold"),
+        ).pack(anchor="w", pady=(0, 5))
+        for axis, var in [
+            ("X", mpos_home_x_var),
+            ("Y", mpos_home_y_var),
+            ("Z", mpos_home_z_var),
+        ]:
+            frame = ttk.Frame(coord_frame)
+            frame.pack(fill="x", pady=(0, 3))
+            ttk.Label(frame, text=f"  MPos Home {axis} (mm):").pack(side="left")
+            ttk.Spinbox(
+                frame,
+                from_=-1000.0,
+                to=1000.0,
+                increment=1.0,
+                width=10,
+                textvariable=var,
+            ).pack(side="right")
+
+        # Max Travel
+        ttk.Label(
+            coord_frame, text="Max Travel (from MPos Home):", font=("Arial", 9, "bold")
+        ).pack(anchor="w", pady=(10, 5))
+        for axis, var in [
+            ("X", max_travel_x_var),
+            ("Y", max_travel_y_var),
+            ("Z", max_travel_z_var),
+        ]:
+            frame = ttk.Frame(coord_frame)
+            frame.pack(fill="x", pady=(0, 3))
+            ttk.Label(frame, text=f"  Max Travel {axis} (mm):").pack(side="left")
+            ttk.Spinbox(
+                frame,
+                from_=-1000.0,
+                to=1000.0,
+                increment=1.0,
+                width=10,
+                textvariable=var,
+            ).pack(side="right")
+
+        # WPos Home
+        ttk.Label(
+            coord_frame,
+            text="WPos Home (in MPos coordinates):",
+            font=("Arial", 9, "bold"),
+        ).pack(anchor="w", pady=(10, 5))
+        for axis, var in [
+            ("X", wpos_home_x_var),
+            ("Y", wpos_home_y_var),
+            ("Z", wpos_home_z_var),
+        ]:
+            frame = ttk.Frame(coord_frame)
+            frame.pack(fill="x", pady=(0, 3))
+            ttk.Label(frame, text=f"  WPos Home {axis} (mm):").pack(side="left")
+            ttk.Spinbox(
+                frame,
+                from_=-1000.0,
+                to=1000.0,
+                increment=0.1,
+                width=10,
+                textvariable=var,
+            ).pack(side="right")
 
         # Raise laser between paths checkbox
         raise_laser_var = tk.BooleanVar(
@@ -3454,10 +4752,20 @@ DXF Units: {self.dxf_units}"""
             self.gcode_settings["laser_power"] = laser_power_var.get()
             self.gcode_settings["cutting_z"] = cutting_z_var.get()
             self.gcode_settings["feedrate"] = feedrate_var.get()
-            self.gcode_settings["max_workspace_x"] = max_x_var.get()
-            self.gcode_settings["max_workspace_y"] = max_y_var.get()
+            # Save coordinate system settings
+            self.gcode_settings["mpos_home_x"] = mpos_home_x_var.get()
+            self.gcode_settings["mpos_home_y"] = mpos_home_y_var.get()
+            self.gcode_settings["mpos_home_z"] = mpos_home_z_var.get()
+            self.gcode_settings["max_travel_x"] = max_travel_x_var.get()
+            self.gcode_settings["max_travel_y"] = max_travel_y_var.get()
+            self.gcode_settings["max_travel_z"] = max_travel_z_var.get()
+            self.gcode_settings["wpos_home_x"] = wpos_home_x_var.get()
+            self.gcode_settings["wpos_home_y"] = wpos_home_y_var.get()
+            self.gcode_settings["wpos_home_z"] = wpos_home_z_var.get()
             self.gcode_settings["raise_laser_between_paths"] = raise_laser_var.get()
             self.gcode_settings["optimize_toolpath"] = optimize_toolpath_var.get()
+            # Update plot to reflect new workspace bounds
+            self.update_plot()
             settings_window.destroy()
 
         ttk.Button(button_frame, text="Save", command=save_settings).pack(
