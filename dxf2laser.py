@@ -318,7 +318,7 @@ Colors:
 
         # Connect motion event for selection rectangle
         self.canvas.mpl_connect("motion_notify_event", self.on_motion)
-        
+
         # Connect key press event for escape to clear selection
         self.canvas.mpl_connect("key_press_event", self.on_key_press)
 
@@ -1917,7 +1917,7 @@ Colors:
         self.update_selection_info()
 
         # Clear selection
-        self.selected_element_id = None
+        self.selected_element_ids.clear()
 
     def apply_offset(self):
         """Apply origin offset to all points"""
@@ -2382,7 +2382,7 @@ Colors:
 
     def on_key_press(self, event):
         """Handle keyboard events for selection"""
-        if event.key == 'escape':
+        if event.key == "escape":
             # Clear selection with escape key
             self.selected_element_ids.clear()
             self.selection_mode = False
@@ -2395,7 +2395,7 @@ Colors:
                 self.selection_rect = None
             self.update_plot_preserve_zoom()
             self.update_selection_info()
-    
+
     def on_click(self, event):
         """Handle mouse clicks on the plot - store position for click_release"""
         # Check if zoom or pan tool is active
@@ -2808,11 +2808,13 @@ Colors:
 
     def update_selection_info(self):
         """Update the selected element info display"""
-        if self.selected_element_id is None:
+        if not self.selected_element_ids:
             self.selected_info_var.set("None")
             return
 
-        element_data = self.element_data.get(self.selected_element_id)
+        # Show info for the first selected element if multiple are selected
+        element_id = next(iter(self.selected_element_ids))
+        element_data = self.element_data.get(element_id)
         if element_data:
             x, y, radius, geom_type, _ = element_data
             if geom_type == "CIRCLE":
@@ -2905,19 +2907,23 @@ Colors:
         self.update_selection_info()
 
     def remove_element(self):
-        """Remove selected element"""
-        if self.selected_element_id is None:
+        """Remove selected element(s)"""
+        if not self.selected_element_ids:
             messagebox.showwarning("Warning", "Please select an element first")
             return
 
         # Save state before making changes
         self.save_state()
 
-        self.removed_elements.add(self.selected_element_id)
-        self.engraved_elements.discard(
-            self.selected_element_id
-        )  # Remove from engraving if it was there
-        self.selected_element_id = None  # Clear selection since element is now removed
+        # Remove all selected elements
+        for element_id in self.selected_element_ids:
+            self.removed_elements.add(element_id)
+            self.engraved_elements.discard(
+                element_id
+            )  # Remove from engraving if it was there
+        
+        # Clear selection since elements are now removed
+        self.selected_element_ids.clear()
         self.update_plot_preserve_zoom()
         self.update_statistics()
         self.update_selection_info()
@@ -2927,7 +2933,7 @@ Colors:
         self.removed_elements.clear()
         self.engraved_elements.clear()
         self.clipped_elements.clear()
-        self.selected_element_id = None
+        self.selected_element_ids.clear()
         self.origin_offset = (0.0, 0.0)
         self.x_offset_var.set("0.0")
         self.y_offset_var.set("0.0")
@@ -2955,7 +2961,7 @@ Colors:
         self.engraved_elements.update(all_element_ids)
 
         # Clear current selection
-        self.selected_element_id = None
+        self.selected_element_ids.clear()
 
         # Update display
         self.update_plot()
