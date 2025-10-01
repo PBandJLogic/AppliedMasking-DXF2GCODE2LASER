@@ -1982,7 +1982,9 @@ Colors:
                 print(f"Processing element {element_id} for offset application")
                 # Handle different element_data structures
                 print(f"  Element {element_id} has {len(element_info)} components")
-                print(f"  Element type: {element_info[3] if len(element_info) > 3 else 'unknown'}")
+                print(
+                    f"  Element type: {element_info[3] if len(element_info) > 3 else 'unknown'}"
+                )
                 if len(element_info) == 4:
                     # Old format: (x, y, radius, geom_type)
                     x, y, radius, geom_type = element_info
@@ -2042,10 +2044,12 @@ Colors:
                         continue
                     new_x_coords.append(fx + x_offset)
                     new_y_coords.append(fy + y_offset)
-                
+
                 # If no valid coordinates were found, keep the original ones
                 if not new_x_coords or not new_y_coords:
-                    print(f"  Warning: No valid coordinates after offset for element {element_id}, keeping original")
+                    print(
+                        f"  Warning: No valid coordinates after offset for element {element_id}, keeping original"
+                    )
                     new_x_coords = x_coords
                     new_y_coords = y_coords
 
@@ -2272,9 +2276,16 @@ Colors:
                 # For closed polylines, ensure the closure is maintained
                 if geom_type in ["LWPOLYLINE", "POLYLINE"] and len(new_x_coords) > 2:
                     # Check if the original polyline was closed (first and last points were the same)
-                    if len(x_coords) > 2 and abs(x_coords[0] - x_coords[-1]) < 0.001 and abs(y_coords[0] - y_coords[-1]) < 0.001:
+                    if (
+                        len(x_coords) > 2
+                        and abs(x_coords[0] - x_coords[-1]) < 0.001
+                        and abs(y_coords[0] - y_coords[-1]) < 0.001
+                    ):
                         # Ensure the new polyline is also closed
-                        if abs(new_x_coords[0] - new_x_coords[-1]) > 0.001 or abs(new_y_coords[0] - new_y_coords[-1]) > 0.001:
+                        if (
+                            abs(new_x_coords[0] - new_x_coords[-1]) > 0.001
+                            or abs(new_y_coords[0] - new_y_coords[-1]) > 0.001
+                        ):
                             print(f"  Closing polyline for element {element_id}")
                             new_x_coords.append(new_x_coords[0])
                             new_y_coords.append(new_y_coords[0])
@@ -2282,14 +2293,36 @@ Colors:
                             if new_detailed_points and len(new_detailed_points) > 0:
                                 if isinstance(new_detailed_points, list):
                                     new_detailed_points.append(new_detailed_points[0])
-                
-                self.element_data[element_id] = (
-                    new_x_coords,
-                    new_y_coords,
-                    radius,
-                    geom_type,
-                    new_detailed_points,
-                )
+
+                # For ARC and CIRCLE entities, store center coordinates as single values, not lists
+                if geom_type in ["ARC", "CIRCLE"]:
+                    # These should have single center coordinates
+                    if len(new_x_coords) > 0 and len(new_y_coords) > 0:
+                        self.element_data[element_id] = (
+                            new_x_coords[0],  # Store as single value
+                            new_y_coords[0],  # Store as single value
+                            radius,
+                            geom_type,
+                            new_detailed_points,
+                        )
+                    else:
+                        # Fallback if coordinates are missing
+                        self.element_data[element_id] = (
+                            x_coords[0] if len(x_coords) > 0 else 0,
+                            y_coords[0] if len(y_coords) > 0 else 0,
+                            radius,
+                            geom_type,
+                            new_detailed_points,
+                        )
+                else:
+                    # For other entities (LINE, LWPOLYLINE, etc.), store as lists
+                    self.element_data[element_id] = (
+                        new_x_coords,
+                        new_y_coords,
+                        radius,
+                        geom_type,
+                        new_detailed_points,
+                    )
 
             print(f"Applied offset: ({x_offset}, {y_offset})")
             print(f"Updated {len(self.element_data)} elements in element_data")
