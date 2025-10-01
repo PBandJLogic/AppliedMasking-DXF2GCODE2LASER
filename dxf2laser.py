@@ -1800,7 +1800,9 @@ Colors:
 
             # Use many more segments for better resolution
             num_segments = 100  # More segments for accuracy
-            angle_step = angle_span / num_segments
+            # For angle_step, we always want the absolute value divided by num_segments
+            # The direction is handled in the loop
+            angle_step = abs(angle_span) / num_segments
 
             segments_added = 0
             segments_checked = 0
@@ -1813,7 +1815,11 @@ Colors:
 
             for i in range(num_segments + 1):
                 # Calculate point on arc
-                angle = start_angle + i * angle_step
+                # For CW arcs, we need to go in the negative direction
+                if ccw:
+                    angle = start_angle + i * angle_step
+                else:
+                    angle = start_angle - i * angle_step
                 pt_x = center_x + radius * math.cos(angle)
                 pt_y = center_y + radius * math.sin(angle)
 
@@ -3885,9 +3891,7 @@ DXF Units: {self.dxf_units}"""
                                 )
                                 print(f"  Start point: ({start_x:.3f}, {start_y:.3f})")
                                 print(f"  End point: ({end_x:.3f}, {end_y:.3f})")
-                                print(
-                                    f"  Direction: {'CCW' if ccw else 'CW'}"
-                                )
+                                print(f"  Direction: {'CCW' if ccw else 'CW'}")
 
                                 # Use unified arc G-code generation
                                 arc_gcode, new_x, new_y = self.generate_arc_gcode(
