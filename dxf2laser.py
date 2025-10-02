@@ -2562,8 +2562,10 @@ Colors:
                 rect_right = max(start_x, end_x)
                 rect_bottom = min(start_y, end_y)
                 rect_top = max(start_y, end_y)
-                
-                print(f"\nSelection rectangle: left={rect_left:.1f}, right={rect_right:.1f}, bottom={rect_bottom:.1f}, top={rect_top:.1f}")
+
+                print(
+                    f"\nSelection rectangle: left={rect_left:.1f}, right={rect_right:.1f}, bottom={rect_bottom:.1f}, top={rect_top:.1f}"
+                )
 
                 # Get unique elements for selection
                 unique_elements = {}
@@ -2575,7 +2577,7 @@ Colors:
                             "points": [],
                         }
                     unique_elements[element_id]["points"].append((x, y))
-                
+
                 print(f"Checking {len(unique_elements)} unique elements...")
 
                 # Select elements within rectangle
@@ -2601,16 +2603,69 @@ Colors:
                     elif geom_type == "ARC" and len(points) >= 1:
                         center_x, center_y = points[0]
                         radius = element_info["radius"]
-                        # Check if arc intersects with rectangle
-                        # For simplicity, check if the arc's bounding circle intersects
-                        in_rect = (
-                            center_x - radius <= rect_right
-                            and center_x + radius >= rect_left
-                            and center_y - radius <= rect_top
-                            and center_y + radius >= rect_bottom
-                        )
-                        if in_rect:
-                            print(f"  Arc {element_id} selected: center=({center_x:.1f},{center_y:.1f}), radius={radius:.3f}")
+                        
+                        # Get arc parameters from element data
+                        element_data = self.element_data.get(element_id)
+                        if element_data and len(element_data) >= 5:
+                            _, _, _, _, original_data = element_data
+                            if len(original_data) >= 6:
+                                _, _, _, start_angle, end_angle, _ = original_data
+                                
+                                # Check if the actual arc segment intersects with the rectangle
+                                # Sample points along the arc to check for intersection
+                                in_rect = False
+                                num_samples = 20  # Check 20 points along the arc
+                                
+                                for i in range(num_samples + 1):
+                                    # Calculate angle for this sample point
+                                    t = i / num_samples
+                                    
+                                    # Handle arc angle interpolation
+                                    start_angle_norm = start_angle % 360
+                                    end_angle_norm = end_angle % 360
+                                    
+                                    # Calculate the angle for this point
+                                    if start_angle_norm > end_angle_norm:
+                                        # Arc crosses 0 degrees
+                                        angle_span = (360 - start_angle_norm) + end_angle_norm
+                                        angle = start_angle_norm + t * angle_span
+                                        if angle >= 360:
+                                            angle -= 360
+                                    else:
+                                        # Normal arc
+                                        angle = start_angle_norm + t * (end_angle_norm - start_angle_norm)
+                                    
+                                    # Calculate point on arc
+                                    angle_rad = math.radians(angle)
+                                    px = center_x + radius * math.cos(angle_rad)
+                                    py = center_y + radius * math.sin(angle_rad)
+                                    
+                                    # Check if this point is in the rectangle
+                                    if (rect_left <= px <= rect_right and 
+                                        rect_bottom <= py <= rect_top):
+                                        in_rect = True
+                                        break
+                                
+                                if in_rect:
+                                    print(
+                                        f"  Arc {element_id} selected: center=({center_x:.1f},{center_y:.1f}), radius={radius:.3f}, angles={start_angle:.1f}°-{end_angle:.1f}°"
+                                    )
+                            else:
+                                # Fallback to bounding circle if arc data is incomplete
+                                in_rect = (
+                                    center_x - radius <= rect_right
+                                    and center_x + radius >= rect_left
+                                    and center_y - radius <= rect_top
+                                    and center_y + radius >= rect_bottom
+                                )
+                        else:
+                            # Fallback to bounding circle if no arc data
+                            in_rect = (
+                                center_x - radius <= rect_right
+                                and center_x + radius >= rect_left
+                                and center_y - radius <= rect_top
+                                and center_y + radius >= rect_bottom
+                            )
                     elif (
                         geom_type
                         in ["LINE", "LWPOLYLINE", "POLYLINE", "ELLIPSE", "SPLINE"]
