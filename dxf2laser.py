@@ -341,6 +341,11 @@ Colors:
             return
 
         try:
+            # Clear any existing element data before loading new file
+            self.element_data.clear()
+            if hasattr(self, "original_element_data"):
+                self.original_element_data.clear()
+            
             self.original_points = self.extract_geometry(file_path)
             self.current_points = self.original_points.copy()
             self.reset_selection()
@@ -1720,7 +1725,7 @@ Colors:
         # This ensures the angles correspond to the actual arc being drawn
         actual_start_angle = math.atan2(start_y - center_y, start_x - center_x)
         actual_end_angle = math.atan2(end_y - center_y, end_x - center_x)
-        
+
         # Use the recalculated angles instead of the passed ones
         start_angle = actual_start_angle
         end_angle = actual_end_angle
@@ -1734,7 +1739,9 @@ Colors:
         print(f"      End: ({end_x:.3f}, {end_y:.3f})")
         print(f"      Center: ({center_x:.3f}, {center_y:.3f})")
         print(f"      Radius: {radius:.3f}")
-        print(f"      Recalculated angles - Start: {math.degrees(start_angle):.1f}°, End: {math.degrees(end_angle):.1f}°")
+        print(
+            f"      Recalculated angles - Start: {math.degrees(start_angle):.1f}°, End: {math.degrees(end_angle):.1f}°"
+        )
 
         # Check if both start and end points are within workspace
         start_inside = self.is_within_workspace(start_x, start_y)
