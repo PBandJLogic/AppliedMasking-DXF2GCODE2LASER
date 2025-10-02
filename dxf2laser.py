@@ -345,7 +345,7 @@ Colors:
             self.element_data.clear()
             if hasattr(self, "original_element_data"):
                 self.original_element_data.clear()
-            
+
             self.original_points = self.extract_geometry(file_path)
             self.current_points = self.original_points.copy()
             self.reset_selection()
@@ -4326,7 +4326,7 @@ DXF Units: {self.dxf_units}"""
         """Show G-code preview window with visual toolpath plot and G-code text"""
         preview_window = tk.Toplevel(self.root)
         preview_window.title("G-code Toolpath Preview")
-        preview_window.geometry("1000x800")
+        preview_window.geometry("1400x900")  # Increased window size
         preview_window.transient(self.root)
         preview_window.grab_set()
 
@@ -4361,7 +4361,7 @@ DXF Units: {self.dxf_units}"""
         from matplotlib.figure import Figure
         import matplotlib.pyplot as plt
 
-        fig = Figure(figsize=(8, 5), dpi=100)
+        fig = Figure(figsize=(12, 8), dpi=100)  # Increased figure size
         ax = fig.add_subplot(111)
 
         # Parse G-code and create toolpath visualization
