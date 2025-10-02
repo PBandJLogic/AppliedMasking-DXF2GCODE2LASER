@@ -1707,7 +1707,7 @@ Colors:
             end_x, end_y: Arc end point
             center_x, center_y: Arc center
             radius: Arc radius
-            start_angle, end_angle: Arc angles in radians
+            start_angle, end_angle: Arc angles in radians (IGNORED - recalculated from points)
             ccw: True for counterclockwise, False for clockwise
             current_x, current_y: Current tool position
 
@@ -1715,6 +1715,15 @@ Colors:
             tuple: (gcode_lines, new_x, new_y) - G-code lines and new position
         """
         gcode_lines = []
+
+        # Recalculate angles from the actual start and end points
+        # This ensures the angles correspond to the actual arc being drawn
+        actual_start_angle = math.atan2(start_y - center_y, start_x - center_x)
+        actual_end_angle = math.atan2(end_y - center_y, end_x - center_x)
+        
+        # Use the recalculated angles instead of the passed ones
+        start_angle = actual_start_angle
+        end_angle = actual_end_angle
 
         # Determine G2 (clockwise) or G3 (counterclockwise)
         g_command = "G3" if ccw else "G2"
@@ -1725,6 +1734,7 @@ Colors:
         print(f"      End: ({end_x:.3f}, {end_y:.3f})")
         print(f"      Center: ({center_x:.3f}, {center_y:.3f})")
         print(f"      Radius: {radius:.3f}")
+        print(f"      Recalculated angles - Start: {math.degrees(start_angle):.1f}°, End: {math.degrees(end_angle):.1f}°")
 
         # Check if both start and end points are within workspace
         start_inside = self.is_within_workspace(start_x, start_y)
@@ -1775,7 +1785,7 @@ Colors:
             # The DXF arc goes from start_angle to end_angle in the specified direction
             # For CW arcs, the actual arc path is from start to end going clockwise
             # which means we traverse in the negative angular direction
-            
+
             if not ccw:  # Clockwise
                 # For CW, calculate the angle we need to traverse clockwise
                 angle_span = start_angle - end_angle
