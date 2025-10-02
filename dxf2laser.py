@@ -2562,6 +2562,8 @@ Colors:
                 rect_right = max(start_x, end_x)
                 rect_bottom = min(start_y, end_y)
                 rect_top = max(start_y, end_y)
+                
+                print(f"\nSelection rectangle: left={rect_left:.1f}, right={rect_right:.1f}, bottom={rect_bottom:.1f}, top={rect_top:.1f}")
 
                 # Get unique elements for selection
                 unique_elements = {}
@@ -2573,6 +2575,8 @@ Colors:
                             "points": [],
                         }
                     unique_elements[element_id]["points"].append((x, y))
+                
+                print(f"Checking {len(unique_elements)} unique elements...")
 
                 # Select elements within rectangle
                 for element_id, element_info in unique_elements.items():
@@ -2605,6 +2609,8 @@ Colors:
                             and center_y - radius <= rect_top
                             and center_y + radius >= rect_bottom
                         )
+                        if in_rect:
+                            print(f"  Arc {element_id} selected: center=({center_x:.1f},{center_y:.1f}), radius={radius:.3f}")
                     elif (
                         geom_type
                         in ["LINE", "LWPOLYLINE", "POLYLINE", "ELLIPSE", "SPLINE"]
@@ -2632,6 +2638,8 @@ Colors:
                 self.selection_rect = None
 
             self.selection_mode = False
+            print(f"Total selected elements: {len(self.selected_element_ids)}")
+            print(f"Selected element IDs: {sorted(self.selected_element_ids)}")
             self.update_plot_preserve_zoom()
             self.update_selection_info()
             return
