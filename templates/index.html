@@ -722,7 +722,11 @@ G0 X0 Y0 ; Return to origin</textarea>
                 .then(response => response.json())
                 .then(data => {
                     const gcode = data.success ? data.gcode : '';
-
+                    console.log('G-code fetched, length:', gcode.length);
+                    
+                    // Store gcode in the window for the button to access
+                    toolpathWindow.gcodeData = gcode;
+                    
                     toolpathWindow.document.write(`
                         <!DOCTYPE html>
                         <html>
@@ -787,6 +791,25 @@ G0 X0 Y0 ; Return to origin</textarea>
                                 <p>Elements marked for engraving: ${elementCount}</p>
                             </div>
                             <div class="content">
+                                <div class="button-container">
+                                    <button class="btn btn-success" onclick="
+                                        if (window.gcodeData) {
+                                            const blob = new Blob([window.gcodeData], { type: 'text/plain' });
+                                            const url = URL.createObjectURL(blob);
+                                            const a = document.createElement('a');
+                                            a.href = url;
+                                            a.download = 'dxf_gcode_' + new Date().toISOString().slice(0, 19).replace(/:/g, '-') + '.nc';
+                                            document.body.appendChild(a);
+                                            a.click();
+                                            URL.revokeObjectURL(url);
+                                            document.body.removeChild(a);
+                                        } else {
+                                            alert('G-code data not available');
+                                        }
+                                    ">Save G-code File</button>
+                                    <button class="btn" onclick="window.close()">Close Toolpath</button>
+                                </div>
+                                <hr style="margin: 20px 0; border: 1px solid #ecf0f1;">
                                 <div class="legend">
                                     <strong>Legend:</strong><br>
                                     <span style="color: green;">● Green lines with arrows = Positioning moves (G0) - laser off</span><br>
@@ -797,15 +820,14 @@ G0 X0 Y0 ; Return to origin</textarea>
                                 <div class="plot-container">
                                     <img src="data:image/png;base64,${plotImage}" alt="G-code Toolpath" />
                                 </div>
-                                <div class="button-container">
-                                    <button class="btn btn-success" onclick="window.opener.downloadGcodeFromPreview(\`${gcode.replace(/`/g, '\\`').replace(/\$/g, '\\$')}\`)">Save G-code File</button>
-                                    <button class="btn" onclick="window.close()">Close Toolpath</button>
-                                </div>
                             </div>
                         </body>
                         </html>
                     `);
                     toolpathWindow.document.close();
+                    
+                    // Set the gcode data after document is written
+                    toolpathWindow.gcodeData = gcode;
                 })
                 .catch(error => {
                     console.error('Error fetching G-code for toolpath window:', error);
@@ -872,6 +894,10 @@ G0 X0 Y0 ; Return to origin</textarea>
                                 <p>Elements marked for engraving: ${elementCount}</p>
                             </div>
                             <div class="content">
+                                <div class="button-container">
+                                    <button class="btn" onclick="window.close()">Close Toolpath</button>
+                                </div>
+                                <hr style="margin: 20px 0; border: 1px solid #ecf0f1;">
                                 <div class="legend">
                                     <strong>Legend:</strong><br>
                                     <span style="color: green;">● Green lines with arrows = Positioning moves (G0) - laser off</span><br>
@@ -881,9 +907,6 @@ G0 X0 Y0 ; Return to origin</textarea>
                                 </div>
                                 <div class="plot-container">
                                     <img src="data:image/png;base64,${plotImage}" alt="G-code Toolpath" />
-                                </div>
-                                <div class="button-container">
-                                    <button class="btn" onclick="window.close()">Close Toolpath</button>
                                 </div>
                             </div>
                         </body>
