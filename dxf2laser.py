@@ -2603,49 +2603,55 @@ Colors:
                     elif geom_type == "ARC" and len(points) >= 1:
                         center_x, center_y = points[0]
                         radius = element_info["radius"]
-                        
+
                         # Get arc parameters from element data
                         element_data = self.element_data.get(element_id)
                         if element_data and len(element_data) >= 5:
                             _, _, _, _, original_data = element_data
                             if len(original_data) >= 6:
                                 _, _, _, start_angle, end_angle, _ = original_data
-                                
+
                                 # Check if the actual arc segment intersects with the rectangle
                                 # Sample points along the arc to check for intersection
                                 in_rect = False
                                 num_samples = 20  # Check 20 points along the arc
-                                
+
                                 for i in range(num_samples + 1):
                                     # Calculate angle for this sample point
                                     t = i / num_samples
-                                    
+
                                     # Handle arc angle interpolation
                                     start_angle_norm = start_angle % 360
                                     end_angle_norm = end_angle % 360
-                                    
+
                                     # Calculate the angle for this point
                                     if start_angle_norm > end_angle_norm:
                                         # Arc crosses 0 degrees
-                                        angle_span = (360 - start_angle_norm) + end_angle_norm
+                                        angle_span = (
+                                            360 - start_angle_norm
+                                        ) + end_angle_norm
                                         angle = start_angle_norm + t * angle_span
                                         if angle >= 360:
                                             angle -= 360
                                     else:
                                         # Normal arc
-                                        angle = start_angle_norm + t * (end_angle_norm - start_angle_norm)
-                                    
+                                        angle = start_angle_norm + t * (
+                                            end_angle_norm - start_angle_norm
+                                        )
+
                                     # Calculate point on arc
                                     angle_rad = math.radians(angle)
                                     px = center_x + radius * math.cos(angle_rad)
                                     py = center_y + radius * math.sin(angle_rad)
-                                    
+
                                     # Check if this point is in the rectangle
-                                    if (rect_left <= px <= rect_right and 
-                                        rect_bottom <= py <= rect_top):
+                                    if (
+                                        rect_left <= px <= rect_right
+                                        and rect_bottom <= py <= rect_top
+                                    ):
                                         in_rect = True
                                         break
-                                
+
                                 if in_rect:
                                     print(
                                         f"  Arc {element_id} selected: center=({center_x:.1f},{center_y:.1f}), radius={radius:.3f}, angles={start_angle:.1f}°-{end_angle:.1f}°"
