@@ -717,47 +717,180 @@ G0 X0 Y0 ; Return to origin</textarea>
             const toolpathWindow = window.open('', 'toolpathPreview', 'width=1000,height=700,scrollbars=yes,resizable=yes');
             console.log('Toolpath window object:', toolpathWindow);
 
-            toolpathWindow.document.write(`
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <title>G-code Toolpath Preview</title>
-                    <style>
-                        body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
-                        .header { background: #2c3e50; color: white; padding: 15px; margin: -20px -20px 20px -20px; }
-                        .content { background: white; padding: 20px; border-radius: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); text-align: center; }
-                        .plot-container { margin: 20px 0; }
-                        .legend { background: #ecf0f1; padding: 10px; border-radius: 3px; margin-bottom: 15px; text-align: left; }
-                        .btn { background: #3498db; color: white; border: none; padding: 10px 20px; border-radius: 3px; cursor: pointer; margin: 5px; }
-                        .btn:hover { background: #2980b9; }
-                        img { max-width: 100%; height: auto; border: 1px solid #ddd; }
-                    </style>
-                </head>
-                <body>
-                    <div class="header">
-                        <h2>G-code Toolpath Preview</h2>
-                        <p>Elements marked for engraving: ${elementCount}</p>
-                    </div>
-                    <div class="content">
-                        <div class="legend">
-                            <strong>Legend:</strong><br>
-                            <span style="color: green;">● Green lines with arrows = Positioning moves (G0) - laser off</span><br>
-                            <span style="color: red;">● Red lines with arrows = Engraving moves (G1) - laser on</span><br>
-                            <span style="color: green;">● Green dot = Start position</span><br>
-                            <span style="color: #666;">→ Arrows show toolpath direction</span>
-                        </div>
-                        <div class="plot-container">
-                            <img src="data:image/png;base64,${plotImage}" alt="G-code Toolpath" style="max-width: 100%; height: auto;" />
-                        </div>
-                        <button class="btn" onclick="window.close()">Close Toolpath</button>
-    </div>
-</body>
+            // First, fetch the G-code to make it available for download
+            fetch('/preview_gcode')
+                .then(response => response.json())
+                .then(data => {
+                    const gcode = data.success ? data.gcode : '';
 
-</html>
-`);
-            console.log('Toolpath window content written');
-            toolpathWindow.document.close();
-            console.log('Toolpath window document closed');
+                    toolpathWindow.document.write(`
+                        <!DOCTYPE html>
+                        <html>
+                        <head>
+                            <title>G-code Toolpath Preview</title>
+                            <style>
+                                body { 
+                                    font-family: Arial, sans-serif; 
+                                    margin: 20px; 
+                                    background: #f5f5f5; 
+                                }
+                                .header { 
+                                    background: #2c3e50; 
+                                    color: white; 
+                                    padding: 15px; 
+                                    margin: -20px -20px 20px -20px;
+                                }
+                                .content { 
+                                    background: white; 
+                                    padding: 20px; 
+                                    border-radius: 5px; 
+                                    box-shadow: 0 2px 5px rgba(0,0,0,0.1); 
+                                    text-align: center; 
+                                }
+                                .plot-container { 
+                                    margin: 20px 0; 
+                                }
+                                .legend { 
+                                    background: #ecf0f1; 
+                                    padding: 10px; 
+                                    border-radius: 3px; 
+                                    margin-bottom: 15px; 
+                                    text-align: left; 
+                                }
+                                .button-container {
+                                    margin-top: 20px;
+                                    text-align: center;
+                                }
+                                .btn { 
+                                    background: #3498db; 
+                                    color: white; 
+                                    border: none; 
+                                    padding: 10px 20px; 
+                                    border-radius: 3px; 
+                                    cursor: pointer; 
+                                    margin: 5px;
+                                    font-size: 14px;
+                                }
+                                .btn:hover { background: #2980b9; }
+                                .btn-success { background: #27ae60; }
+                                .btn-success:hover { background: #229954; }
+                                img { 
+                                    max-width: 100%; 
+                                    height: auto; 
+                                    border: 1px solid #ddd; 
+                                }
+                            </style>
+                        </head>
+                        <body>
+                            <div class="header">
+                                <h2>G-code Toolpath Preview</h2>
+                                <p>Elements marked for engraving: ${elementCount}</p>
+                            </div>
+                            <div class="content">
+                                <div class="legend">
+                                    <strong>Legend:</strong><br>
+                                    <span style="color: green;">● Green lines with arrows = Positioning moves (G0) - laser off</span><br>
+                                    <span style="color: red;">● Red lines with arrows = Engraving moves (G1) - laser on</span><br>
+                                    <span style="color: green;">● Green dot = Start position</span><br>
+                                    <span style="color: #666;">→ Arrows show toolpath direction</span>
+                                </div>
+                                <div class="plot-container">
+                                    <img src="data:image/png;base64,${plotImage}" alt="G-code Toolpath" />
+                                </div>
+                                <div class="button-container">
+                                    <button class="btn btn-success" onclick="window.opener.downloadGcodeFromPreview(\`${gcode.replace(/`/g, '\\`').replace(/\$/g, '\\$')}\`)">Save G-code File</button>
+                                    <button class="btn" onclick="window.close()">Close Toolpath</button>
+                                </div>
+                            </div>
+                        </body>
+                        </html>
+                    `);
+                    toolpathWindow.document.close();
+                })
+                .catch(error => {
+                    console.error('Error fetching G-code for toolpath window:', error);
+                    // Fall back to showing toolpath without download button
+                    toolpathWindow.document.write(`
+                        <!DOCTYPE html>
+                        <html>
+                        <head>
+                            <title>G-code Toolpath Preview</title>
+                            <style>
+                                body { 
+                                    font-family: Arial, sans-serif; 
+                                    margin: 20px; 
+                                    background: #f5f5f5; 
+                                }
+                                .header { 
+                                    background: #2c3e50; 
+                                    color: white; 
+                                    padding: 15px; 
+                                    margin: -20px -20px 20px -20px;
+                                }
+                                .content { 
+                                    background: white; 
+                                    padding: 20px; 
+                                    border-radius: 5px; 
+                                    box-shadow: 0 2px 5px rgba(0,0,0,0.1); 
+                                    text-align: center; 
+                                }
+                                .plot-container { 
+                                    margin: 20px 0; 
+                                }
+                                .legend { 
+                                    background: #ecf0f1; 
+                                    padding: 10px; 
+                                    border-radius: 3px; 
+                                    margin-bottom: 15px; 
+                                    text-align: left; 
+                                }
+                                .button-container {
+                                    margin-top: 20px;
+                                    text-align: center;
+                                }
+                                .btn { 
+                                    background: #3498db; 
+                                    color: white; 
+                                    border: none; 
+                                    padding: 10px 20px; 
+                                    border-radius: 3px; 
+                                    cursor: pointer; 
+                                    margin: 5px;
+                                    font-size: 14px;
+                                }
+                                .btn:hover { background: #2980b9; }
+                                img { 
+                                    max-width: 100%; 
+                                    height: auto; 
+                                    border: 1px solid #ddd; 
+                                }
+                            </style>
+                        </head>
+                        <body>
+                            <div class="header">
+                                <h2>G-code Toolpath Preview</h2>
+                                <p>Elements marked for engraving: ${elementCount}</p>
+                            </div>
+                            <div class="content">
+                                <div class="legend">
+                                    <strong>Legend:</strong><br>
+                                    <span style="color: green;">● Green lines with arrows = Positioning moves (G0) - laser off</span><br>
+                                    <span style="color: red;">● Red lines with arrows = Engraving moves (G1) - laser on</span><br>
+                                    <span style="color: green;">● Green dot = Start position</span><br>
+                                    <span style="color: #666;">→ Arrows show toolpath direction</span>
+                                </div>
+                                <div class="plot-container">
+                                    <img src="data:image/png;base64,${plotImage}" alt="G-code Toolpath" />
+                                </div>
+                                <div class="button-container">
+                                    <button class="btn" onclick="window.close()">Close Toolpath</button>
+                                </div>
+                            </div>
+                        </body>
+                        </html>
+                    `);
+                    toolpathWindow.document.close();
+                });
         }
 
         function exportGcode() {
