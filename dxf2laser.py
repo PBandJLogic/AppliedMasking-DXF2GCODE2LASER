@@ -4484,12 +4484,12 @@ DXF Units: {self.dxf_units}"""
         # Embed plot in tkinter
         canvas = FigureCanvasTkAgg(fig, plot_frame)
         canvas.draw()
-        
+
         # Add navigation toolbar for zoom/pan functionality
         toolbar = NavigationToolbar2Tk(canvas, plot_frame)
         toolbar.update()
         toolbar.pack(side="bottom", fill="x")
-        
+
         # Pack canvas after toolbar to ensure toolbar stays visible
         canvas.get_tk_widget().pack(side="top", fill="both", expand=True)
 
