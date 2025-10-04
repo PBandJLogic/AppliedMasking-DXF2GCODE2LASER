@@ -31,6 +31,9 @@ class GCodeAdjuster:
 
         # GUI setup
         self.setup_gui()
+        
+        # Initialize radius calculation
+        self.update_expected_radius()
 
     def setup_gui(self):
         """Set up the GUI layout"""
@@ -60,12 +63,17 @@ class GCodeAdjuster:
             file_frame, text="Load G-code File", command=self.load_gcode_file
         ).pack(fill="x")
 
-        # Expected radius
-        radius_frame = ttk.LabelFrame(parent, text="Expected Radius", padding=10)
+        # Expected radius (calculated from left expected point)
+        radius_frame = ttk.LabelFrame(parent, text="Expected Radius (Auto-calculated)", padding=10)
         radius_frame.pack(fill="x", pady=(0, 10))
 
         self.expected_radius_var = tk.StringVar(value="224.066")
-        ttk.Entry(radius_frame, textvariable=self.expected_radius_var, width=20).pack()
+        radius_entry = ttk.Entry(radius_frame, textvariable=self.expected_radius_var, width=20, state="readonly")
+        radius_entry.pack()
+        
+        # Right point validation label
+        self.right_validation_label = ttk.Label(radius_frame, text="", foreground="red")
+        self.right_validation_label.pack()
 
         # Left Target section
         left_frame = ttk.LabelFrame(parent, text="Left Target", padding=10)
@@ -79,11 +87,17 @@ class GCodeAdjuster:
         self.left_expected_x_var = tk.StringVar(value="-222.959")
         self.left_expected_y_var = tk.StringVar(value="-22.250")
         ttk.Entry(
-            left_expected_frame, textvariable=self.left_expected_x_var, width=10
+            left_expected_frame, textvariable=self.left_expected_x_var, width=10, 
+            command=self.update_expected_radius
         ).pack(side="left", padx=(0, 5))
         ttk.Entry(
-            left_expected_frame, textvariable=self.left_expected_y_var, width=10
+            left_expected_frame, textvariable=self.left_expected_y_var, width=10,
+            command=self.update_expected_radius
         ).pack(side="left")
+        
+        # Bind the update function to variable changes
+        self.left_expected_x_var.trace('w', self.update_expected_radius)
+        self.left_expected_y_var.trace('w', self.update_expected_radius)
 
         # Left Target Actual
         ttk.Label(left_frame, text="Actual X, Y:", foreground="black").pack(anchor="w")
@@ -118,6 +132,10 @@ class GCodeAdjuster:
         ttk.Entry(
             right_expected_frame, textvariable=self.right_expected_y_var, width=10
         ).pack(side="left")
+        
+        # Bind the validation function to variable changes
+        self.right_expected_x_var.trace('w', self.validate_right_expected)
+        self.right_expected_y_var.trace('w', self.validate_right_expected)
 
         # Right Target Actual
         ttk.Label(right_frame, text="Actual X, Y:", foreground="black").pack(anchor="w")
@@ -264,7 +282,9 @@ class GCodeAdjuster:
 
         if self.adjusted_coords:
             # Plot adjusted toolpath with color coding
-            self.plot_gcode_toolpath(self.adjusted_coords, self.adjusted_move_types, "Adjusted", self.ax)
+            self.plot_gcode_toolpath(
+                self.adjusted_coords, self.adjusted_move_types, "Adjusted", self.ax
+            )
 
         # Set plot properties
         self.ax.set_xlabel("X (mm)")
@@ -282,6 +302,51 @@ class GCodeAdjuster:
         self.ax.autoscale_view()
 
         self.canvas.draw()
+
+    def update_expected_radius(self, *args):
+        """Calculate expected radius from left expected point"""
+        try:
+            left_x = float(self.left_expected_x_var.get())
+            left_y = float(self.left_expected_y_var.get())
+            
+            # Calculate radius from distance to origin
+            radius = np.sqrt(left_x**2 + left_y**2)
+            self.expected_radius_var.set(f"{radius:.3f}")
+            
+            # Validate right expected point
+            self.validate_right_expected()
+            
+        except ValueError:
+            # Invalid input, skip calculation
+            pass
+
+    def validate_right_expected(self, *args):
+        """Validate that right expected point matches the calculated radius"""
+        try:
+            left_x = float(self.left_expected_x_var.get())
+            left_y = float(self.left_expected_y_var.get())
+            right_x = float(self.right_expected_x_var.get())
+            right_y = float(self.right_expected_y_var.get())
+            
+            # Calculate expected radius from left point
+            expected_radius = np.sqrt(left_x**2 + left_y**2)
+            
+            # Calculate actual radius from right point
+            actual_radius = np.sqrt(right_x**2 + right_y**2)
+            
+            # Check if within tolerance
+            error = abs(actual_radius - expected_radius)
+            if error <= 0.01:
+                self.right_validation_label.config(text="✓ Valid", foreground="green")
+            else:
+                self.right_validation_label.config(
+                    text=f"✗ Error: {error:.3f}mm", 
+                    foreground="red"
+                )
+                
+        except ValueError:
+            # Invalid input, clear validation
+            self.right_validation_label.config(text="", foreground="red")
 
     def plot_gcode_toolpath(self, coords, move_types, label_prefix, ax):
         """Plot G-code toolpath with color coding for move types"""
@@ -388,9 +453,32 @@ class GCodeAdjuster:
                 self.original_gcode, actual_center, rotation_angle
             )
 
+            # Validate expected points
+            left_expected_x = float(self.left_expected_x_var.get())
+            left_expected_y = float(self.left_expected_y_var.get())
+            right_expected_x = float(self.right_expected_x_var.get())
+            right_expected_y = float(self.right_expected_y_var.get())
+            
+            # Calculate expected radius from left point
+            calculated_radius = np.sqrt(left_expected_x**2 + left_expected_y**2)
+            
+            # Calculate actual radius from right point
+            right_radius = np.sqrt(right_expected_x**2 + right_expected_y**2)
+            right_radius_error = abs(right_radius - calculated_radius)
+            
             # Display results
             results = f"""CALCULATION RESULTS
 ========================
+
+Expected Circle (from left point):
+  Radius: {calculated_radius:.3f} mm
+  Center: (0.000, 0.000) mm
+
+Right Point Validation:
+  Expected radius: {calculated_radius:.3f} mm
+  Actual radius: {right_radius:.3f} mm
+  Error: {right_radius_error:.3f} mm
+  Status: {'✓ Valid' if right_radius_error <= 0.01 else '✗ Error > 0.01mm'}
 
 Actual Circle Center:
   X: {actual_center[0]:.3f} mm
@@ -426,12 +514,11 @@ Transformation Applied:
 
     def calculate_corrections(self, left_actual, right_actual, expected_radius):
         """Calculate the center and rotation needed for correction"""
-        # Calculate the actual circle center
-        # For a circle, the center is equidistant from both points
+        # Calculate the actual circle center from the two actual points
         mid_x = (left_actual[0] + right_actual[0]) / 2
         mid_y = (left_actual[1] + right_actual[1]) / 2
 
-        # Distance between the two points
+        # Distance between the two actual points
         chord_length = np.sqrt(
             (right_actual[0] - left_actual[0]) ** 2
             + (right_actual[1] - left_actual[1]) ** 2
@@ -454,14 +541,27 @@ Transformation Applied:
         perp_x = -dy / chord_length
         perp_y = dx / chord_length
 
-        # Calculate center (there are two possible centers, we'll use one)
+        # Calculate actual center (there are two possible centers, we'll use one)
         actual_center_x = mid_x + perp_x * perpendicular_dist
         actual_center_y = mid_y + perp_y * perpendicular_dist
 
-        # Calculate rotation angle to align with expected circle at origin
-        # Expected circle is centered at (0, 0)
-        # We need to rotate so that the actual center aligns with origin
-        rotation_angle = -np.arctan2(actual_center_y, actual_center_x)
+        # Calculate rotation angle to align the chord direction
+        # Expected: left at (-X, Y), right at (+X, Y) - horizontal line
+        # Actual: left at (x1, y1), right at (x2, y2)
+        # We want to rotate the actual chord to match the expected horizontal direction
+        
+        # Expected direction (horizontal, left to right)
+        expected_dx = 1.0  # horizontal direction
+        expected_dy = 0.0
+        
+        # Actual direction (normalized)
+        actual_dx = dx / chord_length
+        actual_dy = dy / chord_length
+        
+        # Calculate rotation angle to align actual direction with expected direction
+        # This rotates the actual chord to be horizontal
+        rotation_angle = np.arctan2(expected_dx * actual_dy - expected_dy * actual_dx, 
+                                   expected_dx * actual_dx + expected_dy * actual_dy)
 
         return (actual_center_x, actual_center_y), rotation_angle
 
