@@ -4412,6 +4412,51 @@ DXF Units: {self.dxf_units}"""
         )
         title_label.pack(pady=(0, 10))
 
+        # Buttons frame - moved to top for better visibility
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(fill="x", pady=(0, 10))
+
+        def save_gcode():
+            """Save G-code to file automatically"""
+            import os
+            from datetime import datetime
+
+            # Generate automatic filename with timestamp
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"dxf_gcode_{timestamp}.nc"
+            save_file_path = os.path.join(os.getcwd(), filename)
+
+            print(f"Attempting to save G-code to: {save_file_path}")
+            print(
+                f"G-code content length: {len(preview_window.gcode_content)} characters"
+            )
+
+            try:
+                with open(save_file_path, "w") as f:
+                    f.write(preview_window.gcode_content)
+                print(f"Successfully saved G-code to: {save_file_path}")
+                messagebox.showinfo("Success", f"G-code exported to:\n{save_file_path}")
+                preview_window.destroy()
+            except Exception as e:
+                print(f"Error saving G-code: {str(e)}")
+                messagebox.showerror("Error", f"Failed to save G-code:\n{str(e)}")
+
+        def copy_gcode():
+            """Copy G-code to clipboard"""
+            preview_window.clipboard_clear()
+            preview_window.clipboard_append(preview_window.gcode_content)
+            messagebox.showinfo("Success", "G-code copied to clipboard")
+
+        ttk.Button(button_frame, text="Close", command=preview_window.destroy).pack(
+            side="left"
+        )
+        ttk.Button(button_frame, text="Save G-code", command=save_gcode).pack(
+            side="left", padx=(5, 0)
+        )
+        ttk.Button(button_frame, text="Copy G-code", command=copy_gcode).pack(
+            side="left", padx=(5, 0)
+        )
+
         # Create notebook for tabs
         notebook = ttk.Notebook(main_frame)
         notebook.pack(fill="both", expand=True, pady=(0, 10))
@@ -4482,51 +4527,6 @@ DXF Units: {self.dxf_units}"""
         # Bind focus events to the text widget
         gcode_text.bind("<Button-1>", lambda e: ensure_text_focus())
         gcode_text.bind("<FocusIn>", lambda e: ensure_text_focus())
-
-        # Buttons frame
-        button_frame = ttk.Frame(main_frame)
-        button_frame.pack(fill="x")
-
-        def save_gcode():
-            """Save G-code to file automatically"""
-            import os
-            from datetime import datetime
-
-            # Generate automatic filename with timestamp
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"dxf_gcode_{timestamp}.nc"
-            save_file_path = os.path.join(os.getcwd(), filename)
-
-            print(f"Attempting to save G-code to: {save_file_path}")
-            print(
-                f"G-code content length: {len(preview_window.gcode_content)} characters"
-            )
-
-            try:
-                with open(save_file_path, "w") as f:
-                    f.write(preview_window.gcode_content)
-                print(f"Successfully saved G-code to: {save_file_path}")
-                messagebox.showinfo("Success", f"G-code exported to:\n{save_file_path}")
-                preview_window.destroy()
-            except Exception as e:
-                print(f"Error saving G-code: {str(e)}")
-                messagebox.showerror("Error", f"Failed to save G-code:\n{str(e)}")
-
-        def copy_gcode():
-            """Copy G-code to clipboard"""
-            preview_window.clipboard_clear()
-            preview_window.clipboard_append(preview_window.gcode_content)
-            messagebox.showinfo("Success", "G-code copied to clipboard")
-
-        ttk.Button(button_frame, text="Copy G-code", command=copy_gcode).pack(
-            side="right", padx=(5, 0)
-        )
-        ttk.Button(button_frame, text="Save G-code", command=save_gcode).pack(
-            side="right", padx=(5, 0)
-        )
-        ttk.Button(button_frame, text="Close", command=preview_window.destroy).pack(
-            side="right"
-        )
 
     def plot_gcode_toolpath(self, gcode, ax):
         """Plot the G-code toolpath with color-coded moves"""
