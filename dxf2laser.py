@@ -4434,9 +4434,9 @@ DXF Units: {self.dxf_units}"""
                     ("G-code files", "*.nc"),
                     ("G-code files", "*.gcode"),
                     ("Text files", "*.txt"),
-                    ("All files", "*.*")
+                    ("All files", "*.*"),
                 ],
-                title="Save G-code File"
+                title="Save G-code File",
             )
 
             # If user cancelled, return
