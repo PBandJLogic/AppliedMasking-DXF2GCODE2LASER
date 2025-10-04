@@ -27,6 +27,7 @@ class GCodeAdjuster:
         self.original_coords = []
         self.original_move_types = []
         self.adjusted_coords = []
+        self.adjusted_move_types = []
 
         # GUI setup
         self.setup_gui()
@@ -262,14 +263,8 @@ class GCodeAdjuster:
             )
 
         if self.adjusted_coords:
-            # Plot adjusted toolpath in orange
-            adj_x, adj_y = (
-                zip(*self.adjusted_coords) if self.adjusted_coords else ([], [])
-            )
-            self.ax.plot(
-                adj_x, adj_y, "orange", linewidth=2, label="Adjusted", alpha=0.8
-            )
-            self.ax.scatter(adj_x, adj_y, c="orange", s=8, alpha=0.6)
+            # Plot adjusted toolpath with color coding
+            self.plot_gcode_toolpath(self.adjusted_coords, self.adjusted_move_types, "Adjusted", self.ax)
 
         # Set plot properties
         self.ax.set_xlabel("X (mm)")
@@ -303,31 +298,39 @@ class GCodeAdjuster:
             else:  # G1, G2, G3
                 g1_coords.append(coord)
 
-        # Plot G0 moves (positioning) in green
+        # Determine colors based on whether it's original or adjusted
+        if label_prefix == "Original":
+            g0_color = "green"
+            g1_color = "red"
+        else:  # Adjusted
+            g0_color = "blue"
+            g1_color = "orange"
+
+        # Plot G0 moves (positioning)
         if g0_coords:
             g0_x, g0_y = zip(*g0_coords)
             ax.plot(
                 g0_x,
                 g0_y,
-                "g-",
+                f"{g0_color[0]}-",
                 linewidth=2,
                 label=f"{label_prefix} - Positioning (G0)",
                 alpha=0.7,
             )
-            ax.scatter(g0_x, g0_y, c="green", s=8, alpha=0.5)
+            ax.scatter(g0_x, g0_y, c=g0_color, s=8, alpha=0.5)
 
-        # Plot G1+ moves (engraving) in red
+        # Plot G1+ moves (engraving)
         if g1_coords:
             g1_x, g1_y = zip(*g1_coords)
             ax.plot(
                 g1_x,
                 g1_y,
-                "r-",
+                f"{g1_color[0]}-",
                 linewidth=2,
                 label=f"{label_prefix} - Engraving (G1+)",
                 alpha=0.7,
             )
-            ax.scatter(g1_x, g1_y, c="red", s=8, alpha=0.5)
+            ax.scatter(g1_x, g1_y, c=g1_color, s=8, alpha=0.5)
 
     def adjust_gcode(self):
         """Calculate adjustments and modify G-code"""
@@ -374,10 +377,11 @@ class GCodeAdjuster:
             left_error = abs(left_distance - expected_radius)
             right_error = abs(right_distance - expected_radius)
 
-            # Apply transformations to coordinates
+            # Apply transformations to coordinates and preserve move types
             self.adjusted_coords = self.apply_transformations(
                 self.original_coords, actual_center, rotation_angle
             )
+            self.adjusted_move_types = self.original_move_types.copy()
 
             # Generate adjusted G-code
             self.adjusted_gcode = self.generate_adjusted_gcode(
