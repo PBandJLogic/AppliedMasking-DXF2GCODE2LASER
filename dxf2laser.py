@@ -4417,14 +4417,31 @@ DXF Units: {self.dxf_units}"""
         button_frame.pack(fill="x", pady=(0, 10))
 
         def save_gcode():
-            """Save G-code to file automatically"""
+            """Save G-code to file with user-specified filename"""
             import os
             from datetime import datetime
+            from tkinter import filedialog
 
-            # Generate automatic filename with timestamp
+            # Generate suggested filename with timestamp
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"dxf_gcode_{timestamp}.nc"
-            save_file_path = os.path.join(os.getcwd(), filename)
+            default_filename = f"dxf_gcode_{timestamp}.nc"
+
+            # Ask user for save location and filename
+            save_file_path = filedialog.asksaveasfilename(
+                defaultextension=".nc",
+                initialfile=default_filename,
+                filetypes=[
+                    ("G-code files", "*.nc"),
+                    ("G-code files", "*.gcode"),
+                    ("Text files", "*.txt"),
+                    ("All files", "*.*")
+                ],
+                title="Save G-code File"
+            )
+
+            # If user cancelled, return
+            if not save_file_path:
+                return
 
             print(f"Attempting to save G-code to: {save_file_path}")
             print(
