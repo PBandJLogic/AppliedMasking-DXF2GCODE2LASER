@@ -282,11 +282,12 @@ class GCodeAdjuster:
                 if y_pos is not None:
                     current_y = y_pos
 
-                # Add positioning move
+                # Add positioning move - always add if this is a G0 command with coordinates
                 if x_pos is not None or y_pos is not None:
                     coords.append((current_x, current_y))
                     move_types.append("G0")
 
+                # Always update last position for arc calculations
                 last_x = current_x
                 last_y = current_y
 
@@ -357,9 +358,13 @@ class GCodeAdjuster:
                     is_ccw = line_upper.startswith("G3")
 
                     # Check if this is a full circle (start and end points are very close)
-                    distance_between_points = np.sqrt((current_x - last_x)**2 + (current_y - last_y)**2)
-                    is_full_circle = distance_between_points < 0.001  # Points are essentially the same
-                    
+                    distance_between_points = np.sqrt(
+                        (current_x - last_x) ** 2 + (current_y - last_y) ** 2
+                    )
+                    is_full_circle = (
+                        distance_between_points < 0.001
+                    )  # Points are essentially the same
+
                     # Calculate arc span - handle full circles properly
                     if is_full_circle:
                         # This is a full circle
@@ -383,16 +388,21 @@ class GCodeAdjuster:
 
                     # Break arc into segments for visualization (use 5-degree steps)
                     num_segments = max(8, int(abs(arc_span) / np.radians(5)))
-                    
+
                     # Ensure we have enough segments for smooth visualization
-                    if is_full_circle or abs(arc_span) > 2 * np.pi * 0.99:  # Full circle or nearly full circle
-                        num_segments = max(72, num_segments)  # At least 72 segments for full circle
-                    
+                    if (
+                        is_full_circle or abs(arc_span) > 2 * np.pi * 0.99
+                    ):  # Full circle or nearly full circle
+                        num_segments = max(
+                            72, num_segments
+                        )  # At least 72 segments for full circle
+
                     angle_step = (end_angle - start_angle) / num_segments
 
-                    # Generate arc segments
-                    prev_arc_x = last_x
-                    prev_arc_y = last_y
+                    # Generate arc segments - start from the actual start position
+                    # Add the start point of the arc first
+                    coords.append((last_x, last_y))
+                    move_types.append("G1")  # Arcs are treated as engraving moves
 
                     for i in range(1, num_segments + 1):
                         angle = start_angle + i * angle_step
@@ -403,9 +413,6 @@ class GCodeAdjuster:
                         coords.append((arc_x, arc_y))
                         move_types.append("G1")  # Arcs are treated as engraving moves
 
-                        prev_arc_x = arc_x
-                        prev_arc_y = arc_y
-                    
                     # Ensure the final point matches the end point exactly for closure
                     if is_full_circle:
                         # For full circles, add the start point again to ensure closure
