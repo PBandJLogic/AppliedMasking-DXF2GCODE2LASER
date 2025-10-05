@@ -90,7 +90,7 @@ class GCodeAdjuster:
         left_frame.pack(fill="x", pady=(0, 10))
 
         # Left Target Expected
-        ttk.Label(left_frame, text="Expected X, Y:", foreground="gray").pack(anchor="w")
+        ttk.Label(left_frame, text="Expected X, Y:", foreground="orange").pack(anchor="w")
         left_expected_frame = ttk.Frame(left_frame)
         left_expected_frame.pack(fill="x", pady=(0, 5))
 
@@ -126,7 +126,7 @@ class GCodeAdjuster:
         right_frame.pack(fill="x", pady=(0, 10))
 
         # Right Target Expected
-        ttk.Label(right_frame, text="Expected X, Y:", foreground="gray").pack(
+        ttk.Label(right_frame, text="Expected X, Y:", foreground="orange").pack(
             anchor="w"
         )
         right_expected_frame = ttk.Frame(right_frame)
@@ -243,36 +243,152 @@ class GCodeAdjuster:
             messagebox.showerror("Error", f"Failed to load G-code file:\n{str(e)}")
 
     def parse_gcode_coordinates(self, gcode):
-        """Parse G-code and extract X,Y coordinates with move types"""
+        """Parse G-code and extract X,Y coordinates with move types, handling arcs"""
         coords = []
         move_types = []
         lines = gcode.split("\n")
 
         current_x = 0.0
         current_y = 0.0
+        last_x = 0.0
+        last_y = 0.0
 
         for line in lines:
-            line = line.strip()
-            if not line or line.startswith(";") or line.startswith("("):
+            line_upper = line.upper().strip()
+            if not line_upper or line_upper.startswith(";") or line_upper.startswith("("):
                 continue
 
-            # Parse X and Y coordinates
-            x_match = re.search(r"X([+-]?\d+\.?\d*)", line)
-            y_match = re.search(r"Y([+-]?\d+\.?\d*)", line)
+            # Parse G0 (positioning) moves
+            if line_upper.startswith("G0"):
+                x_pos = None
+                y_pos = None
 
-            if x_match:
-                current_x = float(x_match.group(1))
-            if y_match:
-                current_y = float(y_match.group(1))
+                # Extract X and Y coordinates (handle commas)
+                parts = line_upper.replace(",", " ").split()
+                for part in parts:
+                    if part.startswith("X"):
+                        x_pos = float(part[1:])
+                    elif part.startswith("Y"):
+                        y_pos = float(part[1:])
 
-            # Determine move type and add coordinate if this line has movement
-            if x_match or y_match:
-                if "G0" in line:
+                if x_pos is not None:
+                    current_x = x_pos
+                if y_pos is not None:
+                    current_y = y_pos
+
+                # Add positioning move
+                if x_pos is not None or y_pos is not None:
                     coords.append((current_x, current_y))
                     move_types.append("G0")
-                elif "G1" in line or "G2" in line or "G3" in line:
+
+                last_x = current_x
+                last_y = current_y
+
+            # Parse G1 (engraving) moves
+            elif line_upper.startswith("G1"):
+                x_pos = None
+                y_pos = None
+
+                # Extract X and Y coordinates (handle commas)
+                parts = line_upper.replace(",", " ").split()
+                for part in parts:
+                    if part.startswith("X"):
+                        x_pos = float(part[1:])
+                    elif part.startswith("Y"):
+                        y_pos = float(part[1:])
+
+                if x_pos is not None:
+                    current_x = x_pos
+                if y_pos is not None:
+                    current_y = y_pos
+
+                # Add engraving move
+                if x_pos is not None or y_pos is not None:
                     coords.append((current_x, current_y))
                     move_types.append("G1")
+
+                last_x = current_x
+                last_y = current_y
+
+            # Parse G2 (clockwise arc) and G3 (counterclockwise arc) moves
+            elif line_upper.startswith("G2") or line_upper.startswith("G3"):
+                x_pos = None
+                y_pos = None
+                i_offset = None
+                j_offset = None
+
+                # Extract X, Y, I, J coordinates (handle commas)
+                parts = line_upper.replace(",", " ").split()
+                for part in parts:
+                    if part.startswith("X"):
+                        x_pos = float(part[1:])
+                    elif part.startswith("Y"):
+                        y_pos = float(part[1:])
+                    elif part.startswith("I"):
+                        i_offset = float(part[1:])
+                    elif part.startswith("J"):
+                        j_offset = float(part[1:])
+
+                if x_pos is not None:
+                    current_x = x_pos
+                if y_pos is not None:
+                    current_y = y_pos
+
+                # Calculate arc if we have I and J offsets
+                if i_offset is not None and j_offset is not None:
+                    # Calculate center of arc
+                    center_x = last_x + i_offset
+                    center_y = last_y + j_offset
+
+                    # Calculate start and end angles
+                    start_angle = np.arctan2(last_y - center_y, last_x - center_x)
+                    end_angle = np.arctan2(current_y - center_y, current_x - center_x)
+
+                    # Calculate radius
+                    radius = np.sqrt(i_offset**2 + j_offset**2)
+
+                    # Determine arc direction (G2 = CW, G3 = CCW)
+                    is_ccw = line_upper.startswith("G3")
+
+                    # Calculate arc span
+                    if is_ccw:
+                        # Counterclockwise
+                        if end_angle <= start_angle:
+                            end_angle += 2 * np.pi
+                        arc_span = end_angle - start_angle
+                    else:
+                        # Clockwise
+                        if end_angle >= start_angle:
+                            end_angle -= 2 * np.pi
+                        arc_span = start_angle - end_angle
+
+                    # Break arc into segments for visualization (use 5-degree steps)
+                    num_segments = max(8, int(abs(arc_span) / np.radians(5)))
+                    angle_step = (end_angle - start_angle) / num_segments
+
+                    # Generate arc segments
+                    prev_arc_x = last_x
+                    prev_arc_y = last_y
+
+                    for i in range(1, num_segments + 1):
+                        angle = start_angle + i * angle_step
+                        arc_x = center_x + radius * np.cos(angle)
+                        arc_y = center_y + radius * np.sin(angle)
+
+                        # Add segment to coordinates
+                        coords.append((arc_x, arc_y))
+                        move_types.append("G1")  # Arcs are treated as engraving moves
+
+                        prev_arc_x = arc_x
+                        prev_arc_y = arc_y
+                else:
+                    # No I/J offsets, treat as straight line (fallback)
+                    if x_pos is not None or y_pos is not None:
+                        coords.append((current_x, current_y))
+                        move_types.append("G1")
+
+                last_x = current_x
+                last_y = current_y
 
         return coords, move_types
 
@@ -614,45 +730,122 @@ Transformation Applied:
         return adjusted
 
     def generate_adjusted_gcode(self, original_gcode, center, rotation_angle):
-        """Generate adjusted G-code with new coordinates"""
+        """Generate adjusted G-code with new coordinates, handling arcs"""
         lines = original_gcode.split("\n")
         adjusted_lines = []
 
+        current_x = 0.0
+        current_y = 0.0
+        last_x = 0.0
+        last_y = 0.0
+
         for line in lines:
             adjusted_line = line
+            line_upper = line.upper().strip()
 
-            # Check if line contains X or Y coordinates
-            x_match = re.search(r"X([+-]?\d+\.?\d*)", line)
-            y_match = re.search(r"Y([+-]?\d+\.?\d*)", line)
+            # Skip comments and empty lines
+            if not line_upper or line_upper.startswith(";") or line_upper.startswith("("):
+                adjusted_lines.append(adjusted_line)
+                continue
 
-            if x_match or y_match:
-                # Extract current coordinates
-                current_x = float(x_match.group(1)) if x_match else 0.0
-                current_y = float(y_match.group(1)) if y_match else 0.0
+            # Apply transformations based on move type
+            if line_upper.startswith("G0") or line_upper.startswith("G1"):
+                adjusted_line = self.transform_linear_move(line, center, rotation_angle)
+                adjusted_lines.append(adjusted_line)
+            elif line_upper.startswith("G2") or line_upper.startswith("G3"):
+                adjusted_line = self.transform_arc_move(line, center, rotation_angle, last_x, last_y)
+                adjusted_lines.append(adjusted_line)
+            else:
+                adjusted_lines.append(adjusted_line)
 
-                # Apply transformation
-                tx = current_x - center[0]
-                ty = current_y - center[1]
-
-                cos_r = np.cos(rotation_angle)
-                sin_r = np.sin(rotation_angle)
-
-                new_x = tx * cos_r - ty * sin_r
-                new_y = tx * sin_r + ty * cos_r
-
-                # Replace coordinates in line
-                if x_match:
-                    adjusted_line = re.sub(
-                        r"X[+-]?\d+\.?\d*", f"X{new_x:.6f}", adjusted_line
-                    )
-                if y_match:
-                    adjusted_line = re.sub(
-                        r"Y[+-]?\d+\.?\d*", f"Y{new_y:.6f}", adjusted_line
-                    )
-
-            adjusted_lines.append(adjusted_line)
+            # Update position tracking
+            x_match = re.search(r"X([+-]?\d+\.?\d*)", line_upper)
+            y_match = re.search(r"Y([+-]?\d+\.?\d*)", line_upper)
+            
+            if x_match:
+                last_x = float(x_match.group(1))
+            if y_match:
+                last_y = float(y_match.group(1))
 
         return "\n".join(adjusted_lines)
+
+    def transform_linear_move(self, line, center, rotation_angle):
+        """Transform coordinates in a linear G-code move (G0/G1)"""
+        # Extract coordinates
+        x_match = re.search(r"X([+-]?\d+\.?\d*)", line)
+        y_match = re.search(r"Y([+-]?\d+\.?\d*)", line)
+
+        if not x_match and not y_match:
+            return line  # No coordinates to transform
+
+        # Get current coordinates
+        current_x = float(x_match.group(1)) if x_match else 0.0
+        current_y = float(y_match.group(1)) if y_match else 0.0
+
+        # Apply transformations
+        adjusted_x, adjusted_y = self.apply_transformations(
+            [(current_x, current_y)], center, rotation_angle
+        )[0]
+
+        # Replace coordinates in the line
+        adjusted_line = line
+        if x_match:
+            adjusted_line = re.sub(r"X[+-]?\d+\.?\d*", f"X{adjusted_x:.6f}", adjusted_line)
+        if y_match:
+            adjusted_line = re.sub(r"Y[+-]?\d+\.?\d*", f"Y{adjusted_y:.6f}", adjusted_line)
+
+        return adjusted_line
+
+    def transform_arc_move(self, line, center, rotation_angle, last_x, last_y):
+        """Transform coordinates in an arc G-code move (G2/G3)"""
+        # Extract coordinates
+        x_match = re.search(r"X([+-]?\d+\.?\d*)", line)
+        y_match = re.search(r"Y([+-]?\d+\.?\d*)", line)
+        i_match = re.search(r"I([+-]?\d+\.?\d*)", line)
+        j_match = re.search(r"J([+-]?\d+\.?\d*)", line)
+
+        if not (x_match or y_match) and not (i_match or j_match):
+            return line  # No coordinates to transform
+
+        # Get current coordinates
+        current_x = float(x_match.group(1)) if x_match else last_x
+        current_y = float(y_match.group(1)) if y_match else last_y
+        i_offset = float(i_match.group(1)) if i_match else 0.0
+        j_offset = float(j_match.group(1)) if j_match else 0.0
+
+        # Transform the start point (last position)
+        adjusted_start_x, adjusted_start_y = self.apply_transformations(
+            [(last_x, last_y)], center, rotation_angle
+        )[0]
+
+        # Transform the end point
+        adjusted_end_x, adjusted_end_y = self.apply_transformations(
+            [(current_x, current_y)], center, rotation_angle
+        )[0]
+
+        # Transform the arc center
+        arc_center_x = last_x + i_offset
+        arc_center_y = last_y + j_offset
+        adjusted_center_x, adjusted_center_y = self.apply_transformations(
+            [(arc_center_x, arc_center_y)], center, rotation_angle
+        )[0]
+
+        # Calculate new I,J offsets relative to adjusted start point
+        new_i_offset = adjusted_center_x - adjusted_start_x
+        new_j_offset = adjusted_center_y - adjusted_start_y
+
+        # Replace coordinates in the line
+        adjusted_line = line
+        if x_match:
+            adjusted_line = re.sub(r"X[+-]?\d+\.?\d*", f"X{adjusted_end_x:.6f}", adjusted_line)
+        if y_match:
+            adjusted_line = re.sub(r"Y[+-]?\d+\.?\d*", f"Y{adjusted_end_y:.6f}", adjusted_line)
+        if i_match:
+            adjusted_line = re.sub(r"I[+-]?\d+\.?\d*", f"I{new_i_offset:.6f}", adjusted_line)
+        if j_match:
+            adjusted_line = re.sub(r"J[+-]?\d+\.?\d*", f"J{new_j_offset:.6f}", adjusted_line)
+
+        return adjusted_line
 
     def save_adjusted_gcode(self):
         """Save the adjusted G-code to a new file"""
