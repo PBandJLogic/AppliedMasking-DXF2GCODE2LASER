@@ -107,8 +107,6 @@ class GCodeAdjuster:
             width=10,
         ).pack(side="left")
 
-        # Bind the update function to variable changes (will be set up after GUI is complete)
-
         # Left Target Actual
         ttk.Label(left_frame, text="Actual X, Y:", foreground="black").pack(anchor="w")
         left_actual_frame = ttk.Frame(left_frame)
