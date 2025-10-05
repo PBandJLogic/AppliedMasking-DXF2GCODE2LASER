@@ -357,45 +357,26 @@ class GCodeAdjuster:
                     # Determine arc direction (G2 = CW, G3 = CCW)
                     is_ccw = line_upper.startswith("G3")
 
-                    # Check if this is a full circle (start and end points are very close)
-                    distance_between_points = np.sqrt(
-                        (current_x - last_x) ** 2 + (current_y - last_y) ** 2
-                    )
-                    is_full_circle = (
-                        distance_between_points < 0.001
-                    )  # Points are essentially the same
-
-                    # Calculate arc span - handle full circles properly
-                    if is_full_circle:
-                        # This is a full circle
-                        if is_ccw:
-                            end_angle = start_angle + 2 * np.pi
-                        else:
-                            end_angle = start_angle - 2 * np.pi
-                        arc_span = 2 * np.pi
+                    # Calculate arc span - handle arc direction properly
+                    if is_ccw:
+                        # Counterclockwise
+                        if end_angle <= start_angle:
+                            end_angle += 2 * np.pi
+                        arc_span = end_angle - start_angle
                     else:
-                        # Regular arc
-                        if is_ccw:
-                            # Counterclockwise
-                            if end_angle <= start_angle:
-                                end_angle += 2 * np.pi
-                            arc_span = end_angle - start_angle
-                        else:
-                            # Clockwise
-                            if end_angle >= start_angle:
-                                end_angle -= 2 * np.pi
-                            arc_span = start_angle - end_angle
+                        # Clockwise
+                        if end_angle >= start_angle:
+                            end_angle -= 2 * np.pi
+                        arc_span = start_angle - end_angle
 
                     # Break arc into segments for visualization (use 5-degree steps)
                     num_segments = max(8, int(abs(arc_span) / np.radians(5)))
 
                     # Ensure we have enough segments for smooth visualization
-                    if (
-                        is_full_circle or abs(arc_span) > 2 * np.pi * 0.99
-                    ):  # Full circle or nearly full circle
+                    if abs(arc_span) > 2 * np.pi * 0.99:  # Nearly full circle
                         num_segments = max(
                             72, num_segments
-                        )  # At least 72 segments for full circle
+                        )  # At least 72 segments for nearly full circle
 
                     angle_step = (end_angle - start_angle) / num_segments
 
@@ -408,9 +389,10 @@ class GCodeAdjuster:
                         # Add segment to coordinates
                         coords.append((arc_x, arc_y))
                         move_types.append("G1")  # Arcs are treated as engraving moves
-
-                    # For full circles, the arc segments should naturally close the circle
-                    # No need to add extra closure points
+                    
+                    # Ensure the last arc segment ends exactly at the target point
+                    # This handles any floating-point precision issues
+                    coords[-1] = (current_x, current_y)
                 else:
                     # No I/J offsets, treat as straight line (fallback)
                     if x_pos is not None or y_pos is not None:
