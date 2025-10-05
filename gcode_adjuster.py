@@ -496,7 +496,9 @@ class GCodeAdjuster:
                 float(self.left_expected_x_var.get()),
                 float(self.left_expected_y_var.get()),
             )
-            expected_radius = np.sqrt(left_expected[0] ** 2 + left_expected[1] ** 2)
+            expected_radius_left = np.sqrt(
+                left_expected[0] ** 2 + left_expected[1] ** 2
+            )
             left_actual = (
                 float(self.left_actual_x_var.get()),
                 float(self.left_actual_y_var.get()),
@@ -504,6 +506,9 @@ class GCodeAdjuster:
             right_expected = (
                 float(self.right_expected_x_var.get()),
                 float(self.right_expected_y_var.get()),
+            )
+            expected_radius_right = np.sqrt(
+                right_expected[0] ** 2 + right_expected[1] ** 2
             )
             right_actual = (
                 float(self.right_actual_x_var.get()),
@@ -519,7 +524,7 @@ class GCodeAdjuster:
 
             # Calculate actual circle center and rotation
             actual_center, rotation_angle = self.calculate_corrections(
-                left_actual, right_actual, expected_radius
+                left_actual, right_actual, expected_radius_left
             )
 
             # Calculate distances and errors
@@ -532,8 +537,8 @@ class GCodeAdjuster:
                 + (right_actual[1] - actual_center[1]) ** 2
             )
 
-            left_error = abs(left_distance - expected_radius)
-            right_error = abs(right_distance - expected_radius)
+            left_error = abs(left_distance - expected_radius_left)
+            right_error = abs(right_distance - expected_radius_right)
 
             # Apply transformations to line segments
             self.adjusted_positioning_lines = self.apply_transformations_to_lines(
@@ -547,47 +552,31 @@ class GCodeAdjuster:
             self.adjusted_gcode = self.generate_adjusted_gcode(
                 self.original_gcode, actual_center, rotation_angle
             )
-
-            # Validate expected points
-            left_expected_x = float(self.left_expected_x_var.get())
-            left_expected_y = float(self.left_expected_y_var.get())
-            right_expected_x = float(self.right_expected_x_var.get())
-            right_expected_y = float(self.right_expected_y_var.get())
-
-            # Calculate expected radius from left point
-            calculated_radius = np.sqrt(left_expected_x**2 + left_expected_y**2)
-
-            # Calculate actual radius from right point
-            right_radius = np.sqrt(right_expected_x**2 + right_expected_y**2)
-            right_radius_error = abs(right_radius - calculated_radius)
-
             # Display results
             results = f"""CALCULATION RESULTS
 ========================
 
 Expected Circle (from left point):
-  Radius: {calculated_radius:.3f} mm
+  Left Radius:      {expected_radius_left:.3f} mm
+  Right Radius:     {expected_radius_right:.3f} mm
+  Error in Radius:  {abs(expected_radius_left-expected_radius_right):.3f} mm
   Center: (0.000, 0.000) mm
 
+Left Point Validation:
+  Actual radius: {left_distance:.3f} mm
+  Error: {left_error:.3f} mm
+  Status: {'✓ Valid' if left_error <= 0.01 else '✗ Error > 0.01mm'}
+
 Right Point Validation:
-  Expected radius: {calculated_radius:.3f} mm
-  Actual radius: {right_radius:.3f} mm
-  Error: {right_radius_error:.3f} mm
-  Status: {'✓ Valid' if right_radius_error <= 0.01 else '✗ Error > 0.01mm'}
+  Actual radius: {right_distance:.3f} mm
+  Error: {right_error:.3f} mm
+  Status: {'✓ Valid' if right_error <= 0.01 else '✗ Error > 0.01mm'}
 
 Actual Circle Center:
   X: {actual_center[0]:.3f} mm
   Y: {actual_center[1]:.3f} mm
 
 Rotation Angle: {np.degrees(rotation_angle):.3f} degrees
-
-Distance to Left Target: {left_distance:.3f} mm
-Expected Radius: {expected_radius:.3f} mm
-Left Error: {left_error:.3f} mm
-
-Distance to Right Target: {right_distance:.3f} mm
-Expected Radius: {expected_radius:.3f} mm
-Right Error: {right_error:.3f} mm
 
 Transformation Applied:
 - Translation: ({actual_center[0]:.3f}, {actual_center[1]:.3f})
