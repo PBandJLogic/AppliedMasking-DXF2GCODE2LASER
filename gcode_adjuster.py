@@ -105,8 +105,8 @@ class GCodeAdjuster:
         ).pack(side="left")
 
         # Bind the update function to variable changes
-        self.left_expected_x_var.trace("w", self.update_expected_radius)
-        self.left_expected_y_var.trace("w", self.update_expected_radius)
+        self.left_expected_x_var.trace("w", self._update_radius_callback)
+        self.left_expected_y_var.trace("w", self._update_radius_callback)
 
         # Left Target Actual
         ttk.Label(left_frame, text="Actual X, Y:", foreground="black").pack(anchor="w")
@@ -143,8 +143,8 @@ class GCodeAdjuster:
         ).pack(side="left")
 
         # Bind the validation function to variable changes
-        self.right_expected_x_var.trace("w", self.validate_right_expected)
-        self.right_expected_y_var.trace("w", self.validate_right_expected)
+        self.right_expected_x_var.trace("w", self._validate_right_callback)
+        self.right_expected_y_var.trace("w", self._validate_right_callback)
 
         # Right Target Actual
         ttk.Label(right_frame, text="Actual X, Y:", foreground="black").pack(anchor="w")
@@ -355,6 +355,14 @@ class GCodeAdjuster:
         except ValueError:
             # Invalid input, clear validation
             self.right_validation_label.config(text="", foreground="red")
+
+    def _update_radius_callback(self, *args):
+        """Wrapper callback for trace method"""
+        self.update_expected_radius()
+
+    def _validate_right_callback(self, *args):
+        """Wrapper callback for trace method"""
+        self.validate_right_expected()
 
     def plot_gcode_toolpath(self, coords, move_types, label_prefix, ax):
         """Plot G-code toolpath with color coding for move types"""
