@@ -32,9 +32,6 @@ class GCodeAdjuster:
         # GUI setup
         self.setup_gui()
 
-        # Initialize radius calculation
-        self.update_expected_radius()
-
     def setup_gui(self):
         """Set up the GUI layout"""
         # Main container
@@ -66,23 +63,11 @@ class GCodeAdjuster:
             file_frame, text="Load G-code File", command=self.load_gcode_file
         ).pack(fill="x")
 
-        # Expected radius (calculated from left expected point)
-        radius_frame = ttk.LabelFrame(
-            parent, text="Expected Radius (Auto-calculated)", padding=10
-        )
-        radius_frame.pack(fill="x", pady=(0, 10))
-
-        self.expected_radius_var = tk.StringVar(value="224.066")
-        radius_entry = ttk.Entry(
-            radius_frame,
-            textvariable=self.expected_radius_var,
-            width=20,
-            state="readonly",
-        )
-        radius_entry.pack()
-
-        # Right point validation label
-        self.right_validation_label = ttk.Label(radius_frame, text="", foreground="red")
+        # Right point validation label (standalone)
+        validation_frame = ttk.LabelFrame(parent, text="Validation", padding=10)
+        validation_frame.pack(fill="x", pady=(0, 10))
+        
+        self.right_validation_label = ttk.Label(validation_frame, text="", foreground="red")
         self.right_validation_label.pack()
 
         # Left Target section
@@ -437,32 +422,15 @@ class GCodeAdjuster:
     def setup_trace_callbacks(self):
         """Set up trace callbacks for real-time updates"""
         try:
-            # Bind the update function to variable changes
-            self.left_expected_x_var.trace("w", self._update_radius_callback)
-            self.left_expected_y_var.trace("w", self._update_radius_callback)
+            # Bind the validation function to variable changes
+            self.left_expected_x_var.trace("w", self._validate_right_callback)
+            self.left_expected_y_var.trace("w", self._validate_right_callback)
 
             # Bind the validation function to variable changes
             self.right_expected_x_var.trace("w", self._validate_right_callback)
             self.right_expected_y_var.trace("w", self._validate_right_callback)
         except Exception as e:
             print(f"Warning: Could not set up trace callbacks: {e}")
-
-    def update_expected_radius(self, *args):
-        """Calculate expected radius from left expected point"""
-        try:
-            left_x = float(self.left_expected_x_var.get())
-            left_y = float(self.left_expected_y_var.get())
-
-            # Calculate radius from distance to origin
-            radius = np.sqrt(left_x**2 + left_y**2)
-            self.expected_radius_var.set(f"{radius:.3f}")
-
-            # Validate right expected point
-            self.validate_right_expected()
-
-        except ValueError:
-            # Invalid input, skip calculation
-            pass
 
     def validate_right_expected(self, *args):
         """Validate that right expected point matches the calculated radius"""
@@ -490,10 +458,6 @@ class GCodeAdjuster:
         except ValueError:
             # Invalid input, clear validation
             self.right_validation_label.config(text="", foreground="red")
-
-    def _update_radius_callback(self, *args):
-        """Wrapper callback for trace method"""
-        self.update_expected_radius()
 
     def _validate_right_callback(self, *args):
         """Wrapper callback for trace method"""
@@ -534,13 +498,12 @@ class GCodeAdjuster:
     def adjust_gcode(self):
         """Calculate adjustments and modify G-code"""
         try:
-            # Get input values
-            expected_radius = float(self.expected_radius_var.get())
-
+            # Get input values - calculate expected radius from left expected point
             left_expected = (
                 float(self.left_expected_x_var.get()),
                 float(self.left_expected_y_var.get()),
             )
+            expected_radius = np.sqrt(left_expected[0]**2 + left_expected[1]**2)
             left_actual = (
                 float(self.left_actual_x_var.get()),
                 float(self.left_actual_y_var.get()),
