@@ -399,11 +399,7 @@ class GCodeAdjuster:
 
                     angle_step = (end_angle - start_angle) / num_segments
 
-                    # Generate arc segments - start from the actual start position
-                    # Add the start point of the arc first
-                    coords.append((last_x, last_y))
-                    move_types.append("G1")  # Arcs are treated as engraving moves
-
+                    # Generate arc segments - don't add start point as it's already added by G0
                     for i in range(1, num_segments + 1):
                         angle = start_angle + i * angle_step
                         arc_x = center_x + radius * np.cos(angle)
@@ -413,11 +409,8 @@ class GCodeAdjuster:
                         coords.append((arc_x, arc_y))
                         move_types.append("G1")  # Arcs are treated as engraving moves
 
-                    # Ensure the final point matches the end point exactly for closure
-                    if is_full_circle:
-                        # For full circles, add the start point again to ensure closure
-                        coords.append((last_x, last_y))
-                        move_types.append("G1")
+                    # For full circles, the arc segments should naturally close the circle
+                    # No need to add extra closure points
                 else:
                     # No I/J offsets, treat as straight line (fallback)
                     if x_pos is not None or y_pos is not None:
