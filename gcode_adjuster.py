@@ -24,10 +24,10 @@ class GCodeAdjuster:
         # Data storage
         self.original_gcode = ""
         self.adjusted_gcode = ""
-        self.original_coords = []
-        self.original_move_types = []
-        self.adjusted_coords = []
-        self.adjusted_move_types = []
+        self.original_positioning_lines = []
+        self.original_engraving_lines = []
+        self.adjusted_positioning_lines = []
+        self.adjusted_engraving_lines = []
 
         # GUI setup
         self.setup_gui()
@@ -225,8 +225,8 @@ class GCodeAdjuster:
             with open(file_path, "r") as f:
                 self.original_gcode = f.read()
 
-            # Parse G-code coordinates
-            self.original_coords, self.original_move_types = (
+            # Parse G-code line segments
+            self.original_positioning_lines, self.original_engraving_lines = (
                 self.parse_gcode_coordinates(self.original_gcode)
             )
 
@@ -238,33 +238,29 @@ class GCodeAdjuster:
 
             messagebox.showinfo(
                 "Success",
-                f"G-code file loaded successfully!\n{len(self.original_coords)} coordinate points found.",
+                f"G-code file loaded successfully!\n{len(self.original_positioning_lines)} positioning moves, {len(self.original_engraving_lines)} engraving moves found.",
             )
 
         except Exception as e:
             messagebox.showerror("Error", f"Failed to load G-code file:\n{str(e)}")
 
     def parse_gcode_coordinates(self, gcode):
-        """Parse G-code and extract X,Y coordinates with move types, handling arcs"""
-        coords = []
-        move_types = []
+        """Parse G-code and extract line segments exactly like dxf2laser.py"""
         lines = gcode.split("\n")
 
         current_x = 0.0
         current_y = 0.0
         last_x = 0.0
         last_y = 0.0
-        
-        # Track if we've seen any positioning moves
-        first_positioning = True
+
+        positioning_lines = []
+        engraving_lines = []
 
         for line in lines:
             line_upper = line.upper().strip()
-            if (
-                not line_upper
-                or line_upper.startswith(";")
-                or line_upper.startswith("(")
-            ):
+
+            # Skip comments and empty lines
+            if not line_upper or line_upper.startswith(";"):
                 continue
 
             # Parse G0 (positioning) moves
@@ -285,15 +281,8 @@ class GCodeAdjuster:
                 if y_pos is not None:
                     current_y = y_pos
 
-                # Add positioning move - always add if this is a G0 command with coordinates
-                if x_pos is not None or y_pos is not None:
-                    # Only add if this is the first positioning move or if coordinates actually changed
-                    if first_positioning or (x_pos is not None and x_pos != last_x) or (y_pos is not None and y_pos != last_y):
-                        coords.append((current_x, current_y))
-                        move_types.append("G0")
-                        first_positioning = False
-
-                # Always update last position for arc calculations
+                # Draw positioning move
+                positioning_lines.append([(last_x, last_y), (current_x, current_y)])
                 last_x = current_x
                 last_y = current_y
 
@@ -315,11 +304,8 @@ class GCodeAdjuster:
                 if y_pos is not None:
                     current_y = y_pos
 
-                # Add engraving move
-                if x_pos is not None or y_pos is not None:
-                    coords.append((current_x, current_y))
-                    move_types.append("G1")
-
+                # Draw engraving move
+                engraving_lines.append([(last_x, last_y), (current_x, current_y)])
                 last_x = current_x
                 last_y = current_y
 
@@ -363,7 +349,7 @@ class GCodeAdjuster:
                     # Determine arc direction (G2 = CW, G3 = CCW)
                     is_ccw = line_upper.startswith("G3")
 
-                    # Calculate arc span - handle arc direction properly
+                    # Calculate arc span
                     if is_ccw:
                         # Counterclockwise
                         if end_angle <= start_angle:
@@ -377,58 +363,47 @@ class GCodeAdjuster:
 
                     # Break arc into segments for visualization (use 5-degree steps)
                     num_segments = max(8, int(abs(arc_span) / np.radians(5)))
-
-                    # Ensure we have enough segments for smooth visualization
-                    if abs(arc_span) > 2 * np.pi * 0.99:  # Nearly full circle
-                        num_segments = max(
-                            72, num_segments
-                        )  # At least 72 segments for nearly full circle
-
                     angle_step = (end_angle - start_angle) / num_segments
 
-                    # Generate arc segments - don't add start point as it's already added by G0
+                    # Generate arc segments
+                    prev_arc_x = last_x
+                    prev_arc_y = last_y
+
                     for i in range(1, num_segments + 1):
                         angle = start_angle + i * angle_step
                         arc_x = center_x + radius * np.cos(angle)
                         arc_y = center_y + radius * np.sin(angle)
 
-                        # Add segment to coordinates
-                        coords.append((arc_x, arc_y))
-                        move_types.append("G1")  # Arcs are treated as engraving moves
-                    
-                    # Ensure the last arc segment ends exactly at the target point
-                    # This handles any floating-point precision issues and ensures closure
-                    if coords:
-                        coords[-1] = (current_x, current_y)
-                    else:
-                        # If no segments were generated, add the target point
-                        coords.append((current_x, current_y))
-                        move_types.append("G1")
+                        # Add segment to engraving lines
+                        engraving_lines.append(
+                            [(prev_arc_x, prev_arc_y), (arc_x, arc_y)]
+                        )
+
+                        prev_arc_x = arc_x
+                        prev_arc_y = arc_y
                 else:
                     # No I/J offsets, treat as straight line (fallback)
-                    if x_pos is not None or y_pos is not None:
-                        coords.append((current_x, current_y))
-                        move_types.append("G1")
+                    engraving_lines.append([(last_x, last_y), (current_x, current_y)])
 
                 last_x = current_x
                 last_y = current_y
 
-        return coords, move_types
+        return positioning_lines, engraving_lines
 
     def plot_toolpath(self):
         """Plot the toolpath on the canvas"""
         self.ax.clear()
 
-        if self.original_coords:
+        if self.original_positioning_lines or self.original_engraving_lines:
             # Plot original toolpath with color coding
             self.plot_gcode_toolpath(
-                self.original_coords, self.original_move_types, "Original", self.ax
+                self.original_positioning_lines, self.original_engraving_lines, "Original", self.ax
             )
 
-        if self.adjusted_coords:
+        if self.adjusted_positioning_lines or self.adjusted_engraving_lines:
             # Plot adjusted toolpath with color coding
             self.plot_gcode_toolpath(
-                self.adjusted_coords, self.adjusted_move_types, "Adjusted", self.ax
+                self.adjusted_positioning_lines, self.adjusted_engraving_lines, "Adjusted", self.ax
             )
 
         # Set plot properties
@@ -439,7 +414,7 @@ class GCodeAdjuster:
         self.ax.set_aspect("equal")
 
         # Add legend if we have data
-        if self.original_coords or self.adjusted_coords:
+        if self.original_positioning_lines or self.original_engraving_lines or self.adjusted_positioning_lines or self.adjusted_engraving_lines:
             self.ax.legend()
 
         # Auto-scale to fit all data
@@ -513,54 +488,31 @@ class GCodeAdjuster:
         """Wrapper callback for trace method"""
         self.validate_right_expected()
 
-    def plot_gcode_toolpath(self, coords, move_types, label_prefix, ax):
-        """Plot G-code toolpath with color coding for move types"""
-        if not coords:
-            return
-
-        # Separate G0 and G1+ moves
-        g0_coords = []
-        g1_coords = []
-
-        for i, (coord, move_type) in enumerate(zip(coords, move_types)):
-            if move_type == "G0":
-                g0_coords.append(coord)
-            else:  # G1, G2, G3
-                g1_coords.append(coord)
-
+    def plot_gcode_toolpath(self, positioning_lines, engraving_lines, label_prefix, ax):
+        """Plot G-code toolpath exactly like dxf2laser.py"""
         # Determine colors based on whether it's original or adjusted
         if label_prefix == "Original":
-            g0_color = "green"
-            g1_color = "red"
+            positioning_color = "g"
+            engraving_color = "r"
         else:  # Adjusted
-            g0_color = "blue"
-            g1_color = "orange"
+            positioning_color = "b"
+            engraving_color = "orange"
 
-        # Plot G0 moves (positioning)
-        if g0_coords:
-            g0_x, g0_y = zip(*g0_coords)
+        # Plot positioning moves in green/blue
+        for line_segment in positioning_lines:
+            start, end = line_segment
             ax.plot(
-                g0_x,
-                g0_y,
-                f"{g0_color[0]}-",
-                linewidth=2,
-                label=f"{label_prefix} - Positioning (G0)",
-                alpha=0.7,
+                [start[0], end[0]], [start[1], end[1]], 
+                f"{positioning_color}-", linewidth=2, alpha=0.8
             )
-            ax.scatter(g0_x, g0_y, c=g0_color, s=8, alpha=0.5)
 
-        # Plot G1+ moves (engraving)
-        if g1_coords:
-            g1_x, g1_y = zip(*g1_coords)
+        # Plot engraving moves in red/orange
+        for line_segment in engraving_lines:
+            start, end = line_segment
             ax.plot(
-                g1_x,
-                g1_y,
-                f"{g1_color[0]}-",
-                linewidth=2,
-                label=f"{label_prefix} - Engraving (G1+)",
-                alpha=0.7,
+                [start[0], end[0]], [start[1], end[1]], 
+                f"{engraving_color}-", linewidth=2, alpha=0.8
             )
-            ax.scatter(g1_x, g1_y, c=g1_color, s=8, alpha=0.5)
 
     def adjust_gcode(self):
         """Calculate adjustments and modify G-code"""
@@ -585,7 +537,7 @@ class GCodeAdjuster:
                 float(self.right_actual_y_var.get()),
             )
 
-            if not self.original_coords:
+            if not self.original_positioning_lines and not self.original_engraving_lines:
                 messagebox.showwarning("Warning", "Please load a G-code file first!")
                 return
 
@@ -607,11 +559,13 @@ class GCodeAdjuster:
             left_error = abs(left_distance - expected_radius)
             right_error = abs(right_distance - expected_radius)
 
-            # Apply transformations to coordinates and preserve move types
-            self.adjusted_coords = self.apply_transformations(
-                self.original_coords, actual_center, rotation_angle
+            # Apply transformations to line segments
+            self.adjusted_positioning_lines = self.apply_transformations_to_lines(
+                self.original_positioning_lines, actual_center, rotation_angle
             )
-            self.adjusted_move_types = self.original_move_types.copy()
+            self.adjusted_engraving_lines = self.apply_transformations_to_lines(
+                self.original_engraving_lines, actual_center, rotation_angle
+            )
 
             # Generate adjusted G-code
             self.adjusted_gcode = self.generate_adjusted_gcode(
@@ -731,6 +685,20 @@ Transformation Applied:
         )
 
         return (actual_center_x, actual_center_y), rotation_angle
+
+    def apply_transformations_to_lines(self, line_segments, center, rotation_angle):
+        """Apply translation and rotation to line segments"""
+        adjusted_lines = []
+
+        for line_segment in line_segments:
+            start, end = line_segment
+            # Transform start point
+            start_adj = self.apply_transformations([start], center, rotation_angle)[0]
+            # Transform end point
+            end_adj = self.apply_transformations([end], center, rotation_angle)[0]
+            adjusted_lines.append([start_adj, end_adj])
+
+        return adjusted_lines
 
     def apply_transformations(self, coords, center, rotation_angle):
         """Apply translation and rotation to coordinates"""
