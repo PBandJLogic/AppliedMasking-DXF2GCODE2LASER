@@ -50,9 +50,6 @@ class GCodeAdjuster:
         self.setup_left_panel(left_panel)
         self.setup_right_panel(right_panel)
 
-        # Set up trace callbacks after GUI is complete
-        self.setup_trace_callbacks()
-
     def setup_left_panel(self, parent):
         """Set up the left control panel"""
         # File operations
@@ -213,11 +210,6 @@ class GCodeAdjuster:
 
             # Store the file path for saving
             self.original_file_path = file_path
-
-            messagebox.showinfo(
-                "Success",
-                f"G-code file loaded successfully!\n{len(self.original_positioning_lines)} positioning moves, {len(self.original_engraving_lines)} engraving moves found.",
-            )
 
         except Exception as e:
             messagebox.showerror("Error", f"Failed to load G-code file:\n{str(e)}")
@@ -412,50 +404,6 @@ class GCodeAdjuster:
 
         self.canvas.draw()
 
-    def setup_trace_callbacks(self):
-        """Set up trace callbacks for real-time updates"""
-        try:
-            # Bind the validation function to variable changes
-            self.left_expected_x_var.trace("w", self._validate_right_callback)
-            self.left_expected_y_var.trace("w", self._validate_right_callback)
-
-            # Bind the validation function to variable changes
-            self.right_expected_x_var.trace("w", self._validate_right_callback)
-            self.right_expected_y_var.trace("w", self._validate_right_callback)
-        except Exception as e:
-            print(f"Warning: Could not set up trace callbacks: {e}")
-
-    def validate_right_expected(self, *args):
-        """Validate that right expected point matches the calculated radius"""
-        try:
-            left_x = float(self.left_expected_x_var.get())
-            left_y = float(self.left_expected_y_var.get())
-            right_x = float(self.right_expected_x_var.get())
-            right_y = float(self.right_expected_y_var.get())
-
-            # Calculate expected radius from left point
-            expected_radius = np.sqrt(left_x**2 + left_y**2)
-
-            # Calculate actual radius from right point
-            actual_radius = np.sqrt(right_x**2 + right_y**2)
-
-            # Check if within tolerance
-            error = abs(actual_radius - expected_radius)
-            if error <= 0.01:
-                self.right_validation_label.config(text="✓ Valid", foreground="green")
-            else:
-                self.right_validation_label.config(
-                    text=f"✗ Error: {error:.3f}mm", foreground="red"
-                )
-
-        except ValueError:
-            # Invalid input, clear validation
-            self.right_validation_label.config(text="", foreground="red")
-
-    def _validate_right_callback(self, *args):
-        """Wrapper callback for trace method"""
-        self.validate_right_expected()
-
     def plot_gcode_toolpath(self, positioning_lines, engraving_lines, label_prefix, ax):
         """Plot G-code toolpath exactly like dxf2laser.py"""
         # Determine colors based on whether it's original or adjusted
@@ -588,8 +536,6 @@ Transformation Applied:
 
             # Update plot
             self.plot_toolpath()
-
-            messagebox.showinfo("Success", "G-code adjustment completed!")
 
         except ValueError as e:
             messagebox.showerror("Error", f"Invalid input values:\n{str(e)}")
@@ -833,7 +779,7 @@ Transformation Applied:
                 base_path = os.path.splitext(self.original_file_path)[0]
                 extension = os.path.splitext(self.original_file_path)[1]
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                new_filename = f"{base_path}_adjusted_{timestamp}"
+                new_filename = f"{base_path}_adjusted_{timestamp}{extension}"
             else:
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 new_filename = f"adjusted_gcode_{timestamp}"
@@ -852,10 +798,6 @@ Transformation Applied:
             if save_path:
                 with open(save_path, "w") as f:
                     f.write(self.adjusted_gcode)
-
-                messagebox.showinfo(
-                    "Success", f"Adjusted G-code saved to:\n{save_path}"
-                )
 
         except Exception as e:
             messagebox.showerror("Error", f"Failed to save adjusted G-code:\n{str(e)}")
