@@ -397,13 +397,19 @@ class GCodeAdjuster:
         if self.original_positioning_lines or self.original_engraving_lines:
             # Plot original toolpath with color coding
             self.plot_gcode_toolpath(
-                self.original_positioning_lines, self.original_engraving_lines, "Original", self.ax
+                self.original_positioning_lines,
+                self.original_engraving_lines,
+                "Original",
+                self.ax,
             )
 
         if self.adjusted_positioning_lines or self.adjusted_engraving_lines:
             # Plot adjusted toolpath with color coding
             self.plot_gcode_toolpath(
-                self.adjusted_positioning_lines, self.adjusted_engraving_lines, "Adjusted", self.ax
+                self.adjusted_positioning_lines,
+                self.adjusted_engraving_lines,
+                "Adjusted",
+                self.ax,
             )
 
         # Set plot properties
@@ -414,7 +420,12 @@ class GCodeAdjuster:
         self.ax.set_aspect("equal")
 
         # Add legend if we have data
-        if self.original_positioning_lines or self.original_engraving_lines or self.adjusted_positioning_lines or self.adjusted_engraving_lines:
+        if (
+            self.original_positioning_lines
+            or self.original_engraving_lines
+            or self.adjusted_positioning_lines
+            or self.adjusted_engraving_lines
+        ):
             self.ax.legend()
 
         # Auto-scale to fit all data
@@ -502,16 +513,22 @@ class GCodeAdjuster:
         for line_segment in positioning_lines:
             start, end = line_segment
             ax.plot(
-                [start[0], end[0]], [start[1], end[1]], 
-                f"{positioning_color}-", linewidth=2, alpha=0.8
+                [start[0], end[0]],
+                [start[1], end[1]],
+                color=positioning_color,
+                linewidth=2,
+                alpha=0.8,
             )
 
         # Plot engraving moves in red/orange
         for line_segment in engraving_lines:
             start, end = line_segment
             ax.plot(
-                [start[0], end[0]], [start[1], end[1]], 
-                f"{engraving_color}-", linewidth=2, alpha=0.8
+                [start[0], end[0]],
+                [start[1], end[1]],
+                color=engraving_color,
+                linewidth=2,
+                alpha=0.8,
             )
 
     def adjust_gcode(self):
@@ -537,7 +554,10 @@ class GCodeAdjuster:
                 float(self.right_actual_y_var.get()),
             )
 
-            if not self.original_positioning_lines and not self.original_engraving_lines:
+            if (
+                not self.original_positioning_lines
+                and not self.original_engraving_lines
+            ):
                 messagebox.showwarning("Warning", "Please load a G-code file first!")
                 return
 
