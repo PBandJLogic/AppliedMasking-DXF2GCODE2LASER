@@ -254,6 +254,9 @@ class GCodeAdjuster:
         current_y = 0.0
         last_x = 0.0
         last_y = 0.0
+        
+        # Track if we've seen any positioning moves
+        first_positioning = True
 
         for line in lines:
             line_upper = line.upper().strip()
@@ -284,8 +287,11 @@ class GCodeAdjuster:
 
                 # Add positioning move - always add if this is a G0 command with coordinates
                 if x_pos is not None or y_pos is not None:
-                    coords.append((current_x, current_y))
-                    move_types.append("G0")
+                    # Only add if this is the first positioning move or if coordinates actually changed
+                    if first_positioning or (x_pos is not None and x_pos != last_x) or (y_pos is not None and y_pos != last_y):
+                        coords.append((current_x, current_y))
+                        move_types.append("G0")
+                        first_positioning = False
 
                 # Always update last position for arc calculations
                 last_x = current_x
@@ -391,8 +397,13 @@ class GCodeAdjuster:
                         move_types.append("G1")  # Arcs are treated as engraving moves
                     
                     # Ensure the last arc segment ends exactly at the target point
-                    # This handles any floating-point precision issues
-                    coords[-1] = (current_x, current_y)
+                    # This handles any floating-point precision issues and ensures closure
+                    if coords:
+                        coords[-1] = (current_x, current_y)
+                    else:
+                        # If no segments were generated, add the target point
+                        coords.append((current_x, current_y))
+                        move_types.append("G1")
                 else:
                     # No I/J offsets, treat as straight line (fallback)
                     if x_pos is not None or y_pos is not None:
