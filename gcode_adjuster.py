@@ -53,6 +53,9 @@ class GCodeAdjuster:
         self.setup_left_panel(left_panel)
         self.setup_right_panel(right_panel)
 
+        # Set up trace callbacks after GUI is complete
+        self.setup_trace_callbacks()
+
     def setup_left_panel(self, parent):
         """Set up the left control panel"""
         # File operations
@@ -104,9 +107,7 @@ class GCodeAdjuster:
             width=10,
         ).pack(side="left")
 
-        # Bind the update function to variable changes
-        self.left_expected_x_var.trace("w", self._update_radius_callback)
-        self.left_expected_y_var.trace("w", self._update_radius_callback)
+        # Bind the update function to variable changes (will be set up after GUI is complete)
 
         # Left Target Actual
         ttk.Label(left_frame, text="Actual X, Y:", foreground="black").pack(anchor="w")
@@ -142,9 +143,7 @@ class GCodeAdjuster:
             right_expected_frame, textvariable=self.right_expected_y_var, width=10
         ).pack(side="left")
 
-        # Bind the validation function to variable changes
-        self.right_expected_x_var.trace("w", self._validate_right_callback)
-        self.right_expected_y_var.trace("w", self._validate_right_callback)
+        # Bind the validation function to variable changes (will be set up after GUI is complete)
 
         # Right Target Actual
         ttk.Label(right_frame, text="Actual X, Y:", foreground="black").pack(anchor="w")
@@ -311,6 +310,19 @@ class GCodeAdjuster:
         self.ax.autoscale_view()
 
         self.canvas.draw()
+
+    def setup_trace_callbacks(self):
+        """Set up trace callbacks for real-time updates"""
+        try:
+            # Bind the update function to variable changes
+            self.left_expected_x_var.trace("w", self._update_radius_callback)
+            self.left_expected_y_var.trace("w", self._update_radius_callback)
+
+            # Bind the validation function to variable changes
+            self.right_expected_x_var.trace("w", self._validate_right_callback)
+            self.right_expected_y_var.trace("w", self._validate_right_callback)
+        except Exception as e:
+            print(f"Warning: Could not set up trace callbacks: {e}")
 
     def update_expected_radius(self, *args):
         """Calculate expected radius from left expected point"""
