@@ -90,7 +90,9 @@ class GCodeAdjuster:
         left_frame.pack(fill="x", pady=(0, 10))
 
         # Left Target Expected
-        ttk.Label(left_frame, text="Expected X, Y:", foreground="orange").pack(anchor="w")
+        ttk.Label(left_frame, text="Expected X, Y:", foreground="orange").pack(
+            anchor="w"
+        )
         left_expected_frame = ttk.Frame(left_frame)
         left_expected_frame.pack(fill="x", pady=(0, 5))
 
@@ -255,7 +257,11 @@ class GCodeAdjuster:
 
         for line in lines:
             line_upper = line.upper().strip()
-            if not line_upper or line_upper.startswith(";") or line_upper.startswith("("):
+            if (
+                not line_upper
+                or line_upper.startswith(";")
+                or line_upper.startswith("(")
+            ):
                 continue
 
             # Parse G0 (positioning) moves
@@ -350,20 +356,38 @@ class GCodeAdjuster:
                     # Determine arc direction (G2 = CW, G3 = CCW)
                     is_ccw = line_upper.startswith("G3")
 
-                    # Calculate arc span
-                    if is_ccw:
-                        # Counterclockwise
-                        if end_angle <= start_angle:
-                            end_angle += 2 * np.pi
-                        arc_span = end_angle - start_angle
+                    # Check if this is a full circle (start and end points are very close)
+                    distance_between_points = np.sqrt((current_x - last_x)**2 + (current_y - last_y)**2)
+                    is_full_circle = distance_between_points < 0.001  # Points are essentially the same
+                    
+                    # Calculate arc span - handle full circles properly
+                    if is_full_circle:
+                        # This is a full circle
+                        if is_ccw:
+                            end_angle = start_angle + 2 * np.pi
+                        else:
+                            end_angle = start_angle - 2 * np.pi
+                        arc_span = 2 * np.pi
                     else:
-                        # Clockwise
-                        if end_angle >= start_angle:
-                            end_angle -= 2 * np.pi
-                        arc_span = start_angle - end_angle
+                        # Regular arc
+                        if is_ccw:
+                            # Counterclockwise
+                            if end_angle <= start_angle:
+                                end_angle += 2 * np.pi
+                            arc_span = end_angle - start_angle
+                        else:
+                            # Clockwise
+                            if end_angle >= start_angle:
+                                end_angle -= 2 * np.pi
+                            arc_span = start_angle - end_angle
 
                     # Break arc into segments for visualization (use 5-degree steps)
                     num_segments = max(8, int(abs(arc_span) / np.radians(5)))
+                    
+                    # Ensure we have enough segments for smooth visualization
+                    if is_full_circle or abs(arc_span) > 2 * np.pi * 0.99:  # Full circle or nearly full circle
+                        num_segments = max(72, num_segments)  # At least 72 segments for full circle
+                    
                     angle_step = (end_angle - start_angle) / num_segments
 
                     # Generate arc segments
@@ -381,6 +405,12 @@ class GCodeAdjuster:
 
                         prev_arc_x = arc_x
                         prev_arc_y = arc_y
+                    
+                    # Ensure the final point matches the end point exactly for closure
+                    if is_full_circle:
+                        # For full circles, add the start point again to ensure closure
+                        coords.append((last_x, last_y))
+                        move_types.append("G1")
                 else:
                     # No I/J offsets, treat as straight line (fallback)
                     if x_pos is not None or y_pos is not None:
@@ -744,7 +774,11 @@ Transformation Applied:
             line_upper = line.upper().strip()
 
             # Skip comments and empty lines
-            if not line_upper or line_upper.startswith(";") or line_upper.startswith("("):
+            if (
+                not line_upper
+                or line_upper.startswith(";")
+                or line_upper.startswith("(")
+            ):
                 adjusted_lines.append(adjusted_line)
                 continue
 
@@ -753,7 +787,9 @@ Transformation Applied:
                 adjusted_line = self.transform_linear_move(line, center, rotation_angle)
                 adjusted_lines.append(adjusted_line)
             elif line_upper.startswith("G2") or line_upper.startswith("G3"):
-                adjusted_line = self.transform_arc_move(line, center, rotation_angle, last_x, last_y)
+                adjusted_line = self.transform_arc_move(
+                    line, center, rotation_angle, last_x, last_y
+                )
                 adjusted_lines.append(adjusted_line)
             else:
                 adjusted_lines.append(adjusted_line)
@@ -761,7 +797,7 @@ Transformation Applied:
             # Update position tracking
             x_match = re.search(r"X([+-]?\d+\.?\d*)", line_upper)
             y_match = re.search(r"Y([+-]?\d+\.?\d*)", line_upper)
-            
+
             if x_match:
                 last_x = float(x_match.group(1))
             if y_match:
@@ -790,9 +826,13 @@ Transformation Applied:
         # Replace coordinates in the line
         adjusted_line = line
         if x_match:
-            adjusted_line = re.sub(r"X[+-]?\d+\.?\d*", f"X{adjusted_x:.6f}", adjusted_line)
+            adjusted_line = re.sub(
+                r"X[+-]?\d+\.?\d*", f"X{adjusted_x:.6f}", adjusted_line
+            )
         if y_match:
-            adjusted_line = re.sub(r"Y[+-]?\d+\.?\d*", f"Y{adjusted_y:.6f}", adjusted_line)
+            adjusted_line = re.sub(
+                r"Y[+-]?\d+\.?\d*", f"Y{adjusted_y:.6f}", adjusted_line
+            )
 
         return adjusted_line
 
@@ -837,13 +877,21 @@ Transformation Applied:
         # Replace coordinates in the line
         adjusted_line = line
         if x_match:
-            adjusted_line = re.sub(r"X[+-]?\d+\.?\d*", f"X{adjusted_end_x:.6f}", adjusted_line)
+            adjusted_line = re.sub(
+                r"X[+-]?\d+\.?\d*", f"X{adjusted_end_x:.6f}", adjusted_line
+            )
         if y_match:
-            adjusted_line = re.sub(r"Y[+-]?\d+\.?\d*", f"Y{adjusted_end_y:.6f}", adjusted_line)
+            adjusted_line = re.sub(
+                r"Y[+-]?\d+\.?\d*", f"Y{adjusted_end_y:.6f}", adjusted_line
+            )
         if i_match:
-            adjusted_line = re.sub(r"I[+-]?\d+\.?\d*", f"I{new_i_offset:.6f}", adjusted_line)
+            adjusted_line = re.sub(
+                r"I[+-]?\d+\.?\d*", f"I{new_i_offset:.6f}", adjusted_line
+            )
         if j_match:
-            adjusted_line = re.sub(r"J[+-]?\d+\.?\d*", f"J{new_j_offset:.6f}", adjusted_line)
+            adjusted_line = re.sub(
+                r"J[+-]?\d+\.?\d*", f"J{new_j_offset:.6f}", adjusted_line
+            )
 
         return adjusted_line
 
