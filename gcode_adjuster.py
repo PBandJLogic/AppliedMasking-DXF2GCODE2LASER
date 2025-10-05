@@ -63,13 +63,6 @@ class GCodeAdjuster:
             file_frame, text="Load G-code File", command=self.load_gcode_file
         ).pack(fill="x")
 
-        # Right point validation label (standalone)
-        validation_frame = ttk.LabelFrame(parent, text="Validation", padding=10)
-        validation_frame.pack(fill="x", pady=(0, 10))
-        
-        self.right_validation_label = ttk.Label(validation_frame, text="", foreground="red")
-        self.right_validation_label.pack()
-
         # Left Target section
         left_frame = ttk.LabelFrame(parent, text="Left Target", padding=10)
         left_frame.pack(fill="x", pady=(0, 10))
@@ -153,7 +146,7 @@ class GCodeAdjuster:
         results_frame = ttk.LabelFrame(parent, text="Calculation Results", padding=10)
         results_frame.pack(fill="both", expand=True, pady=(0, 10))
 
-        self.results_text = tk.Text(results_frame, height=12, width=40, wrap=tk.WORD)
+        self.results_text = tk.Text(results_frame, height=20, width=40, wrap=tk.WORD)
         results_text_scroll = ttk.Scrollbar(
             results_frame, orient="vertical", command=self.results_text.yview
         )
@@ -503,7 +496,7 @@ class GCodeAdjuster:
                 float(self.left_expected_x_var.get()),
                 float(self.left_expected_y_var.get()),
             )
-            expected_radius = np.sqrt(left_expected[0]**2 + left_expected[1]**2)
+            expected_radius = np.sqrt(left_expected[0] ** 2 + left_expected[1] ** 2)
             left_actual = (
                 float(self.left_actual_x_var.get()),
                 float(self.left_actual_y_var.get()),
@@ -858,9 +851,6 @@ Transformation Applied:
 
             # Ask user for save location
             save_path = filedialog.asksaveasfilename(
-                defaultextension=(
-                    extension if hasattr(self, "original_file_path") else ".nc"
-                ),
                 initialfile=os.path.basename(new_filename),
                 filetypes=[
                     ("G-code files", "*.nc"),
