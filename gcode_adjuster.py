@@ -682,8 +682,8 @@ Transformation Applied:
 
         for x, y in coords:
             # Translate to move center to origin
-            tx = x - center[0]
-            ty = y - center[1]
+            tx = x + center[0]
+            ty = y + center[1]
 
             # Apply rotation
             cos_r = np.cos(rotation_angle)
@@ -844,11 +844,10 @@ Transformation Applied:
                 base_path = os.path.splitext(self.original_file_path)[0]
                 extension = os.path.splitext(self.original_file_path)[1]
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                new_filename = f"{base_path}_adjusted_{timestamp}{extension}"
+                new_filename = f"{base_path}_adjusted_{timestamp}"
             else:
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                new_filename = f"adjusted_gcode_{timestamp}.nc"
-
+                new_filename = f"adjusted_gcode_{timestamp}"
             # Ask user for save location
             save_path = filedialog.asksaveasfilename(
                 initialfile=os.path.basename(new_filename),
