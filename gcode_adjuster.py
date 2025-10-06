@@ -776,16 +776,22 @@ Transformation Applied:
         try:
             # Generate filename with _adjusted suffix and timestamp
             if hasattr(self, "original_file_path"):
-                base_path = os.path.splitext(self.original_file_path)[0]
-                extension = os.path.splitext(self.original_file_path)[1]
+                # 1. First, get just the filename from the full path (e.g., "my_gcode.nc")
+                filename_only = os.path.basename(self.original_file_path)
+                # 2. Now, split that filename to get its base and extension
+                base_name, extension = os.path.splitext(filename_only)
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                new_filename = f"{base_path}_adjusted_{timestamp}{extension}"
+                # 3. Build the new initial name using ONLY the base_name
+                initial_name = f"{base_name}_adjusted_{timestamp}"
             else:
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                new_filename = f"adjusted_gcode_{timestamp}"
+                initial_name = f"adjusted_gcode_{timestamp}"
+
             # Ask user for save location
+            print(f"Suggested name for adjusted G-code: {initial_name}.nc")
             save_path = filedialog.asksaveasfilename(
-                initialfile=os.path.basename(new_filename),
+                initialfile=initial_name,
+                defaultextension=".nc",
                 filetypes=[
                     ("G-code files", "*.nc"),
                     ("G-code files", "*.gcode"),
@@ -796,6 +802,7 @@ Transformation Applied:
             )
 
             if save_path:
+                print(f"Saving adjusted G-code to: {save_path}")
                 with open(save_path, "w") as f:
                     f.write(self.adjusted_gcode)
 
