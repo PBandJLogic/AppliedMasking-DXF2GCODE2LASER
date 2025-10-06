@@ -590,10 +590,8 @@ Transformation Applied:
 
         # Calculate rotation angle to align actual direction with expected direction
         # This rotates the actual chord to be horizontal
-        rotation_angle = np.arctan2(
-            expected_dx * actual_dy - expected_dy * actual_dx,
-            expected_dx * actual_dx + expected_dy * actual_dy,
-        )
+        # Use the angle of the actual chord from horizontal (expected is horizontal)
+        rotation_angle = np.arctan2(actual_dy, actual_dx)
 
         return (actual_center_x, actual_center_y), rotation_angle
 
