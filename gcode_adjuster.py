@@ -614,18 +614,20 @@ Transformation Applied:
         adjusted = []
 
         for x, y in coords:
-            # Translate to move actual center to expected center (0,0)
-            tx = x - center[0]
-            ty = y - center[1]
-
-            # Apply rotation
+            # Apply rotation first (rotate expected coordinates to match actual orientation)
             cos_r = np.cos(rotation_angle)
             sin_r = np.sin(rotation_angle)
+            
+            rx = x * cos_r - y * sin_r
+            ry = x * sin_r + y * cos_r
+            
+            # Then translate to move rotated expected left point to actual left point (0,0)
+            # We need to subtract the rotated expected left point to move it to origin
+            # and then add the actual left point (which is 0,0)
+            tx = rx - center[0]
+            ty = ry - center[1]
 
-            rx = tx * cos_r - ty * sin_r
-            ry = tx * sin_r + ty * cos_r
-
-            adjusted.append((rx, ry))
+            adjusted.append((tx, ty))
 
         return adjusted
 
