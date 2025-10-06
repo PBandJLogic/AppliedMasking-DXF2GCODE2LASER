@@ -614,9 +614,9 @@ Transformation Applied:
         adjusted = []
 
         for x, y in coords:
-            # Translate to move center to origin
-            tx = x + center[0]
-            ty = y + center[1]
+            # Translate to move actual center to expected center (0,0)
+            tx = x - center[0]
+            ty = y - center[1]
 
             # Apply rotation
             cos_r = np.cos(rotation_angle)
