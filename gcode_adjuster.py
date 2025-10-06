@@ -223,13 +223,13 @@ class GCodeAdjuster:
         self.adjusted_positioning_lines = []
         self.adjusted_engraving_lines = []
         self.adjusted_gcode = ""
-        
+
         # Clear results display
-        if hasattr(self, 'results_text'):
+        if hasattr(self, "results_text"):
             self.results_text.delete(1.0, tk.END)
-        
+
         # Clear validation labels
-        if hasattr(self, 'right_validation_label'):
+        if hasattr(self, "right_validation_label"):
             self.right_validation_label.config(text="", foreground="red")
 
     def parse_gcode_coordinates(self, gcode):
@@ -640,10 +640,10 @@ Transformation Applied:
             ry = x * sin_r + y * cos_r
 
             # Then translate to move rotated expected left point to actual left point (0,0)
-            # We need to subtract the rotated expected left point to move it to origin
+            # We need to add the rotated expected left point to move it to origin
             # and then add the actual left point (which is 0,0)
-            tx = rx - center[0]
-            ty = ry - center[1]
+            tx = rx + center[0]
+            ty = ry + center[1]
 
             adjusted.append((tx, ty))
 
