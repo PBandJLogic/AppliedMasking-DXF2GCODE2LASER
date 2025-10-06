@@ -205,6 +205,9 @@ class GCodeAdjuster:
                 self.parse_gcode_coordinates(self.original_gcode)
             )
 
+            # Reset display and calculation results (but keep expected/actual X,Y values)
+            self.reset_display()
+
             # Plot the original toolpath
             self.plot_toolpath()
 
@@ -213,6 +216,21 @@ class GCodeAdjuster:
 
         except Exception as e:
             messagebox.showerror("Error", f"Failed to load G-code file:\n{str(e)}")
+
+    def reset_display(self):
+        """Reset display and calculation results, but keep expected/actual X,Y values"""
+        # Clear adjusted data
+        self.adjusted_positioning_lines = []
+        self.adjusted_engraving_lines = []
+        self.adjusted_gcode = ""
+        
+        # Clear results display
+        if hasattr(self, 'results_text'):
+            self.results_text.delete(1.0, tk.END)
+        
+        # Clear validation labels
+        if hasattr(self, 'right_validation_label'):
+            self.right_validation_label.config(text="", foreground="red")
 
     def parse_gcode_coordinates(self, gcode):
         """Parse G-code and extract line segments exactly like dxf2laser.py"""
@@ -617,10 +635,10 @@ Transformation Applied:
             # Apply rotation first (rotate expected coordinates to match actual orientation)
             cos_r = np.cos(rotation_angle)
             sin_r = np.sin(rotation_angle)
-            
+
             rx = x * cos_r - y * sin_r
             ry = x * sin_r + y * cos_r
-            
+
             # Then translate to move rotated expected left point to actual left point (0,0)
             # We need to subtract the rotated expected left point to move it to origin
             # and then add the actual left point (which is 0,0)
