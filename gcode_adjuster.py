@@ -351,6 +351,9 @@ class GCodeAdjuster:
 
                     # Break arc into segments for visualization (use 5-degree steps)
                     num_segments = max(8, int(abs(arc_span) / np.radians(5)))
+                    # For full circles or near-full circles, ensure we have enough segments
+                    if abs(arc_span) > 1.9 * np.pi:  # Near full circle
+                        num_segments = max(72, num_segments)  # At least 5-degree steps for full circle
                     angle_step = (end_angle - start_angle) / num_segments
 
                     # Generate arc segments
@@ -369,6 +372,10 @@ class GCodeAdjuster:
 
                         prev_arc_x = arc_x
                         prev_arc_y = arc_y
+                    
+                    # Ensure the final segment reaches exactly the end point
+                    if abs(prev_arc_x - current_x) > 0.001 or abs(prev_arc_y - current_y) > 0.001:
+                        engraving_lines.append([(prev_arc_x, prev_arc_y), (current_x, current_y)])
                 else:
                     # No I/J offsets, treat as straight line (fallback)
                     engraving_lines.append([(last_x, last_y), (current_x, current_y)])
