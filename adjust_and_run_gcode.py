@@ -27,6 +27,39 @@ import re
 import serial
 import serial.tools.list_ports
 import time
+import threading
+import queue
+
+
+class SerialReaderThread(threading.Thread):
+    """
+    Background thread for reading from serial port.
+    Continuously reads responses and puts them in a queue for processing.
+    """
+    def __init__(self, serial_connection, response_queue):
+        super().__init__(daemon=True)
+        self.serial_connection = serial_connection
+        self.response_queue = response_queue
+        self.running = True
+    
+    def run(self):
+        """Continuously read from serial and queue responses"""
+        while self.running:
+            try:
+                if self.serial_connection and self.serial_connection.in_waiting > 0:
+                    response = self.serial_connection.readline().decode('utf-8', errors='ignore').strip()
+                    if response:
+                        self.response_queue.put(response)
+                else:
+                    time.sleep(0.001)  # 1ms sleep when no data
+            except Exception as e:
+                if self.running:  # Only log if not shutting down
+                    print(f"Serial read error: {e}")
+                time.sleep(0.01)
+    
+    def stop(self):
+        """Stop the reading thread"""
+        self.running = False
 
 
 class GRBLSettings:
@@ -115,6 +148,9 @@ class GCodeAdjuster:
         # Serial connection
         self.serial_connection = None
         self.is_connected = False
+        self.serial_reader_thread = None
+        self.response_queue = queue.Queue()
+        self.processing_responses = False
 
         # Position tracking
         self.machine_pos = {"x": 0.0, "y": 0.0, "z": 0.0}
@@ -1428,26 +1464,28 @@ Vector Analysis:
             self.connect_button.config(text="Disconnect")
             self.status_label.config(text="Connected", foreground="green")
             
+            # Start serial reader thread
+            self.serial_reader_thread = SerialReaderThread(
+                self.serial_connection, self.response_queue
+            )
+            self.serial_reader_thread.start()
+            print("Serial reader thread started")
+            
+            # Start processing responses from queue
+            self.start_response_processing()
+            
             # Query all GRBL settings
             print("Querying all GRBL settings...")
             self.query_all_grbl_settings()
             
             # Set $10=3 to report both MPos and WPos
             print("Setting $10=3 to report both MPos and WPos")
-            result = self.send_gcode("$10=3")
-            print(f"$10 setting result: {result}")
+            self.send_gcode_async("$10=3")
             
-            # Small delay to let GRBL process the setting
-            time.sleep(0.5)
+            # Update homing enabled flag from settings (will be set when settings query completes)
             
-            # Update homing enabled flag from settings
-            self.homing_enabled = self.grbl_settings.get(22, 0) == 1
-            print(
-                f"Homing enabled: {self.homing_enabled} ($22={self.grbl_settings.get(22, 0)})"
-            )
-            
-            # Start periodic position updates
-            self.update_position()
+            # Start periodic position updates (now just sends ? commands)
+            self.start_status_updates()
             
         else:
             self.disconnect_grbl()
@@ -1471,23 +1509,41 @@ Vector Analysis:
         was_connected = self.is_connected
         self.is_connected = False
         
+        # Stop processing responses
+        self.processing_responses = False
+        
+        # Stop serial reader thread
+        if self.serial_reader_thread and self.serial_reader_thread.is_alive():
+            self.serial_reader_thread.stop()
+            self.serial_reader_thread.join(timeout=1.0)
+            print("Serial reader thread stopped")
+        self.serial_reader_thread = None
+        
+        # Clear response queue
+        while not self.response_queue.empty():
+            try:
+                self.response_queue.get_nowait()
+            except queue.Empty:
+                break
+
         # Turn off laser if it's on
         if self.laser_on:
             self.laser_on = False
             self.laser_button.config(text="Laser OFF")
-            
+
         if self.serial_connection:
             try:
                 # Only try to send M5 if we had a good connection
                 if was_connected and self.serial_connection.is_open:
                     try:
                         self.serial_connection.write(b"M5\n")
+                        time.sleep(0.1)  # Give it time to send
                     except:
                         pass
                 self.serial_connection.close()
             except Exception as e:
                 print(f"Error closing serial connection: {e}")
-                
+
         self.serial_connection = None
         self.connect_button.config(text="Connect")
         self.status_label.config(text="Disconnected", foreground="red")
@@ -1640,24 +1696,32 @@ Vector Analysis:
                 
                 # Update display
                 self.update_position_display()
+                
+                # Update execution path and plot if executing
+                if self.is_executing:
+                    current_pos = (self.work_pos["x"], self.work_pos["y"])
+                    if not self.execution_path or current_pos != self.execution_path[-1]:
+                        self.execution_path.append(current_pos)
+                        # Update plot (throttled)
+                        current_time = time.time()
+                        if current_time - self._last_plot_update > 0.1:  # 100ms throttle
+                            self.plot_toolpath()
+                            self.canvas.draw_idle()
+                            self._last_plot_update = current_time
             else:
                 print(f"DEBUG - Invalid response format (not < >): {response}")
-                
+
         except Exception as e:
             print(f"Error parsing status: {e}")
-    
+
     def update_position_display(self):
-        """Update position labels and plot"""
+        """Update position labels"""
         self.work_pos_label.config(
             text=f"X: {self.work_pos['x']:6.2f}  Y: {self.work_pos['y']:6.2f}  Z: {self.work_pos['z']:6.2f}"
         )
         self.machine_pos_label.config(
             text=f"X: {self.machine_pos['x']:6.2f}  Y: {self.machine_pos['y']:6.2f}  Z: {self.machine_pos['z']:6.2f}"
         )
-        
-        # Update plot if we have toolpath loaded
-        if self.original_positioning_lines or self.original_engraving_lines:
-            self.plot_toolpath()
     
     def update_position(self):
         """Periodically update position from GRBL"""
@@ -1671,16 +1735,16 @@ Vector Analysis:
         if not self.is_connected:
             messagebox.showwarning("Warning", "Please connect to GRBL first!")
             return
-        
+
         if self.laser_on:
             # Turn laser off
-            self.send_gcode("M5")
+            self.send_gcode_async("M5")
             self.laser_on = False
             self.laser_button.config(text="Laser OFF")
         else:
             # Turn laser on at low power (S10 = 1% power for testing)
-            self.send_gcode("M3 S10")
-            self.send_gcode("G1 F100")
+            self.send_gcode_async("M3 S10")
+            self.send_gcode_async("G1 F100")
             self.laser_on = True
             self.laser_button.config(text="Laser ON")
     
@@ -1700,11 +1764,9 @@ Vector Analysis:
         
         if response:
             # Send G92 command to set current position as origin
-            result = self.send_gcode("G92 X0 Y0 Z0")
-            if result:
-                messagebox.showinfo("Success", "Work origin set to current position")
-                # Force position update
-                self.query_position()
+            self.send_gcode_async("G92 X0 Y0 Z0")
+            messagebox.showinfo("Success", "Work origin set to current position")
+            # Position will update automatically from status responses
     
     def jog_move(self, x_dir, y_dir):
         """Jog move in X and Y direction"""
@@ -1724,25 +1786,25 @@ Vector Analysis:
         # Use $J jog command (GRBL 1.1+) which is safer
         # Format: $J=G91 X10 Y10 F1000 (relative move at feed rate 1000 mm/min)
         jog_cmd = f"$J=G91 X{x_move:.3f} Y{y_move:.3f} F1000"
-        self.send_gcode(jog_cmd)
-    
+        self.send_gcode_async(jog_cmd)
+
     def jog_move_z(self, z_dir):
         """Jog move in Z direction"""
         if not self.is_connected:
             messagebox.showwarning("Warning", "Please connect to GRBL first!")
             return
-        
+
         try:
             step = float(self.jog_step_var.get())
         except ValueError:
             messagebox.showerror("Error", "Invalid step size!")
             return
-        
+
         z_move = z_dir * step
-        
+
         # Use $J jog command for Z axis
         jog_cmd = f"$J=G91 Z{z_move:.3f} F500"
-        self.send_gcode(jog_cmd)
+        self.send_gcode_async(jog_cmd)
     
     def query_all_grbl_settings(self):
         """Query all GRBL settings using $$ command"""
@@ -1810,26 +1872,26 @@ Vector Analysis:
         )
         
         if response:
-            self.send_gcode("$H")
-    
+            self.send_gcode_async("$H")
+
     def clear_errors(self):
         """Clear GRBL errors and alarms"""
         if not self.is_connected:
             messagebox.showwarning("Warning", "Please connect to GRBL first!")
             return
-        
+
         # Send unlock command to clear alarms
-        self.send_gcode("$X")
+        self.send_gcode_async("$X")
         messagebox.showinfo(
             "Clear Errors", "Sent unlock command ($X) to clear GRBL alarms."
         )
-    
+
     def go_home(self):
         """Go to work coordinate origin (0,0,0)"""
         if not self.is_connected:
             messagebox.showwarning("Warning", "Please connect to GRBL first!")
             return
-        
+
         # Confirm with user
         response = messagebox.askyesno(
             "Go to Origin",
@@ -1838,11 +1900,11 @@ Vector Analysis:
             "G90 (absolute positioning)\n"
             "G0 X0 Y0 Z0 (rapid move to origin)",
         )
-        
+
         if response:
             # Send commands to go to origin
-            self.send_gcode("G90")  # Absolute positioning mode
-            self.send_gcode("G0 X0 Y0 Z0")  # Rapid move to origin
+            self.send_gcode_async("G90")  # Absolute positioning mode
+            self.send_gcode_async("G0 X0 Y0 Z0")  # Rapid move to origin
 
     def parse_gcode_position(self, line, current_pos):
         """Parse a G-code line and return the new position"""
@@ -1938,26 +2000,99 @@ Vector Analysis:
             print(f"Error during emergency stop: {e}")
             messagebox.showerror("Error", f"Emergency stop error:\n{str(e)}")
 
+    def start_response_processing(self):
+        """Start processing responses from the queue"""
+        if self.processing_responses:
+            return
+        
+        self.processing_responses = True
+        self.process_responses()
+    
+    def process_responses(self):
+        """Process all responses in the queue (runs on GUI thread)"""
+        if not self.processing_responses:
+            return
+        
+        try:
+            # Process all queued responses (up to 10 per call to avoid blocking GUI)
+            for _ in range(10):
+                try:
+                    response = self.response_queue.get_nowait()
+                    self.handle_response(response)
+                except queue.Empty:
+                    break
+        except Exception as e:
+            print(f"Error processing responses: {e}")
+        
+        # Schedule next processing
+        if self.processing_responses:
+            self.root.after(10, self.process_responses)  # Check every 10ms
+    
+    def handle_response(self, response):
+        """Handle a single response from GRBL"""
+        # Status responses
+        if response.startswith("<"):
+            self.parse_status_response(response)
+        
+        # OK responses - command completed
+        elif response.strip().lower() == "ok":
+            self.handle_grbl_ok()
+        
+        # Error responses
+        elif "error" in response.lower():
+            print(f"GRBL Error: {response}")
+        
+        # Settings responses ($N=value)
+        elif response.startswith("$"):
+            # Parse setting
+            try:
+                parts = response[1:].split("=")
+                if len(parts) == 2:
+                    setting_num = int(parts[0])
+                    value = float(parts[1])
+                    self.grbl_settings.set(setting_num, value)
+                    
+                    # Update homing flag if $22
+                    if setting_num == 22:
+                        self.homing_enabled = (value == 1)
+            except:
+                pass
+        
+        # Other responses
+        else:
+            print(f"GRBL: {response}")
+    
+    def send_gcode_async(self, command):
+        """Send G-code without waiting for response (async)"""
+        if not self.is_connected or not self.serial_connection:
+            return False
+        
+        try:
+            self.serial_connection.write((command + '\n').encode())
+            return True
+        except Exception as e:
+            print(f"Error sending command: {e}")
+            return False
+    
     def start_status_updates(self):
-        """Start periodic status updates (every 250ms)"""
+        """Start periodic status updates (every 100ms for faster updates)"""
         if not self.is_connected or self.status_update_id is not None:
             return
 
         def update_status():
             if self.is_connected and self.serial_connection:
                 try:
-                    # Send status query
+                    # Send status query (response handled by thread)
                     self.serial_connection.write(b"?")
-                    # Response will be handled by parse_status_response
                 except:
                     pass
 
-            # Schedule next update
+            # Schedule next update (faster: 100ms instead of 250ms)
             if self.is_connected:
-                self.status_update_id = self.root.after(250, update_status)
+                self.status_update_id = self.root.after(100, update_status)
 
         # Start the updates
-        self.status_update_id = self.root.after(250, update_status)
+        self.status_update_id = self.root.after(100, update_status)
 
     def stop_status_updates(self):
         """Stop periodic status updates"""
@@ -2051,13 +2186,15 @@ Vector Analysis:
         # Store current line for display
         self.current_line_text = line
 
-        # Send the line
+        # Send the line (async, no waiting)
         try:
-            command = line + "\n"
-            self.serial_connection.write(command.encode())
+            if not self.send_gcode_async(line):
+                print(f"Failed to send line: {line}")
+                self.stop_streaming()
+                return
 
             # Track command size
-            cmd_size = len(command)
+            cmd_size = len(line) + 1  # +1 for newline
             self.buffer_size += cmd_size
             self.command_queue.append({"size": cmd_size, "line": line})
 
