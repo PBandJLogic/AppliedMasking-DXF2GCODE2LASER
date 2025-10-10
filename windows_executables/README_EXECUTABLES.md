@@ -1,19 +1,31 @@
-# DXF2Laser and GCodeAdjuster - Windows Executables
+# DXF2Laser and GCodeAdjuster - Executables
+
+## ⚠️ IMPORTANT PLATFORM NOTICE
+
+**The executables in this folder were built on macOS and will ONLY work on Mac.**
+
+**If you need Windows executables:**
+1. You MUST build them on a Windows computer - see [WINDOWS_BUILD_INSTRUCTIONS.md](../WINDOWS_BUILD_INSTRUCTIONS.md)
+2. OR use GitHub Actions for automated builds - see [GITHUB_ACTIONS_BUILD.md](../GITHUB_ACTIONS_BUILD.md)
+3. OR run the Python scripts directly (see main README.md)
+
+**Why?** PyInstaller creates platform-specific binaries. A Mac executable cannot run on Windows, and vice versa.
 
 ## Overview
-These are standalone Windows executables for the DXF2Laser and GCodeAdjuster applications. They include all necessary dependencies and can run on Windows systems without requiring Python installation.
+These are standalone executables for the DXF2Laser and GCodeAdjuster applications. They include all necessary dependencies and can run without requiring Python installation.
 
 ## Files Included
-- **DXF2Laser.exe** - DXF to G-code conversion tool
-- **GCodeAdjuster.exe** - G-code adjustment and correction tool
+- **DXF2Laser** (or DXF2Laser.exe on Windows) - DXF to G-code conversion tool
+- **GCodeAdjuster** (or GCodeAdjuster.exe on Windows) - G-code adjustment and correction tool
 - **logo.png** - Application logo (included in both executables)
 
 ## System Requirements
-- Windows 64-bit (Windows 10 or later recommended)
+- **macOS**: 64-bit (macOS 10.15 or later recommended) for executables in this folder
+- **Windows**: Must build on Windows (see build instructions)
 - No additional software installation required
 - At least 100MB free disk space for each executable
 
-## DXF2Laser.exe
+## DXF2Laser
 ### Purpose
 Converts DXF (Drawing Exchange Format) files to G-code for laser cutting/engraving.
 
@@ -25,13 +37,15 @@ Converts DXF (Drawing Exchange Format) files to G-code for laser cutting/engravi
 - Copy G-code to clipboard
 
 ### Usage
-1. Double-click `DXF2Laser.exe` to launch
-2. Click "Load DXF File" to select your DXF file
-3. Adjust settings as needed
-4. Click "Convert to G-code" to generate G-code
-5. Use "Save G-code" to export the file
+**On Mac:** Double-click `DXF2Laser` to launch
+**On Windows:** Double-click `DXF2Laser.exe` to launch (must be built on Windows)
 
-## GCodeAdjuster.exe
+1. Click "Load DXF File" to select your DXF file
+2. Adjust settings as needed
+3. Click "Convert to G-code" to generate G-code
+4. Use "Save G-code" to export the file
+
+## GCodeAdjuster
 ### Purpose
 Adjusts G-code files based on actual vs expected target positions for precision correction.
 
@@ -44,13 +58,15 @@ Adjusts G-code files based on actual vs expected target positions for precision 
 - Export corrected G-code files
 
 ### Usage
-1. Double-click `GCodeAdjuster.exe` to launch
-2. Click "Load G-code File" to select your G-code file
-3. Enter expected target coordinates (left and right points)
-4. Enter actual measured coordinates
-5. Click "Adjust G-code" to calculate corrections
-6. Review the results and validation status
-7. Use "Save Adjusted G-code" to export the corrected file
+**On Mac:** Double-click `GCodeAdjuster` to launch
+**On Windows:** Double-click `GCodeAdjuster.exe` to launch (must be built on Windows)
+
+1. Click "Load G-code File" to select your G-code file
+2. Enter expected target coordinates (left and right points)
+3. Enter actual measured coordinates
+4. Click "Adjust G-code" to calculate corrections
+5. Review the results and validation status
+6. Use "Save Adjusted G-code" to export the corrected file
 
 ## Important Notes
 
@@ -87,9 +103,20 @@ For issues or questions about these executables:
 
 ## Version Information
 - Built with PyInstaller 6.16.0
-- Includes Python 3.13.2 runtime
+- Includes Python 3.13 runtime
 - Includes matplotlib, numpy, ezdxf, and Pillow libraries
-- Target architecture: Windows 64-bit
+- **Current executables:** macOS 64-bit
+
+## Building for Windows
+
+The executables in this folder were built on macOS. To create Windows executables:
+
+1. **Use a Windows PC** - See [WINDOWS_BUILD_INSTRUCTIONS.md](../WINDOWS_BUILD_INSTRUCTIONS.md)
+2. **Use GitHub Actions** - Automated builds for all platforms - See [GITHUB_ACTIONS_BUILD.md](../GITHUB_ACTIONS_BUILD.md)
+3. **Use a Windows VM** - Run Windows in Parallels/VMware/VirtualBox on your Mac
+
+You cannot build Windows executables from macOS - PyInstaller only creates executables for the platform it runs on.
 
 ---
-*These executables were created from the DXF2Laser project for easy distribution to Windows users.*
+*These executables were created from the DXF2Laser project for easy distribution.*
+

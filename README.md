@@ -48,7 +48,22 @@ A web application that converts DXF files to G-code for laser engraving machines
 - **Plotting**: Matplotlib
 - **G-code Generation**: Custom implementation with workspace clamping
 
-## Deployment
+## Installation Options
+
+### Option 1: Desktop Applications (Standalone Executables)
+
+**Windows Users:**
+- Download pre-built Windows executables (see Releases page)
+- Or build from source on Windows - see [WINDOWS_BUILD_INSTRUCTIONS.md](WINDOWS_BUILD_INSTRUCTIONS.md)
+- **Note:** Executables are platform-specific. Mac-built executables will NOT work on Windows
+
+**Mac Users:**
+- Build from source on Mac using PyInstaller (see build instructions)
+
+**Automated Builds:**
+- Set up GitHub Actions for automatic Windows/Mac builds - see [GITHUB_ACTIONS_BUILD.md](GITHUB_ACTIONS_BUILD.md)
+
+### Option 2: Web Application (Replit)
 
 This application is configured for Replit deployment with the following files:
 - `main.py`: Entry point for Replit
@@ -56,6 +71,32 @@ This application is configured for Replit deployment with the following files:
 - `requirements.txt`: Python dependencies
 - `.replit`: Replit configuration
 - `replit.nix`: Replit environment setup
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for web deployment instructions.
+
+### Option 3: Run from Source
+
+```bash
+# Clone the repository
+git clone [your-repo-url]
+cd DXF2LASER
+
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run DXF2Laser GUI
+python dxf2laser.py
+
+# Or run G-code Adjuster GUI
+python gcode_adjuster.py
+
+# Or run web version
+python main.py
+```
 
 ## Usage Notes
 
