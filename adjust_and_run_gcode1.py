@@ -751,10 +751,10 @@ class GCodeAdjuster:
 
         # Pack canvas after toolbar
         self.canvas.get_tk_widget().pack(side="top", fill="both", expand=True)
-        
+
         # Initialize plot with laser position marker
         self.initialize_plot()
-    
+
     def initialize_plot(self):
         """Initialize the plot with laser position marker"""
         # Clear and set up basic plot
@@ -764,23 +764,23 @@ class GCodeAdjuster:
         self.ax.set_title("G-code Toolpath")
         self.ax.grid(True, alpha=0.3)
         self.ax.set_aspect("equal")
-        
+
         # Set initial view limits
         self.ax.set_xlim(-10, 10)
         self.ax.set_ylim(-10, 10)
-        
+
         # Add laser position marker (red circle)
         self.laser_marker = self.ax.plot(
-            self.work_pos["x"], 
-            self.work_pos["y"], 
-            'ro', 
-            markersize=8, 
-            label='Laser Position'
+            self.work_pos["x"],
+            self.work_pos["y"],
+            "ro",
+            markersize=8,
+            label="Laser Position",
         )[0]
-        
+
         # Add legend
-        self.ax.legend(loc='upper right')
-        
+        self.ax.legend(loc="upper right")
+
         # Draw the canvas
         self.canvas.draw()
 
@@ -901,6 +901,9 @@ class GCodeAdjuster:
 
         positioning_lines = []
         engraving_lines = []
+        
+        # Track if we've made the first move
+        first_move = True
 
         for line in lines:
             line_upper = line.upper().strip()
@@ -927,10 +930,13 @@ class GCodeAdjuster:
                 if y_pos is not None:
                     current_y = y_pos
 
-                # Draw positioning move
-                positioning_lines.append([(last_x, last_y), (current_x, current_y)])
+                # Draw positioning move (but not for the very first G0)
+                if not first_move:
+                    positioning_lines.append([(last_x, last_y), (current_x, current_y)])
+                
                 last_x = current_x
                 last_y = current_y
+                first_move = False
 
             # Parse G1 (engraving) moves
             elif line_upper.startswith("G1"):
@@ -1729,35 +1735,34 @@ Vector Analysis:
         self.machine_pos_label.config(
             text=f"X: {self.machine_pos['x']:6.2f}  Y: {self.machine_pos['y']:6.2f}  Z: {self.machine_pos['z']:6.2f}"
         )
-        
+
         # Update laser position marker on plot if it exists
-        if hasattr(self, 'laser_marker'):
+        if hasattr(self, "laser_marker"):
             self.laser_marker.set_data([self.work_pos["x"]], [self.work_pos["y"]])
-            
+
             # Auto-scale plot if laser moves outside current view (only when not executing)
             if not self.is_executing:
                 xlim = self.ax.get_xlim()
                 ylim = self.ax.get_ylim()
                 x_pos = self.work_pos["x"]
                 y_pos = self.work_pos["y"]
-                
+
                 # Check if position is outside current view
                 margin = 5  # mm margin around position
                 need_rescale = False
-                
+
                 if x_pos < xlim[0] or x_pos > xlim[1]:
                     self.ax.set_xlim(x_pos - margin, x_pos + margin)
                     need_rescale = True
                 if y_pos < ylim[0] or y_pos > ylim[1]:
                     self.ax.set_ylim(y_pos - margin, y_pos + margin)
                     need_rescale = True
-                    
+
                 # Redraw canvas
                 if need_rescale:
                     self.ax.relim()
                     self.ax.autoscale_view()
                 self.canvas.draw_idle()
-
 
     def toggle_laser(self):
         """Toggle laser on/off at low power"""
