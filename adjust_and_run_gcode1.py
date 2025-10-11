@@ -724,7 +724,9 @@ class GCodeAdjuster:
             goto_button = ttk.Button(
                 point_frame,
                 text="Goto",
-                command=lambda x=expected_point[0], y=expected_point[1]: goto_expected_pos(x, y),
+                command=lambda x=expected_point[0], y=expected_point[
+                    1
+                ]: goto_expected_pos(x, y),
                 width=4,
             )
             goto_button.pack(side="left", padx=(0, 3))
@@ -1870,10 +1872,10 @@ Vector Analysis:
 
         # Track laser state changes from M5/M3 commands
         command_upper = command.upper().strip()
-        
+
         # Send the command async
         self.send_gcode_async(command)
-        
+
         # Update laser button state if M5 or M3/M4
         if command_upper.startswith("M5") or command_upper == "M5":
             self.laser_on = False
@@ -2198,14 +2200,46 @@ Vector Analysis:
         if not self.streaming:
             return
 
+        # Track completion checks to prevent infinite waiting
+        if not hasattr(self, "_completion_checks"):
+            self._completion_checks = 0
+
+        self._completion_checks += 1
+
+        print(
+            f"Completion check #{self._completion_checks}: buffer={self.buffer_size}, queue={len(self.command_queue)}"
+        )
+
         # If buffer is empty and command queue is empty, we're done
-        if self.buffer_size <= 0 and len(self.command_queue) == 0:
+        # OR if we've waited too long (50 checks = 5 seconds)
+        buffer_empty = self.buffer_size <= 0 and len(self.command_queue) == 0
+        timeout_reached = self._completion_checks > 50
+
+        if buffer_empty or timeout_reached:
+            if timeout_reached:
+                print(f"Warning: Completion timeout after 5 seconds. Force completing.")
+
+            self._completion_checks = 0
             self.stop_streaming()
-            if hasattr(self, "progress_window") and self.progress_window.winfo_exists():
-                self.progress_window.destroy()
-            messagebox.showinfo(
-                "Complete",
-                f"G-code execution complete!\n\nSent {self.sent_lines} lines.",
+
+            # Close progress window
+            try:
+                if (
+                    hasattr(self, "progress_window")
+                    and self.progress_window.winfo_exists()
+                ):
+                    self.progress_window.destroy()
+                    print("Progress window destroyed")
+            except Exception as e:
+                print(f"Error destroying progress window: {e}")
+
+            # Show completion message
+            self.root.after(
+                100,
+                lambda: messagebox.showinfo(
+                    "Complete",
+                    f"G-code execution complete!\n\nSent {self.sent_lines} lines.",
+                ),
             )
         else:
             # Check again in 100ms
@@ -2294,17 +2328,24 @@ Vector Analysis:
 
         # Handle single-step mode
         if self.single_step_mode:
-            # Pause after sending this line
-            self.step_paused = True
-            # Enable next buttons (both in left panel and progress window)
-            if hasattr(self, "next_step_button"):
-                self.next_step_button.config(state="normal")
-            if hasattr(self, "step_next_button"):
-                self.step_next_button.config(state="normal")
-            # Don't automatically continue
-            return
+            # Check if there are more lines
+            if self.gcode_buffer:
+                # More lines to go - pause for user to click Next
+                self.step_paused = True
+                # Enable next buttons (both in left panel and progress window)
+                if hasattr(self, "next_step_button"):
+                    self.next_step_button.config(state="normal")
+                if hasattr(self, "step_next_button"):
+                    self.step_next_button.config(state="normal")
+                # Don't automatically continue
+                return
+            else:
+                # No more lines - this was the last line, check for completion
+                print("Single-step: Last line sent, checking for completion")
+                self.check_streaming_complete()
+                return
 
-        # Continue streaming if there are more lines
+        # Continue streaming if there are more lines (run mode)
         if self.gcode_buffer:
             self.root.after(1, self.stream_gcode_line_with_step)
         else:
@@ -2359,7 +2400,7 @@ Vector Analysis:
                 "Single-Step Mode" if self.single_step_mode else "Streaming G-code"
             )
             self.progress_window.title(mode_text)
-            self.progress_window.geometry("500x180")
+            self.progress_window.geometry("550x220")
             self.progress_window.transient(self.root)
 
             # Progress label
@@ -2381,11 +2422,15 @@ Vector Analysis:
             self.progress_bar.pack(pady=10)
             self.progress_bar["maximum"] = self.total_lines
 
-            # Status label
+            # Status label - shows current G-code line
             self.status_label = ttk.Label(
-                self.progress_window, text=f"Line 0 / {self.total_lines}"
+                self.progress_window, 
+                text=f"Line 0 / {self.total_lines}",
+                font=("Courier", 9),
+                wraplength=480,
+                justify="left"
             )
-            self.status_label.pack(pady=5)
+            self.status_label.pack(pady=5, padx=10)
 
             # Control buttons in progress window
             button_frame = ttk.Frame(self.progress_window)
