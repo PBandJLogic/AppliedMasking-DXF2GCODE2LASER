@@ -720,7 +720,7 @@ class GCodeAdjuster:
                 command=lambda x=expected_point[0], y=expected_point[
                     1
                 ]: goto_expected_pos(x, y),
-                width=3,
+                width=5,
             )
             goto_button.pack(side="left", padx=(0, 2))
 
@@ -914,9 +914,6 @@ class GCodeAdjuster:
         positioning_lines = []
         engraving_lines = []
 
-        # Track if we've made the first move
-        first_move = True
-
         for line in lines:
             line_upper = line.upper().strip()
 
@@ -942,13 +939,11 @@ class GCodeAdjuster:
                 if y_pos is not None:
                     current_y = y_pos
 
-                # Draw positioning move (but not for the very first G0)
-                if not first_move:
-                    positioning_lines.append([(last_x, last_y), (current_x, current_y)])
-
+                # Always draw positioning moves (including first one from origin)
+                positioning_lines.append([(last_x, last_y), (current_x, current_y)])
+                
                 last_x = current_x
                 last_y = current_y
-                first_move = False
 
             # Parse G1 (engraving) moves
             elif line_upper.startswith("G1"):
@@ -968,13 +963,11 @@ class GCodeAdjuster:
                 if y_pos is not None:
                     current_y = y_pos
 
-                # Draw engraving move (but not if it's the very first move from origin)
-                if not first_move:
-                    engraving_lines.append([(last_x, last_y), (current_x, current_y)])
-
+                # Always draw engraving moves (including first one if no G0 preceded it)
+                engraving_lines.append([(last_x, last_y), (current_x, current_y)])
+                
                 last_x = current_x
                 last_y = current_y
-                first_move = False
 
             # Parse G2 (clockwise arc) and G3 (counterclockwise arc) moves
             elif line_upper.startswith("G2") or line_upper.startswith("G3"):
@@ -1356,7 +1349,7 @@ Vector Analysis:
             # Skip empty lines (don't include them in adjusted G-code)
             if not line_upper:
                 continue
-                
+
             # Keep comments but skip processing them
             if line_upper.startswith(";") or line_upper.startswith("("):
                 adjusted_lines.append(adjusted_line)
