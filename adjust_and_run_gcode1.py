@@ -483,27 +483,6 @@ class GCodeAdjuster:
             z_frame, text="Z-", command=lambda: self.jog_move_z(-1), width=button_width
         ).pack(side="left", padx=2)
 
-        # Instructional note
-        notes_frame = ttk.Frame(jog_frame)
-        notes_frame.pack(fill="x", pady=(10, 0))
-
-        ttk.Label(
-            notes_frame,
-            text="Note:",
-            font=("TkDefaultFont", 9, "bold"),
-            foreground="#666666",
-        ).pack(anchor="w")
-
-        ttk.Label(
-            notes_frame,
-            text="The 2 reference points are used to calculate translation and rotation corrections. "
-            "Point 1 should be to the left of Point 2.",
-            font=("TkDefaultFont", 8),
-            foreground="#666666",
-            wraplength=440,
-            justify="left",
-        ).pack(anchor="w", padx=(10, 0))
-
         # Store reference to parent for dynamic updates
         self.targets_parent = parent
 
@@ -1652,15 +1631,12 @@ Vector Analysis:
         # Check if serial port is still open
         try:
             if not self.serial_connection.is_open:
-                print("DEBUG - Serial port is not open")
                 return
         except:
-            print("DEBUG - Error checking if serial port is open")
             return
 
         try:
             # Send status query (?)
-            print("DEBUG - Sending ? query to GRBL")
             self.serial_connection.write(b"?")
 
             # Read response
@@ -1669,13 +1645,9 @@ Vector Analysis:
             while (datetime.now() - start_time).total_seconds() < 0.5:
                 if self.serial_connection.in_waiting > 0:
                     response = self.serial_connection.readline().decode().strip()
-                    print(f"DEBUG - Received from GRBL: '{response}'")
                     self.parse_status_response(response)
                     response_received = True
                     break
-
-            if not response_received:
-                print("DEBUG - No response received from GRBL within timeout")
 
         except (serial.SerialException, OSError, PermissionError) as e:
             # Serial connection error - disconnect silently
@@ -1687,9 +1659,6 @@ Vector Analysis:
     def parse_status_response(self, response):
         """Parse GRBL status response and update position"""
         try:
-            # Debug: Print what we received
-            print(f"DEBUG - GRBL Response: {response}")
-
             # GRBL status format: <Idle|MPos:0.000,0.000,0.000|FS:0,0|WCO:0.000,0.000,0.000>
             if response.startswith("<") and response.endswith(">"):
                 parts = response[1:-1].split("|")
@@ -1701,9 +1670,6 @@ Vector Analysis:
                             self.machine_pos["x"] = float(coords[0])
                             self.machine_pos["y"] = float(coords[1])
                             self.machine_pos["z"] = float(coords[2])
-                            print(
-                                f"DEBUG - MPos updated: X={self.machine_pos['x']:.2f} Y={self.machine_pos['y']:.2f} Z={self.machine_pos['z']:.2f}"
-                            )
 
                     elif part.startswith("WPos:"):
                         coords = part[5:].split(",")
@@ -1711,9 +1677,6 @@ Vector Analysis:
                             self.work_pos["x"] = float(coords[0])
                             self.work_pos["y"] = float(coords[1])
                             self.work_pos["z"] = float(coords[2])
-                            print(
-                                f"DEBUG - WPos updated: X={self.work_pos['x']:.2f} Y={self.work_pos['y']:.2f} Z={self.work_pos['z']:.2f}"
-                            )
 
                     elif part.startswith("WCO:"):
                         coords = part[4:].split(",")
@@ -1721,9 +1684,6 @@ Vector Analysis:
                             self.wco["x"] = float(coords[0])
                             self.wco["y"] = float(coords[1])
                             self.wco["z"] = float(coords[2])
-                            print(
-                                f"DEBUG - WCO updated: X={self.wco['x']:.2f} Y={self.wco['y']:.2f} Z={self.wco['z']:.2f}"
-                            )
 
                 # Calculate missing positions
                 if "MPos:" in response and "WPos:" not in response:
@@ -1731,15 +1691,11 @@ Vector Analysis:
                     self.work_pos["x"] = self.machine_pos["x"] - self.wco["x"]
                     self.work_pos["y"] = self.machine_pos["y"] - self.wco["y"]
                     self.work_pos["z"] = self.machine_pos["z"] - self.wco["z"]
-                    print(f"DEBUG - WPos calculated from MPos-WCO")
                 elif "WPos:" in response and "MPos:" not in response:
                     # Calculate MPos from WPos + WCO
                     self.machine_pos["x"] = self.work_pos["x"] + self.wco["x"]
                     self.machine_pos["y"] = self.work_pos["y"] + self.wco["y"]
                     self.machine_pos["z"] = self.work_pos["z"] + self.wco["z"]
-                    print(
-                        f"DEBUG - MPos calculated from WPos+WCO: X={self.machine_pos['x']:.2f} Y={self.machine_pos['y']:.2f} Z={self.machine_pos['z']:.2f}"
-                    )
 
                 # Update display
                 self.update_position_display()
@@ -1747,21 +1703,24 @@ Vector Analysis:
                 # Update execution path and plot if executing
                 if self.is_executing:
                     current_pos = (self.work_pos["x"], self.work_pos["y"])
-                    if (
-                        not self.execution_path
-                        or current_pos != self.execution_path[-1]
-                    ):
+                    # Always add position if changed
+                    if not self.execution_path or current_pos != self.execution_path[-1]:
                         self.execution_path.append(current_pos)
-                        # Update plot (throttled)
+                    
+                    # Force plot update in single-step mode, throttle in run mode
+                    if self.single_step_mode:
+                        # Always update plot immediately in single-step mode
+                        self.plot_toolpath()
+                        self.canvas.draw()
+                        self.canvas.flush_events()
+                    else:
+                        # Run mode - throttled updates for performance
                         current_time = time.time()
-                        if (
-                            current_time - self._last_plot_update > 0.1
-                        ):  # 100ms throttle
+                        if current_time - self._last_plot_update > 0.1:  # 100ms throttle
                             self.plot_toolpath()
-                            self.canvas.draw_idle()
+                            self.canvas.draw()
+                            self.canvas.flush_events()
                             self._last_plot_update = current_time
-            else:
-                print(f"DEBUG - Invalid response format (not < >): {response}")
 
         except Exception as e:
             print(f"Error parsing status: {e}")
@@ -2340,9 +2299,14 @@ Vector Analysis:
                 # Don't automatically continue
                 return
             else:
-                # No more lines - this was the last line, check for completion
-                print("Single-step: Last line sent, checking for completion")
-                self.check_streaming_complete()
+                # No more lines - this was the last line
+                # Wait a bit for GRBL to execute and send final status before completing
+                print(
+                    "Single-step: Last line sent, waiting for execution before completion check"
+                )
+                self.root.after(
+                    500, self.check_streaming_complete
+                )  # 500ms delay for final move
                 return
 
         # Continue streaming if there are more lines (run mode)
@@ -2424,11 +2388,11 @@ Vector Analysis:
 
             # Status label - shows current G-code line
             self.status_label = ttk.Label(
-                self.progress_window, 
+                self.progress_window,
                 text=f"Line 0 / {self.total_lines}",
                 font=("Courier", 9),
                 wraplength=480,
-                justify="left"
+                justify="left",
             )
             self.status_label.pack(pady=5, padx=10)
 
