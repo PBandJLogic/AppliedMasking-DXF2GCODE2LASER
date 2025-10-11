@@ -133,8 +133,16 @@ class GRBLSettings:
 class GCodeAdjuster:
     def __init__(self, root):
         self.root = root
-        self.root.title("G-code Adjuster")
+        self.root.title("Gcode2Laser - Precision G-code Alignment")
         self.root.geometry("1400x900")
+        
+        # Set window icon
+        try:
+            icon_path = os.path.join(os.path.dirname(__file__), "logo.png")
+            if os.path.exists(icon_path):
+                self.root.iconphoto(True, tk.PhotoImage(file=icon_path))
+        except Exception as e:
+            print(f"Could not load window icon: {e}")
 
         # Data storage
         self.original_gcode = ""
@@ -251,6 +259,37 @@ class GCodeAdjuster:
 
     def setup_left_panel(self, parent):
         """Set up the left control panel"""
+        # Logo and title header
+        header_frame = ttk.Frame(parent)
+        header_frame.pack(fill="x", pady=(0, 10))
+        
+        try:
+            logo_path = os.path.join(os.path.dirname(__file__), "logo.png")
+            if os.path.exists(logo_path):
+                # Load and display logo
+                logo_image = tk.PhotoImage(file=logo_path)
+                # Scale down if needed (adjust subsample value to resize)
+                logo_image = logo_image.subsample(2, 2)  # Makes it 50% size
+                logo_label = ttk.Label(header_frame, image=logo_image)
+                logo_label.image = logo_image  # Keep a reference!
+                logo_label.pack(pady=5)
+                
+                # Add title below logo
+                title_label = ttk.Label(
+                    header_frame, 
+                    text="Gcode2Laser",
+                    font=("Arial", 14, "bold")
+                )
+                title_label.pack(pady=(0, 5))
+        except Exception as e:
+            # If logo fails, just show title
+            title_label = ttk.Label(
+                header_frame, 
+                text="Gcode2Laser",
+                font=("Arial", 14, "bold")
+            )
+            title_label.pack(pady=5)
+        
         # GRBL Connection section
         grbl_frame = ttk.LabelFrame(parent, text="GRBL Connection", padding=10)
         grbl_frame.pack(fill="x", pady=(0, 10))
