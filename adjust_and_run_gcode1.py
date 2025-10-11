@@ -490,9 +490,9 @@ class GCodeAdjuster:
         self.update_reference_points_display()
 
         # Adjust button
-        ttk.Button(parent, text="Adjust G-code", command=self.adjust_gcode, width=20).pack(
-            pady=(0, 10)
-        )
+        ttk.Button(
+            parent, text="Adjust G-code", command=self.adjust_gcode, width=20
+        ).pack(pady=(0, 10))
 
         # Results display
         results_frame = ttk.LabelFrame(parent, text="Calculation Results", padding=10)
@@ -546,7 +546,10 @@ class GCodeAdjuster:
         self.stop_button.pack(side="left", padx=(0, 0))
 
         ttk.Button(
-            parent, text="Save Adjusted G-code", command=self.save_adjusted_gcode, width=20
+            parent,
+            text="Save Adjusted G-code",
+            command=self.save_adjusted_gcode,
+            width=20,
         ).pack()
 
     def update_reference_points_display(self):
@@ -748,6 +751,38 @@ class GCodeAdjuster:
 
         # Pack canvas after toolbar
         self.canvas.get_tk_widget().pack(side="top", fill="both", expand=True)
+        
+        # Initialize plot with laser position marker
+        self.initialize_plot()
+    
+    def initialize_plot(self):
+        """Initialize the plot with laser position marker"""
+        # Clear and set up basic plot
+        self.ax.clear()
+        self.ax.set_xlabel("X (mm)")
+        self.ax.set_ylabel("Y (mm)")
+        self.ax.set_title("G-code Toolpath")
+        self.ax.grid(True, alpha=0.3)
+        self.ax.set_aspect("equal")
+        
+        # Set initial view limits
+        self.ax.set_xlim(-10, 10)
+        self.ax.set_ylim(-10, 10)
+        
+        # Add laser position marker (red circle)
+        self.laser_marker = self.ax.plot(
+            self.work_pos["x"], 
+            self.work_pos["y"], 
+            'ro', 
+            markersize=8, 
+            label='Laser Position'
+        )[0]
+        
+        # Add legend
+        self.ax.legend(loc='upper right')
+        
+        # Draw the canvas
+        self.canvas.draw()
 
     def load_gcode_file(self):
         """Load a G-code file and parse coordinates"""
@@ -1687,20 +1722,42 @@ Vector Analysis:
             print(f"Error parsing status: {e}")
 
     def update_position_display(self):
-        """Update position labels"""
+        """Update position labels and laser marker on plot"""
         self.work_pos_label.config(
             text=f"X: {self.work_pos['x']:6.2f}  Y: {self.work_pos['y']:6.2f}  Z: {self.work_pos['z']:6.2f}"
         )
         self.machine_pos_label.config(
             text=f"X: {self.machine_pos['x']:6.2f}  Y: {self.machine_pos['y']:6.2f}  Z: {self.machine_pos['z']:6.2f}"
         )
+        
+        # Update laser position marker on plot if it exists
+        if hasattr(self, 'laser_marker'):
+            self.laser_marker.set_data([self.work_pos["x"]], [self.work_pos["y"]])
+            
+            # Auto-scale plot if laser moves outside current view (only when not executing)
+            if not self.is_executing:
+                xlim = self.ax.get_xlim()
+                ylim = self.ax.get_ylim()
+                x_pos = self.work_pos["x"]
+                y_pos = self.work_pos["y"]
+                
+                # Check if position is outside current view
+                margin = 5  # mm margin around position
+                need_rescale = False
+                
+                if x_pos < xlim[0] or x_pos > xlim[1]:
+                    self.ax.set_xlim(x_pos - margin, x_pos + margin)
+                    need_rescale = True
+                if y_pos < ylim[0] or y_pos > ylim[1]:
+                    self.ax.set_ylim(y_pos - margin, y_pos + margin)
+                    need_rescale = True
+                    
+                # Redraw canvas
+                if need_rescale:
+                    self.ax.relim()
+                    self.ax.autoscale_view()
+                self.canvas.draw_idle()
 
-    def update_position(self):
-        """Periodically update position from GRBL"""
-        if self.is_connected:
-            self.query_position()
-            # Schedule next update in 200ms
-            self.position_update_id = self.root.after(200, self.update_position)
 
     def toggle_laser(self):
         """Toggle laser on/off at low power"""
