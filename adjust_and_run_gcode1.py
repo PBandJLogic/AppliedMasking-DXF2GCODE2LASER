@@ -700,15 +700,15 @@ class GCodeAdjuster:
 
                 # Check if laser is currently on
                 was_laser_on = self.laser_on
-                
+
                 # If laser is on, turn it off for the rapid move
                 if was_laser_on:
                     self.send_gcode_async("M5")  # Turn off laser
-                
+
                 # Send commands to move to the expected position
                 self.send_gcode_async("G90")  # Absolute positioning mode
                 self.send_gcode_async(f"G0 X{exp_x:.4f} Y{exp_y:.4f}")  # Rapid move
-                
+
                 # If laser was on, turn it back on at low power
                 if was_laser_on:
                     self.send_gcode_async("M4 S1")  # Turn on laser at low power
@@ -1353,12 +1353,12 @@ Vector Analysis:
             adjusted_line = line
             line_upper = line.upper().strip()
 
-            # Skip comments and empty lines
-            if (
-                not line_upper
-                or line_upper.startswith(";")
-                or line_upper.startswith("(")
-            ):
+            # Skip empty lines (don't include them in adjusted G-code)
+            if not line_upper:
+                continue
+                
+            # Keep comments but skip processing them
+            if line_upper.startswith(";") or line_upper.startswith("("):
                 adjusted_lines.append(adjusted_line)
                 continue
 
