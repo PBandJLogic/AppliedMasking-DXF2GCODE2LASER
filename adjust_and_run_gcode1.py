@@ -312,8 +312,8 @@ class GCodeAdjuster:
         file_frame.pack(fill="x", pady=(0, 10))
 
         ttk.Button(
-            file_frame, text="Load G-code File", command=self.load_gcode_file
-        ).pack(fill="x")
+            file_frame, text="Load G-code File", command=self.load_gcode_file, width=20
+        ).pack()
 
         # Laser Jog Controls section
         jog_frame = ttk.LabelFrame(
@@ -490,8 +490,8 @@ class GCodeAdjuster:
         self.update_reference_points_display()
 
         # Adjust button
-        ttk.Button(parent, text="Adjust G-code", command=self.adjust_gcode).pack(
-            fill="x", pady=(0, 10)
+        ttk.Button(parent, text="Adjust G-code", command=self.adjust_gcode, width=20).pack(
+            pady=(0, 10)
         )
 
         # Results display
@@ -546,8 +546,8 @@ class GCodeAdjuster:
         self.stop_button.pack(side="left", padx=(0, 0))
 
         ttk.Button(
-            parent, text="Save Adjusted G-code", command=self.save_adjusted_gcode
-        ).pack(fill="x")
+            parent, text="Save Adjusted G-code", command=self.save_adjusted_gcode, width=20
+        ).pack()
 
     def update_reference_points_display(self):
         """Update the reference points display based on loaded data"""
@@ -605,9 +605,8 @@ class GCodeAdjuster:
             ttk.Label(
                 point_frame,
                 text=f"Pt{point_num}:",
-                width=4,
                 font=("TkDefaultFont", 9, "bold"),
-            ).pack(side="left")
+            ).pack(side="left", padx=(0, 2))
 
             # Expected label and entry
             ttk.Label(
