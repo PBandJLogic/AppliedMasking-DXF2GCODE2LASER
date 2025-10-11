@@ -698,9 +698,21 @@ class GCodeAdjuster:
                     messagebox.showwarning("Warning", "Please connect to GRBL first!")
                     return
 
+                # Check if laser is currently on
+                was_laser_on = self.laser_on
+                
+                # If laser is on, turn it off for the rapid move
+                if was_laser_on:
+                    self.send_gcode_async("M5")  # Turn off laser
+                
                 # Send commands to move to the expected position
                 self.send_gcode_async("G90")  # Absolute positioning mode
                 self.send_gcode_async(f"G0 X{exp_x:.4f} Y{exp_y:.4f}")  # Rapid move
+                
+                # If laser was on, turn it back on at low power
+                if was_laser_on:
+                    self.send_gcode_async("M4 S1")  # Turn on laser at low power
+                    self.send_gcode_async("G1 F100")  # Set feed rate for laser mode
 
             goto_button = ttk.Button(
                 point_frame,
