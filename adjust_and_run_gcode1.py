@@ -373,11 +373,34 @@ class GCodeAdjuster:
 
         self.set_origin_button = ttk.Button(
             origin_frame,
-            text="Set Origin (G92 X0 Y0 Z0)",
+            text="Set Origin (G10 L20 P1 X0 Y0 Z0)",
             command=self.set_work_origin,
-            width=25,
+            width=35,
         )
         self.set_origin_button.pack()
+
+        # G-code command entry
+        gcode_cmd_frame = ttk.Frame(jog_frame)
+        gcode_cmd_frame.pack(fill="x", pady=(5, 5))
+
+        ttk.Label(gcode_cmd_frame, text="G-code:").pack(side="left", padx=(0, 5))
+        self.gcode_cmd_var = tk.StringVar()
+        self.gcode_cmd_entry = ttk.Entry(
+            gcode_cmd_frame,
+            textvariable=self.gcode_cmd_var,
+            width=20,
+        )
+        self.gcode_cmd_entry.pack(side="left", padx=(0, 5))
+
+        # Bind Enter key to execute command
+        self.gcode_cmd_entry.bind("<Return>", lambda e: self.execute_manual_gcode())
+
+        ttk.Button(
+            gcode_cmd_frame,
+            text="Execute",
+            command=self.execute_manual_gcode,
+            width=8,
+        ).pack(side="left")
 
         # Jog buttons in a grid
         jog_buttons_frame = ttk.Frame(jog_frame)
@@ -1786,12 +1809,12 @@ Vector Analysis:
             "Set Work Origin",
             f"Set current position as work origin (0, 0, 0)?\n\n"
             f"Current MPos: X={self.machine_pos['x']:.2f} Y={self.machine_pos['y']:.2f} Z={self.machine_pos['z']:.2f}\n\n"
-            f"This will execute: G92 X0 Y0 Z0",
+            f"This will execute: G10 L20 P1 X0 Y0 Z0",
         )
 
         if response:
-            # Send G92 command to set current position as origin
-            self.send_gcode_async("G92 X0 Y0 Z0")
+            # Send G10 command to set current position as origin for G54 coordinate system
+            self.send_gcode_async("G10 L20 P1 X0 Y0 Z0")
             messagebox.showinfo("Success", "Work origin set to current position")
             # Position will update automatically from status responses
 
@@ -1832,6 +1855,37 @@ Vector Analysis:
         # Use $J jog command for Z axis
         jog_cmd = f"$J=G91 Z{z_move:.3f} F500"
         self.send_gcode_async(jog_cmd)
+
+    def execute_manual_gcode(self):
+        """Execute a manually entered G-code command"""
+        if not self.is_connected:
+            messagebox.showwarning("Warning", "Please connect to GRBL first!")
+            return
+
+        command = self.gcode_cmd_var.get().strip()
+        if not command:
+            return
+
+        print(f"Executing manual G-code: {command}")
+
+        # Track laser state changes from M5/M3 commands
+        command_upper = command.upper().strip()
+        
+        # Send the command async
+        self.send_gcode_async(command)
+        
+        # Update laser button state if M5 or M3/M4
+        if command_upper.startswith("M5") or command_upper == "M5":
+            self.laser_on = False
+            self.laser_button.config(text="Laser OFF")
+            print("M5 command executed, laser state set to OFF")
+        elif command_upper.startswith("M3") or command_upper.startswith("M4"):
+            self.laser_on = True
+            self.laser_button.config(text="Laser ON")
+            print("M3/M4 command executed, laser state set to ON")
+
+        # Clear the entry field after execution
+        self.gcode_cmd_var.set("")
 
     def query_all_grbl_settings(self):
         """Query all GRBL settings using $$ command"""
