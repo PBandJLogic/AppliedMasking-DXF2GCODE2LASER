@@ -1344,10 +1344,27 @@ Vector Analysis:
             return
 
         try:
+            # Generate filename with _adjusted suffix and timestamp
+            if hasattr(self, "original_file_path"):
+                filename_only = os.path.basename(self.original_file_path)
+                base_name, extension = os.path.splitext(filename_only)
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                initial_name = f"{base_name}_adjusted_{timestamp}"
+            else:
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                initial_name = f"adjusted_gcode_{timestamp}"
+
             # Ask user for save location
+            print(f"Suggested name for adjusted G-code: {initial_name}.nc")
             file_path = filedialog.asksaveasfilename(
+                initialfile=initial_name,
                 defaultextension=".nc",
-                filetypes=[("G-code files", "*.nc"), ("All files", "*.*")],
+                filetypes=[
+                    ("G-code files", "*.nc"),
+                    ("G-code files", "*.gcode"),
+                    ("Text files", "*.txt"),
+                    ("All files", "*.*"),
+                ],
                 title="Save Adjusted G-code",
             )
 
@@ -1361,7 +1378,7 @@ Vector Analysis:
                 act_x = float(act_x_var.get())
                 act_y = float(act_y_var.get())
                 actual_points.append((act_x, act_y))
-            
+
             # Debug: Print actual reference point values
             print(f"DEBUG save_adjusted_gcode: Actual reference points to save:")
             print(f"  Point 1: ({actual_points[0][0]:.4f}, {actual_points[0][1]:.4f})")
@@ -1410,7 +1427,7 @@ Vector Analysis:
         """Update reference point comments in G-code with actual values"""
         lines = gcode.split("\n")
         updated_lines = []
-        
+
         ref1_updated = False
         ref2_updated = False
 
@@ -1443,8 +1460,10 @@ Vector Analysis:
             else:
                 # Keep all other lines unchanged
                 updated_lines.append(line)
-        
-        print(f"DEBUG _update_reference_points: ref1_updated={ref1_updated}, ref2_updated={ref2_updated}")
+
+        print(
+            f"DEBUG _update_reference_points: ref1_updated={ref1_updated}, ref2_updated={ref2_updated}"
+        )
 
         return "\n".join(updated_lines)
 
@@ -2646,49 +2665,6 @@ Vector Analysis:
             if hasattr(self, "stop_button"):
                 self.stop_button.config(state="disabled")
             messagebox.showerror("Error", f"Failed to run G-code:\n{str(e)}")
-
-    def save_adjusted_gcode(self):
-        """Save the adjusted G-code to a new file"""
-        if not self.adjusted_gcode:
-            messagebox.showwarning("Warning", "Please adjust the G-code first!")
-            return
-
-        try:
-            # Generate filename with _adjusted suffix and timestamp
-            if hasattr(self, "original_file_path"):
-                # 1. First, get just the filename from the full path (e.g., "my_gcode.nc")
-                filename_only = os.path.basename(self.original_file_path)
-                # 2. Now, split that filename to get its base and extension
-                base_name, extension = os.path.splitext(filename_only)
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                # 3. Build the new initial name using ONLY the base_name
-                initial_name = f"{base_name}_adjusted_{timestamp}"
-            else:
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                initial_name = f"adjusted_gcode_{timestamp}"
-
-            # Ask user for save location
-            print(f"Suggested name for adjusted G-code: {initial_name}.nc")
-            save_path = filedialog.asksaveasfilename(
-                initialfile=initial_name,
-                defaultextension=".nc",
-                filetypes=[
-                    ("G-code files", "*.nc"),
-                    ("G-code files", "*.gcode"),
-                    ("Text files", "*.txt"),
-                    ("All files", "*.*"),
-                ],
-                title="Save Adjusted G-code File",
-            )
-
-            if save_path:
-                print(f"Saving adjusted G-code to: {save_path}")
-                with open(save_path, "w") as f:
-                    f.write(self.adjusted_gcode)
-
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to save adjusted G-code:\n{str(e)}")
-
 
 def main():
     root = tk.Tk()
