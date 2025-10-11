@@ -1368,6 +1368,9 @@ Vector Analysis:
             if line_upper.startswith("G0") or line_upper.startswith("G1"):
                 adjusted_line = self.transform_linear_move(line, center, rotation_angle)
                 adjusted_lines.append(adjusted_line)
+                # Debug: Track G0 commands
+                if line_upper.startswith("G0"):
+                    print(f"Processing G0: {line} -> {adjusted_line}")
             elif line_upper.startswith("G2") or line_upper.startswith("G3"):
                 adjusted_line = self.transform_arc_move(
                     line, center, rotation_angle, last_x, last_y
@@ -2114,8 +2117,8 @@ Vector Analysis:
         # Status responses
         if response.startswith("<"):
             # Debug: show status responses
-            if "WPos" in response or "MPos" in response:
-                print(f"Status: {response}")
+            # if "WPos" in response or "MPos" in response:
+            #    print(f"Status: {response}")
             self.parse_status_response(response)
 
         # OK responses - command completed
@@ -2218,7 +2221,9 @@ Vector Analysis:
 
         if buffer_empty or timeout_reached:
             if timeout_reached:
-                print(f"Warning: Completion timeout after 10 seconds. Force completing.")
+                print(
+                    f"Warning: Completion timeout after 10 seconds. Force completing."
+                )
 
             self._completion_checks = 0
             self.stop_streaming()
@@ -2383,6 +2388,9 @@ Vector Analysis:
                 line = line.strip()
                 if line and not line.startswith(";") and not line.startswith("("):
                     filtered_lines.append({"line": line, "num": i + 1})
+                    # Debug: Check for G0 commands
+                    if line.upper().startswith("G0"):
+                        print(f"Found G0 at line {i+1}: {line}")
 
             self.total_lines = len(filtered_lines)
             self.sent_lines = 0
