@@ -840,6 +840,15 @@ class GCodeAdjuster:
                 self.parse_gcode_coordinates(self.original_gcode)
             )
 
+            # Debug: Check what was parsed
+            print(
+                f"Parsed {len(self.original_positioning_lines)} G0 moves, {len(self.original_engraving_lines)} G1 moves"
+            )
+            if self.original_positioning_lines:
+                print(f"First G0 line: {self.original_positioning_lines[0]}")
+            if self.original_engraving_lines:
+                print(f"First G1 line: {self.original_engraving_lines[0]}")
+
             # Reset display and calculation results (but keep expected/actual X,Y values)
             self.reset_display()
 
@@ -941,7 +950,7 @@ class GCodeAdjuster:
 
                 # Always draw positioning moves (including first one from origin)
                 positioning_lines.append([(last_x, last_y), (current_x, current_y)])
-                
+
                 last_x = current_x
                 last_y = current_y
 
@@ -965,7 +974,7 @@ class GCodeAdjuster:
 
                 # Always draw engraving moves (including first one if no G0 preceded it)
                 engraving_lines.append([(last_x, last_y), (current_x, current_y)])
-                
+
                 last_x = current_x
                 last_y = current_y
 
@@ -2203,13 +2212,13 @@ Vector Analysis:
         )
 
         # If buffer is empty and command queue is empty, we're done
-        # OR if we've waited too long (50 checks = 5 seconds)
+        # OR if we've waited too long (100 checks = 10 seconds)
         buffer_empty = self.buffer_size <= 0 and len(self.command_queue) == 0
-        timeout_reached = self._completion_checks > 50
+        timeout_reached = self._completion_checks > 100
 
         if buffer_empty or timeout_reached:
             if timeout_reached:
-                print(f"Warning: Completion timeout after 5 seconds. Force completing.")
+                print(f"Warning: Completion timeout after 10 seconds. Force completing.")
 
             self._completion_checks = 0
             self.stop_streaming()
@@ -2221,18 +2230,9 @@ Vector Analysis:
                     and self.progress_window.winfo_exists()
                 ):
                     self.progress_window.destroy()
-                    print("Progress window destroyed")
+                    print(f"G-code execution complete - sent {self.sent_lines} lines")
             except Exception as e:
                 print(f"Error destroying progress window: {e}")
-
-            # Show completion message
-            self.root.after(
-                100,
-                lambda: messagebox.showinfo(
-                    "Complete",
-                    f"G-code execution complete!\n\nSent {self.sent_lines} lines.",
-                ),
-            )
         else:
             # Check again in 100ms
             self.root.after(100, self.check_streaming_complete)
