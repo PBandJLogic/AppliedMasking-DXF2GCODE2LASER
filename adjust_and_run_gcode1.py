@@ -1293,10 +1293,12 @@ class GCodeAdjuster:
 
         # Generate adjusted G-code
         # Debug: Check original G-code content before generating adjusted
-        print(f"DEBUG: self.original_gcode length: {len(self.original_gcode)} characters")
+        print(
+            f"DEBUG: self.original_gcode length: {len(self.original_gcode)} characters"
+        )
         print(f"DEBUG: First 500 characters of self.original_gcode:")
         print(self.original_gcode[:500])
-        
+
         self.adjusted_gcode = self.generate_adjusted_gcode(
             self.original_gcode, actual_center, rotation_angle
         )
@@ -1359,6 +1361,11 @@ Vector Analysis:
                 act_x = float(act_x_var.get())
                 act_y = float(act_y_var.get())
                 actual_points.append((act_x, act_y))
+            
+            # Debug: Print actual reference point values
+            print(f"DEBUG save_adjusted_gcode: Actual reference points to save:")
+            print(f"  Point 1: ({actual_points[0][0]:.4f}, {actual_points[0][1]:.4f})")
+            print(f"  Point 2: ({actual_points[1][0]:.4f}, {actual_points[1][1]:.4f})")
 
             # Update reference point comments in the G-code
             updated_gcode = self._update_reference_points_in_gcode(
@@ -1403,6 +1410,9 @@ Vector Analysis:
         """Update reference point comments in G-code with actual values"""
         lines = gcode.split("\n")
         updated_lines = []
+        
+        ref1_updated = False
+        ref2_updated = False
 
         for line in lines:
             line_stripped = line.strip()
@@ -1413,20 +1423,28 @@ Vector Analysis:
                 # Extract the point number (case-insensitive check)
                 if "reference_point1" in line_lower:
                     # Update point 1
-                    updated_lines.append(
-                        f"; reference_point1 = ({actual_points[0][0]:.4f}, {actual_points[0][1]:.4f})"
-                    )
+                    new_line = f"; reference_point1 = ({actual_points[0][0]:.4f}, {actual_points[0][1]:.4f})"
+                    print(f"DEBUG _update_reference_points: Replacing point 1")
+                    print(f"  Old: {line}")
+                    print(f"  New: {new_line}")
+                    updated_lines.append(new_line)
+                    ref1_updated = True
                 elif "reference_point2" in line_lower:
                     # Update point 2
-                    updated_lines.append(
-                        f"; reference_point2 = ({actual_points[1][0]:.4f}, {actual_points[1][1]:.4f})"
-                    )
+                    new_line = f"; reference_point2 = ({actual_points[1][0]:.4f}, {actual_points[1][1]:.4f})"
+                    print(f"DEBUG _update_reference_points: Replacing point 2")
+                    print(f"  Old: {line}")
+                    print(f"  New: {new_line}")
+                    updated_lines.append(new_line)
+                    ref2_updated = True
                 else:
                     # Keep other reference point comments as-is
                     updated_lines.append(line)
             else:
                 # Keep all other lines unchanged
                 updated_lines.append(line)
+        
+        print(f"DEBUG _update_reference_points: ref1_updated={ref1_updated}, ref2_updated={ref2_updated}")
 
         return "\n".join(updated_lines)
 
