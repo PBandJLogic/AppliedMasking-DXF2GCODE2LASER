@@ -748,17 +748,19 @@ class GCodeAdjuster:
         # Create control frame for plot options
         control_frame = ttk.Frame(parent)
         control_frame.pack(side="top", fill="x", pady=5)
-        
+
         # Add checkbox for showing original G-code
-        self.show_original_var = tk.BooleanVar(value=True)  # Default to showing original
+        self.show_original_var = tk.BooleanVar(
+            value=True
+        )  # Default to showing original
         show_original_check = ttk.Checkbutton(
             control_frame,
             text="Show Original G-code",
             variable=self.show_original_var,
-            command=self.plot_toolpath
+            command=self.plot_toolpath,
         )
         show_original_check.pack(side="left", padx=10)
-        
+
         # Create matplotlib figure
         self.fig = Figure(figsize=(10, 8), dpi=100)
         self.ax = self.fig.add_subplot(111)
@@ -1096,7 +1098,7 @@ class GCodeAdjuster:
         self.ax.clear()
 
         # Check if we should show original G-code (only if checkbox exists and is checked)
-        show_original = getattr(self, 'show_original_var', None)
+        show_original = getattr(self, "show_original_var", None)
         if show_original is None or show_original.get():
             if self.original_positioning_lines or self.original_engraving_lines:
                 # Plot original toolpath with color coding
@@ -1325,6 +1327,88 @@ Vector Analysis:
 
         # Update plot
         self.plot_toolpath()
+
+    def save_adjusted_gcode(self):
+        """Save the adjusted G-code with updated reference points to a file"""
+        if not hasattr(self, 'adjusted_gcode') or not self.adjusted_gcode:
+            messagebox.showwarning(
+                "Warning",
+                "No adjusted G-code to save. Please adjust the G-code first."
+            )
+            return
+        
+        try:
+            # Ask user for save location
+            file_path = filedialog.asksaveasfilename(
+                defaultextension=".nc",
+                filetypes=[("G-code files", "*.nc"), ("All files", "*.*")],
+                title="Save Adjusted G-code"
+            )
+            
+            if not file_path:
+                return  # User cancelled
+            
+            # Get actual reference point values
+            actual_points = []
+            for i in range(2):  # Always 2 points
+                act_x_var, act_y_var = self.ref_point_actual_vars[i]
+                act_x = float(act_x_var.get())
+                act_y = float(act_y_var.get())
+                actual_points.append((act_x, act_y))
+            
+            # Update reference point comments in the G-code
+            updated_gcode = self._update_reference_points_in_gcode(
+                self.adjusted_gcode, 
+                actual_points
+            )
+            
+            # Write to file
+            with open(file_path, 'w') as f:
+                f.write(updated_gcode)
+            
+            messagebox.showinfo(
+                "Success",
+                f"Adjusted G-code saved to:\n{file_path}\n\n"
+                f"Reference points updated to actual values:\n"
+                f"Point 1: ({actual_points[0][0]:.4f}, {actual_points[0][1]:.4f})\n"
+                f"Point 2: ({actual_points[1][0]:.4f}, {actual_points[1][1]:.4f})"
+            )
+            
+        except Exception as e:
+            messagebox.showerror(
+                "Error",
+                f"Failed to save adjusted G-code:\n{str(e)}"
+            )
+    
+    def _update_reference_points_in_gcode(self, gcode, actual_points):
+        """Update reference point comments in G-code with actual values"""
+        lines = gcode.split('\n')
+        updated_lines = []
+        
+        for line in lines:
+            line_lower = line.lower().strip()
+            
+            # Check if this is a reference point comment
+            if line_lower.startswith(';') and 'reference_point' in line_lower:
+                # Extract the point number
+                if 'reference_point1' in line_lower:
+                    # Update point 1
+                    updated_lines.append(
+                        f"; reference_point1 = ({actual_points[0][0]:.4f}, {actual_points[0][1]:.4f})"
+                    )
+                elif 'reference_point2' in line_lower:
+                    # Update point 2
+                    updated_lines.append(
+                        f"; reference_point2 = ({actual_points[1][0]:.4f}, {actual_points[1][1]:.4f})"
+                    )
+                else:
+                    # Keep other reference point comments as-is
+                    updated_lines.append(line)
+            else:
+                # Keep all other lines unchanged
+                updated_lines.append(line)
+        
+        return '\n'.join(updated_lines)
 
     def apply_transformations_to_lines(self, line_segments, center, rotation_angle):
         """Apply translation and rotation to line segments"""
