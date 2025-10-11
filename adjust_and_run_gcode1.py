@@ -1292,6 +1292,11 @@ class GCodeAdjuster:
         )
 
         # Generate adjusted G-code
+        # Debug: Check original G-code content before generating adjusted
+        print(f"DEBUG: self.original_gcode length: {len(self.original_gcode)} characters")
+        print(f"DEBUG: First 500 characters of self.original_gcode:")
+        print(self.original_gcode[:500])
+        
         self.adjusted_gcode = self.generate_adjusted_gcode(
             self.original_gcode, actual_center, rotation_angle
         )
@@ -1359,16 +1364,24 @@ Vector Analysis:
             updated_gcode = self._update_reference_points_in_gcode(
                 self.adjusted_gcode, actual_points
             )
-            
+
             # Debug: Check for G0 commands in the adjusted and updated G-code
-            g0_in_adjusted = sum(1 for line in self.adjusted_gcode.split('\n') if line.strip().upper().startswith('G0'))
-            g0_in_updated = sum(1 for line in updated_gcode.split('\n') if line.strip().upper().startswith('G0'))
+            g0_in_adjusted = sum(
+                1
+                for line in self.adjusted_gcode.split("\n")
+                if line.strip().upper().startswith("G0")
+            )
+            g0_in_updated = sum(
+                1
+                for line in updated_gcode.split("\n")
+                if line.strip().upper().startswith("G0")
+            )
             print(f"DEBUG: G0 commands in adjusted_gcode: {g0_in_adjusted}")
             print(f"DEBUG: G0 commands in updated_gcode: {g0_in_updated}")
-            
+
             # Print first 20 lines for inspection
             print("DEBUG: First 20 lines of updated G-code:")
-            for i, line in enumerate(updated_gcode.split('\n')[:20]):
+            for i, line in enumerate(updated_gcode.split("\n")[:20]):
                 print(f"  {i+1}: {line}")
 
             # Write to file
@@ -1462,10 +1475,14 @@ Vector Analysis:
         current_y = 0.0
         last_x = 0.0
         last_y = 0.0
-        
+
         # Debug: Count G0 commands in original
-        g0_count_original = sum(1 for line in lines if line.strip().upper().startswith('G0'))
-        print(f"DEBUG generate_adjusted_gcode: Original G-code has {g0_count_original} G0 commands")
+        g0_count_original = sum(
+            1 for line in lines if line.strip().upper().startswith("G0")
+        )
+        print(
+            f"DEBUG generate_adjusted_gcode: Original G-code has {g0_count_original} G0 commands"
+        )
 
         for line in lines:
             adjusted_line = line
@@ -1500,10 +1517,14 @@ Vector Analysis:
                 last_x = float(x_match.group(1))
             if y_match:
                 last_y = float(y_match.group(1))
-        
+
         # Debug: Count G0 commands in adjusted
-        g0_count_adjusted = sum(1 for line in adjusted_lines if line.strip().upper().startswith('G0'))
-        print(f"DEBUG generate_adjusted_gcode: Adjusted G-code has {g0_count_adjusted} G0 commands")
+        g0_count_adjusted = sum(
+            1 for line in adjusted_lines if line.strip().upper().startswith("G0")
+        )
+        print(
+            f"DEBUG generate_adjusted_gcode: Adjusted G-code has {g0_count_adjusted} G0 commands"
+        )
         print(f"DEBUG generate_adjusted_gcode: First 15 lines of adjusted:")
         for i, line in enumerate(adjusted_lines[:15]):
             print(f"  {i+1}: {line}")
