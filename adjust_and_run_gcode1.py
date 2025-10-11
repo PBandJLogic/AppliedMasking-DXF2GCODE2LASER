@@ -626,10 +626,10 @@ class GCodeAdjuster:
             expected_entry = ttk.Entry(
                 point_frame,
                 textvariable=expected_combined,
-                width=14,
+                width=12,
                 font=("TkDefaultFont", 9),
             )
-            expected_entry.pack(side="left", padx=(0, 8))
+            expected_entry.pack(side="left", padx=(0, 5))
 
             # Link the combined entry to individual vars
             def update_expected_vars(combined_var, x_var, y_var, *args):
@@ -666,10 +666,10 @@ class GCodeAdjuster:
             actual_entry = ttk.Entry(
                 point_frame,
                 textvariable=actual_combined,
-                width=14,
+                width=12,
                 font=("TkDefaultFont", 9),
             )
-            actual_entry.pack(side="left", padx=(0, 3))
+            actual_entry.pack(side="left", padx=(0, 2))
 
             # Link the combined entry to individual vars
             def update_actual_vars(combined_var, x_var, y_var, *args):
@@ -708,7 +708,7 @@ class GCodeAdjuster:
                 ]: goto_expected_pos(x, y),
                 width=4,
             )
-            goto_button.pack(side="left", padx=(0, 3))
+            goto_button.pack(side="left", padx=(0, 2))
 
             # "Set" button to capture current work position
             def set_from_wpos(combined_var):
@@ -821,28 +821,16 @@ class GCodeAdjuster:
         """
         Parse reference points from G-code comments.
         Expected format:
-        ; number_of_reference_points = 2
         ; reference_point1 = (-79.2465, -21.234)
         ; reference_point2 = ( 79.2465, -21.234)
 
-        Returns: (num_points, expected_points_list) - always returns first 2 points
+        Returns: (num_points, expected_points_list) - always returns 2 and first 2 points found
         """
         lines = gcode.split("\n")
-        num_points = 2  # default
         expected_points = []
 
         for line in lines:
             line_stripped = line.strip()
-
-            # Check for number_of_reference_points
-            if "number_of_reference_points" in line_stripped.lower():
-                match = re.search(
-                    r"number_of_reference_points\s*=\s*(\d+)",
-                    line_stripped,
-                    re.IGNORECASE,
-                )
-                if match:
-                    num_points = int(match.group(1))
 
             # Check for reference_pointN = (x, y)
             if "reference_point" in line_stripped.lower():
@@ -856,17 +844,17 @@ class GCodeAdjuster:
                     x = float(match.group(1))
                     y = float(match.group(2))
                     expected_points.append((x, y))
+                    
+                    # Stop after finding 2 points
+                    if len(expected_points) >= 2:
+                        break
 
-        # Validate we got the expected number of points
-        if len(expected_points) != num_points:
-            print(
-                f"Warning: Expected {num_points} reference points but found {len(expected_points)}"
-            )
-            # Return what we found anyway
-            if len(expected_points) > 0:
-                num_points = len(expected_points)
-
-        return num_points, expected_points
+        # Always return 2 points (pad with zeros if needed)
+        while len(expected_points) < 2:
+            expected_points.append((0.0, 0.0))
+            
+        # Always return exactly 2 points
+        return 2, expected_points[:2]
 
     def parse_gcode_coordinates(self, gcode):
         """Parse G-code and extract line segments exactly like dxf2laser.py"""
