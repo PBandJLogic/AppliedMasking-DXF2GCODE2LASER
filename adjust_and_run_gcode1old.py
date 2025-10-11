@@ -4,14 +4,12 @@ G-code Adjuster - GUI application for adjusting G-code toolpaths
 based on actual vs expected reference point positions.
 
 Features:
-- Uses 2 reference points for translation and rotation correction
+- Supports 2 or 3 reference points
+- 2 points: Circle-based transformation (points on circle circumference)
+- 3 points: Planar transformation (points on same plane)
 - Reference points can be embedded in G-code comments or entered manually
-- GRBL streaming protocol for smooth, continuous motion
-- Single-step mode for debugging
-- Emergency stop with buffer clearing
-- Real-time position updates every 250ms
-- Interactive GUI with laser jogging controls and position capture
 - Assumes Z height is consistent across all cleaned parts
+- Interactive GUI with laser jogging controls and position capture
 
 Note: Does not validate against laser table limits - use caution with G-code generation.
 """
@@ -27,44 +25,6 @@ import re
 import serial
 import serial.tools.list_ports
 import time
-import threading
-import queue
-
-
-class SerialReaderThread(threading.Thread):
-    """
-    Background thread for reading from serial port.
-    Continuously reads responses and puts them in a queue for processing.
-    """
-
-    def __init__(self, serial_connection, response_queue):
-        super().__init__(daemon=True)
-        self.serial_connection = serial_connection
-        self.response_queue = response_queue
-        self.running = True
-
-    def run(self):
-        """Continuously read from serial and queue responses"""
-        while self.running:
-            try:
-                if self.serial_connection and self.serial_connection.in_waiting > 0:
-                    response = (
-                        self.serial_connection.readline()
-                        .decode("utf-8", errors="ignore")
-                        .strip()
-                    )
-                    if response:
-                        self.response_queue.put(response)
-                else:
-                    time.sleep(0.001)  # 1ms sleep when no data
-            except Exception as e:
-                if self.running:  # Only log if not shutting down
-                    print(f"Serial read error: {e}")
-                time.sleep(0.01)
-
-    def stop(self):
-        """Stop the reading thread"""
-        self.running = False
 
 
 class GRBLSettings:
@@ -145,17 +105,14 @@ class GCodeAdjuster:
         self.adjusted_engraving_lines = []
 
         # Reference point data from G-code comments
-        self.num_reference_points = 2  # Always 2 points for translation + rotation
-        # Initialize with 2 zero points
-        self.reference_points_expected = [(0.0, 0.0), (0.0, 0.0)]
-        self.reference_points_actual = [(0.0, 0.0), (0.0, 0.0)]
+        self.num_reference_points = 3  # Can be 2 or 3, default to 3
+        # Initialize with 3 zero points
+        self.reference_points_expected = [(0.0, 0.0), (0.0, 0.0), (0.0, 0.0)]
+        self.reference_points_actual = [(0.0, 0.0), (0.0, 0.0), (0.0, 0.0)]
 
         # Serial connection
         self.serial_connection = None
         self.is_connected = False
-        self.serial_reader_thread = None
-        self.response_queue = queue.Queue()
-        self.processing_responses = False
 
         # Position tracking
         self.machine_pos = {"x": 0.0, "y": 0.0, "z": 0.0}
@@ -184,6 +141,7 @@ class GCodeAdjuster:
         self.sent_lines = 0  # Track progress
         self.total_lines = 0
         self._last_plot_update = 0  # Throttle plot updates
+        self.completion_checks = 0  # Track how many times we've checked for completion
 
         # Single-step mode
         self.single_step_mode = False
@@ -312,8 +270,8 @@ class GCodeAdjuster:
         file_frame.pack(fill="x", pady=(0, 10))
 
         ttk.Button(
-            file_frame, text="Load G-code File", command=self.load_gcode_file, width=20
-        ).pack()
+            file_frame, text="Load G-code File", command=self.load_gcode_file
+        ).pack(fill="x")
 
         # Laser Jog Controls section
         jog_frame = ttk.LabelFrame(
@@ -381,7 +339,7 @@ class GCodeAdjuster:
 
         # G-code command entry
         gcode_cmd_frame = ttk.Frame(jog_frame)
-        gcode_cmd_frame.pack(fill="x", pady=(5, 5))
+        gcode_cmd_frame.pack(fill="x", pady=(0, 5))
 
         ttk.Label(gcode_cmd_frame, text="G-code:").pack(side="left", padx=(0, 5))
         self.gcode_cmd_var = tk.StringVar()
@@ -391,10 +349,10 @@ class GCodeAdjuster:
             width=20,
         )
         self.gcode_cmd_entry.pack(side="left", padx=(0, 5))
-
+        
         # Bind Enter key to execute command
         self.gcode_cmd_entry.bind("<Return>", lambda e: self.execute_manual_gcode())
-
+        
         ttk.Button(
             gcode_cmd_frame,
             text="Execute",
@@ -483,6 +441,50 @@ class GCodeAdjuster:
             z_frame, text="Z-", command=lambda: self.jog_move_z(-1), width=button_width
         ).pack(side="left", padx=2)
 
+        # Number of reference points selector
+        num_points_frame = ttk.Frame(jog_frame)
+        num_points_frame.pack(fill="x", pady=(10, 5))
+
+        ttk.Label(
+            num_points_frame, text="# of Ref Points:", font=("TkDefaultFont", 10)
+        ).pack(side="left", padx=(0, 5))
+
+        self.num_ref_points_var = tk.StringVar(value="3")
+        num_points_combo = ttk.Combobox(
+            num_points_frame,
+            textvariable=self.num_ref_points_var,
+            values=["2", "3"],
+            width=5,
+            state="readonly",
+            font=("TkDefaultFont", 10),
+        )
+        num_points_combo.pack(side="left")
+        num_points_combo.bind("<<ComboboxSelected>>", self.on_num_points_changed)
+
+        # Instructional notes
+        notes_frame = ttk.Frame(jog_frame)
+        notes_frame.pack(fill="x", pady=(10, 0))
+
+        ttk.Label(
+            notes_frame,
+            text="Note:",
+            font=("TkDefaultFont", 9, "bold"),
+            foreground="#666666",
+        ).pack(anchor="w")
+
+        self.ref_points_note_label = ttk.Label(
+            notes_frame,
+            text="",
+            font=("TkDefaultFont", 8),
+            foreground="#666666",
+            wraplength=420,
+            justify="left",
+        )
+        self.ref_points_note_label.pack(anchor="w", padx=(10, 0))
+
+        # Update the note text based on current number of points
+        self.update_ref_points_note()
+
         # Store reference to parent for dynamic updates
         self.targets_parent = parent
 
@@ -490,9 +492,9 @@ class GCodeAdjuster:
         self.update_reference_points_display()
 
         # Adjust button
-        ttk.Button(
-            parent, text="Adjust G-code", command=self.adjust_gcode, width=20
-        ).pack(pady=(0, 10))
+        ttk.Button(parent, text="Adjust G-code", command=self.adjust_gcode).pack(
+            fill="x", pady=(0, 10)
+        )
 
         # Results display
         results_frame = ttk.LabelFrame(parent, text="Calculation Results", padding=10)
@@ -546,11 +548,47 @@ class GCodeAdjuster:
         self.stop_button.pack(side="left", padx=(0, 0))
 
         ttk.Button(
-            parent,
-            text="Save Adjusted G-code",
-            command=self.save_adjusted_gcode,
-            width=20,
-        ).pack()
+            parent, text="Save Adjusted G-code", command=self.save_adjusted_gcode
+        ).pack(fill="x")
+
+    def update_ref_points_note(self):
+        """Update the instructional note based on number of reference points"""
+        num_points = (
+            int(self.num_ref_points_var.get())
+            if hasattr(self, "num_ref_points_var")
+            else self.num_reference_points
+        )
+
+        if num_points == 2:
+            note_text = "For 2 reference points: Points must align on a circle circumference, and the 1st point must be to the left of the 2nd point."
+        else:  # 3 points
+            note_text = "For 3 reference points: Points must be on the same plane on the work piece."
+
+        if hasattr(self, "ref_points_note_label"):
+            self.ref_points_note_label.config(text=note_text)
+
+    def on_num_points_changed(self, event=None):
+        """Handle change in number of reference points"""
+        new_num = int(self.num_ref_points_var.get())
+        old_num = self.num_reference_points
+
+        self.num_reference_points = new_num
+
+        # Adjust the lists if needed
+        if new_num > old_num:
+            # Add more points (initialize to zero)
+            while len(self.reference_points_expected) < new_num:
+                self.reference_points_expected.append((0.0, 0.0))
+            while len(self.reference_points_actual) < new_num:
+                self.reference_points_actual.append((0.0, 0.0))
+        elif new_num < old_num:
+            # Trim the lists
+            self.reference_points_expected = self.reference_points_expected[:new_num]
+            self.reference_points_actual = self.reference_points_actual[:new_num]
+
+        # Update the display
+        self.update_reference_points_display()
+        self.update_ref_points_note()
 
     def update_reference_points_display(self):
         """Update the reference points display based on loaded data"""
@@ -579,8 +617,8 @@ class GCodeAdjuster:
             # Fallback if we can't find the button
             self.targets_container.pack(fill="x", pady=(0, 10))
 
-        # Always use 2 reference points
-        num_points = 2
+        # Create reference point frames based on number of points
+        num_points = self.num_reference_points
 
         # Store entry variables for each point
         self.ref_point_expected_vars = []
@@ -607,13 +645,14 @@ class GCodeAdjuster:
             # Point label
             ttk.Label(
                 point_frame,
-                text=f"Pt{point_num}:",
+                text=f"Pt {point_num}:",
+                width=4,
                 font=("TkDefaultFont", 9, "bold"),
-            ).pack(side="left", padx=(0, 2))
+            ).pack(side="left", padx=(0, 5))
 
             # Expected label and entry
             ttk.Label(
-                point_frame, text="Exp:", foreground="black", font=("TkDefaultFont", 9)
+                point_frame, text="Exp:", foreground="orange", font=("TkDefaultFont", 9)
             ).pack(side="left", padx=(0, 2))
 
             # Expected X, Y in single entry
@@ -628,10 +667,10 @@ class GCodeAdjuster:
             expected_entry = ttk.Entry(
                 point_frame,
                 textvariable=expected_combined,
-                width=11,
+                width=14,
                 font=("TkDefaultFont", 9),
             )
-            expected_entry.pack(side="left", padx=(0, 3))
+            expected_entry.pack(side="left", padx=(0, 8))
 
             # Link the combined entry to individual vars
             def update_expected_vars(combined_var, x_var, y_var, *args):
@@ -668,10 +707,10 @@ class GCodeAdjuster:
             actual_entry = ttk.Entry(
                 point_frame,
                 textvariable=actual_combined,
-                width=11,
+                width=14,
                 font=("TkDefaultFont", 9),
             )
-            actual_entry.pack(side="left", padx=(0, 2))
+            actual_entry.pack(side="left", padx=(0, 3))
 
             # Link the combined entry to individual vars
             def update_actual_vars(combined_var, x_var, y_var, *args):
@@ -697,34 +736,28 @@ class GCodeAdjuster:
                 if not self.is_connected:
                     messagebox.showwarning("Warning", "Please connect to GRBL first!")
                     return
-
-                # Check if laser is currently on
-                was_laser_on = self.laser_on
-
-                # If laser is on, turn it off for the rapid move
-                if was_laser_on:
-                    self.send_gcode_async("M5")  # Turn off laser
-
+                
+                # Remember if laser was on
+                laser_was_on = self.laser_on
+                
                 # Send commands to move to the expected position
-                self.send_gcode_async("G90")  # Absolute positioning mode
-                self.send_gcode_async(f"G0 X{exp_x:.4f} Y{exp_y:.4f}")  # Rapid move
-
-                # If laser was on, turn it back on at low power (same as toggle_laser)
-                if was_laser_on:
-                    self.send_gcode_async(
-                        "M3 S10"
-                    )  # Turn on laser at 10% power (constant mode)
-                    self.send_gcode_async("G1 F100")  # Set feed rate for laser mode
-                    self.laser_on = True
-                    self.laser_button.config(text="Laser ON")
+                self.send_gcode("G90")  # Absolute positioning mode
+                self.send_gcode(f"G0 X{exp_x:.4f} Y{exp_y:.4f}")  # Rapid move to position
+                
+                # Wait for move to complete and update position
+                # This blocks until GRBL reports Idle state
+                self.wait_for_idle_and_update_position()
+                
+                # If laser was on, turn it back on with G1 F100
+                if laser_was_on:
+                    self.send_gcode("G1 F100")
+                    print(f"Goto: Laser was on, restored with G1 F100")
 
             goto_button = ttk.Button(
                 point_frame,
                 text="Goto",
-                command=lambda x=expected_point[0], y=expected_point[
-                    1
-                ]: goto_expected_pos(x, y),
-                width=5,
+                command=lambda x=expected_point[0], y=expected_point[1]: goto_expected_pos(x, y),
+                width=6,
             )
             goto_button.pack(side="left", padx=(0, 2))
 
@@ -739,28 +772,12 @@ class GCodeAdjuster:
                 point_frame,
                 text="Set",
                 command=lambda c=actual_combined: set_from_wpos(c),
-                width=3,
+                width=6,
             )
-            set_button.pack(side="left", padx=(0, 5))
+            set_button.pack(side="left")
 
     def setup_right_panel(self, parent):
         """Set up the right plot panel"""
-        # Create control frame for plot options
-        control_frame = ttk.Frame(parent)
-        control_frame.pack(side="top", fill="x", pady=5)
-
-        # Add checkbox for showing original G-code
-        self.show_original_var = tk.BooleanVar(
-            value=True
-        )  # Default to showing original
-        show_original_check = ttk.Checkbutton(
-            control_frame,
-            text="Show Original G-code",
-            variable=self.show_original_var,
-            command=self.plot_toolpath,
-        )
-        show_original_check.pack(side="left", padx=10)
-
         # Create matplotlib figure
         self.fig = Figure(figsize=(10, 8), dpi=100)
         self.ax = self.fig.add_subplot(111)
@@ -783,38 +800,6 @@ class GCodeAdjuster:
 
         # Pack canvas after toolbar
         self.canvas.get_tk_widget().pack(side="top", fill="both", expand=True)
-
-        # Initialize plot with laser position marker
-        self.initialize_plot()
-
-    def initialize_plot(self):
-        """Initialize the plot with laser position marker"""
-        # Clear and set up basic plot
-        self.ax.clear()
-        self.ax.set_xlabel("X (mm)")
-        self.ax.set_ylabel("Y (mm)")
-        self.ax.set_title("G-code Toolpath")
-        self.ax.grid(True, alpha=0.3)
-        self.ax.set_aspect("equal")
-
-        # Set initial view limits
-        self.ax.set_xlim(-10, 10)
-        self.ax.set_ylim(-10, 10)
-
-        # Add laser position marker (red circle)
-        self.laser_marker = self.ax.plot(
-            self.work_pos["x"],
-            self.work_pos["y"],
-            "ro",
-            markersize=8,
-            label="Laser Position",
-        )[0]
-
-        # Add legend
-        self.ax.legend(loc="upper right")
-
-        # Draw the canvas
-        self.canvas.draw()
 
     def load_gcode_file(self):
         """Load a G-code file and parse coordinates"""
@@ -840,16 +825,22 @@ class GCodeAdjuster:
                 self.original_gcode
             )
 
-            if expected_points and len(expected_points) >= 2:
-                # Found reference points in comments - use first 2
-                self.reference_points_expected = expected_points[:2]
+            if expected_points:
+                # Found reference points in comments - use them
+                self.num_reference_points = num_points
+                self.reference_points_expected = expected_points
                 # Initialize actual points to match expected points
-                self.reference_points_actual = expected_points[:2].copy()
+                self.reference_points_actual = expected_points.copy()
+
+                # Update the combo box to match
+                if hasattr(self, "num_ref_points_var"):
+                    self.num_ref_points_var.set(str(num_points))
 
                 # Update the GUI to show these reference points
                 self.update_reference_points_display()
+                self.update_ref_points_note()
 
-                print(f"Loaded 2 reference points from G-code comments")
+                print(f"Loaded {num_points} reference points from G-code comments")
             else:
                 print(
                     "No reference points found in G-code comments - using manual entry"
@@ -887,16 +878,29 @@ class GCodeAdjuster:
         """
         Parse reference points from G-code comments.
         Expected format:
+        ; number_of_reference_points = 2
         ; reference_point1 = (-79.2465, -21.234)
         ; reference_point2 = ( 79.2465, -21.234)
+        ; reference_point3 = (  0.0000,  50.000)  # optional, for 3-point case
 
-        Returns: (num_points, expected_points_list) - always returns 2 and first 2 points found
+        Returns: (num_points, expected_points_list)
         """
         lines = gcode.split("\n")
+        num_points = 2  # default
         expected_points = []
 
         for line in lines:
             line_stripped = line.strip()
+
+            # Check for number_of_reference_points
+            if "number_of_reference_points" in line_stripped.lower():
+                match = re.search(
+                    r"number_of_reference_points\s*=\s*(\d+)",
+                    line_stripped,
+                    re.IGNORECASE,
+                )
+                if match:
+                    num_points = int(match.group(1))
 
             # Check for reference_pointN = (x, y)
             if "reference_point" in line_stripped.lower():
@@ -911,16 +915,16 @@ class GCodeAdjuster:
                     y = float(match.group(2))
                     expected_points.append((x, y))
 
-                    # Stop after finding 2 points
-                    if len(expected_points) >= 2:
-                        break
+        # Validate we got the expected number of points
+        if len(expected_points) != num_points:
+            print(
+                f"Warning: Expected {num_points} reference points but found {len(expected_points)}"
+            )
+            # Return what we found anyway
+            if len(expected_points) > 0:
+                num_points = len(expected_points)
 
-        # Always return 2 points (pad with zeros if needed)
-        while len(expected_points) < 2:
-            expected_points.append((0.0, 0.0))
-
-        # Always return exactly 2 points
-        return 2, expected_points[:2]
+        return num_points, expected_points
 
     def parse_gcode_coordinates(self, gcode):
         """Parse G-code and extract line segments exactly like dxf2laser.py"""
@@ -959,9 +963,8 @@ class GCodeAdjuster:
                 if y_pos is not None:
                     current_y = y_pos
 
-                # Always draw positioning moves (including first one from origin)
+                # Draw positioning move
                 positioning_lines.append([(last_x, last_y), (current_x, current_y)])
-
                 last_x = current_x
                 last_y = current_y
 
@@ -983,9 +986,8 @@ class GCodeAdjuster:
                 if y_pos is not None:
                     current_y = y_pos
 
-                # Always draw engraving moves (including first one if no G0 preceded it)
+                # Draw engraving move
                 engraving_lines.append([(last_x, last_y), (current_x, current_y)])
-
                 last_x = current_x
                 last_y = current_y
 
@@ -1088,17 +1090,14 @@ class GCodeAdjuster:
         """Plot the toolpath on the canvas"""
         self.ax.clear()
 
-        # Check if we should show original G-code (only if checkbox exists and is checked)
-        show_original = getattr(self, "show_original_var", None)
-        if show_original is None or show_original.get():
-            if self.original_positioning_lines or self.original_engraving_lines:
-                # Plot original toolpath with color coding
-                self.plot_gcode_toolpath(
-                    self.original_positioning_lines,
-                    self.original_engraving_lines,
-                    "Original",
-                    self.ax,
-                )
+        if self.original_positioning_lines or self.original_engraving_lines:
+            # Plot original toolpath with color coding
+            self.plot_gcode_toolpath(
+                self.original_positioning_lines,
+                self.original_engraving_lines,
+                "Original",
+                self.ax,
+            )
 
         if self.adjusted_positioning_lines or self.adjusted_engraving_lines:
             # Plot adjusted toolpath with color coding
@@ -1123,25 +1122,26 @@ class GCodeAdjuster:
                 zorder=90,
             )
 
-        # Plot current position marker (always show it)
-        x = self.work_pos["x"]
-        y = self.work_pos["y"]
-        self.laser_marker = self.ax.plot(
-            x,
-            y,
-            "ro",
-            markersize=10,
-            markeredgecolor="black",
-            markeredgewidth=2,
-            label="Current Position",
-            zorder=100,
-        )[0]
+        # Plot current position marker if connected
+        if self.is_connected:
+            x = self.work_pos["x"]
+            y = self.work_pos["y"]
+            self.ax.plot(
+                x,
+                y,
+                "ro",
+                markersize=10,
+                markeredgecolor="black",
+                markeredgewidth=2,
+                label="Current Position",
+                zorder=100,
+            )
 
-        # Add crosshair at current position
-        xlim = self.ax.get_xlim()
-        ylim = self.ax.get_ylim()
-        self.ax.plot([x, x], ylim, "r--", alpha=0.3, linewidth=1)
-        self.ax.plot(xlim, [y, y], "r--", alpha=0.3, linewidth=1)
+            # Add crosshair at current position
+            xlim = self.ax.get_xlim()
+            ylim = self.ax.get_ylim()
+            self.ax.plot([x, x], ylim, "r--", alpha=0.3, linewidth=1)
+            self.ax.plot(xlim, [y, y], "r--", alpha=0.3, linewidth=1)
 
         # Set plot properties
         self.ax.set_xlabel("X (mm)")
@@ -1198,18 +1198,67 @@ class GCodeAdjuster:
                 alpha=0.8,
             )
 
-    def adjust_gcode(self):
-        """Calculate adjustments and modify G-code using 2-point transformation"""
-        try:
-            # Get 2 reference points from GUI
-            if len(self.ref_point_expected_vars) < 2:
-                messagebox.showerror("Error", "Need 2 reference points!")
-                return
+    def calculate_3point_transformation(self, expected_points, actual_points):
+        """
+        Calculate transformation matrix for 3-point planar transformation.
+        Uses affine transformation: translation + rotation + optional scaling.
 
+        Args:
+            expected_points: List of 3 (x, y) tuples - expected positions
+            actual_points: List of 3 (x, y) tuples - actual measured positions
+
+        Returns:
+            (translation, rotation_angle, scale_factor) tuple
+        """
+        # Convert to numpy arrays
+        exp_pts = np.array(expected_points, dtype=float)
+        act_pts = np.array(actual_points, dtype=float)
+
+        # Calculate centroids
+        exp_centroid = np.mean(exp_pts, axis=0)
+        act_centroid = np.mean(act_pts, axis=0)
+
+        # Center the points
+        exp_centered = exp_pts - exp_centroid
+        act_centered = act_pts - act_centroid
+
+        # Calculate the optimal rotation using SVD
+        # H = sum of outer products
+        H = np.dot(act_centered.T, exp_centered)
+
+        # SVD decomposition
+        U, S, Vt = np.linalg.svd(H)
+
+        # Calculate rotation matrix
+        R = np.dot(Vt.T, U.T)
+
+        # Ensure proper rotation (det = 1, not reflection)
+        if np.linalg.det(R) < 0:
+            Vt[-1, :] *= -1
+            R = np.dot(Vt.T, U.T)
+
+        # Extract rotation angle
+        rotation_angle = np.arctan2(R[1, 0], R[0, 0])
+
+        # Calculate scale factor (optional, usually 1.0 for rigid transformation)
+        # We'll use the ratio of RMS distances
+        exp_rms = np.sqrt(np.mean(np.sum(exp_centered**2, axis=1)))
+        act_rms = np.sqrt(np.mean(np.sum(act_centered**2, axis=1)))
+        scale_factor = act_rms / exp_rms if exp_rms > 0 else 1.0
+
+        # Translation is the difference between centroids after rotation
+        translation = act_centroid - exp_centroid
+
+        return translation, rotation_angle, scale_factor
+
+    def adjust_gcode(self):
+        """Calculate adjustments and modify G-code"""
+        try:
+            # Get reference points from GUI
             expected_points = []
             actual_points = []
 
-            for i in range(2):  # Always use exactly 2 points
+            for i in range(len(self.ref_point_expected_vars)):
                 exp_x_var, exp_y_var = self.ref_point_expected_vars[i]
                 act_x_var, act_y_var = self.ref_point_actual_vars[i]
 
@@ -1221,8 +1270,24 @@ class GCodeAdjuster:
                 expected_points.append((exp_x, exp_y))
                 actual_points.append((act_x, act_y))
 
-            # Perform 2-point transformation
-            self._adjust_gcode_2point(expected_points, actual_points)
+            num_points = len(expected_points)
+
+            if num_points < 2:
+                messagebox.showerror("Error", "Need at least 2 reference points!")
+                return
+
+            # Handle based on number of points
+            if num_points == 2:
+                # Use 2-point circle-based transformation
+                self._adjust_gcode_2point(expected_points, actual_points)
+            elif num_points == 3:
+                # Use 3-point planar transformation
+                self._adjust_gcode_3point(expected_points, actual_points)
+            else:
+                messagebox.showerror(
+                    "Error", f"Unsupported number of reference points: {num_points}"
+                )
+                return
 
         except ValueError as e:
             messagebox.showerror("Error", f"Invalid input values:\n{str(e)}")
@@ -1230,49 +1295,35 @@ class GCodeAdjuster:
             messagebox.showerror("Error", f"Calculation failed:\n{str(e)}")
 
     def _adjust_gcode_2point(self, expected_points, actual_points):
-        """
-        Adjust G-code using 2-point transformation (translation + rotation)
-        Uses the method from transformtest.py for accuracy
-        """
-        P1, P2 = np.array(expected_points[0]), np.array(expected_points[1])
-        Q1, Q2 = np.array(actual_points[0]), np.array(actual_points[1])
+        """Adjust G-code using 2-point circle-based transformation"""
+        left_expected, right_expected = expected_points
+        left_actual, right_actual = actual_points
 
         if not self.original_positioning_lines and not self.original_engraving_lines:
             messagebox.showwarning("Warning", "Please load a G-code file first!")
             return
 
-        # Compute vectors between points
-        v_expected = P2 - P1
-        v_actual = Q2 - Q1
+        # Calculate expected radius from left expected point
+        expected_radius_left = np.sqrt(left_expected[0] ** 2 + left_expected[1] ** 2)
+        expected_radius_right = np.sqrt(right_expected[0] ** 2 + right_expected[1] ** 2)
 
-        # Compute rotation angle (from expected vector to actual vector)
-        angle_expected = np.arctan2(v_expected[1], v_expected[0])
-        angle_actual = np.arctan2(v_actual[1], v_actual[0])
-        rotation_angle = angle_actual - angle_expected
-
-        # Compute scale factor (optional, for verification)
-        scale = np.linalg.norm(v_actual) / np.linalg.norm(v_expected)
-
-        # Rotation matrix
-        cos_r = np.cos(rotation_angle)
-        sin_r = np.sin(rotation_angle)
-
-        # Compute translation: Q1 = R × P1 + T
-        # Therefore: T = Q1 - R × P1
-        rotated_P1 = np.array(
-            [cos_r * P1[0] - sin_r * P1[1], sin_r * P1[0] + cos_r * P1[1]]
+        # Calculate actual circle center and rotation
+        actual_center, rotation_angle = self.calculate_corrections(
+            left_actual, right_actual, expected_radius_left
         )
-        translation = Q1 - rotated_P1
 
-        # Validate: Apply transformation to P2 and check if it matches Q2
-        rotated_P2 = np.array(
-            [cos_r * P2[0] - sin_r * P2[1], sin_r * P2[0] + cos_r * P2[1]]
+        # Calculate distances and errors
+        left_distance = np.sqrt(
+            (left_actual[0] - actual_center[0]) ** 2
+            + (left_actual[1] - actual_center[1]) ** 2
         )
-        transformed_P2 = rotated_P2 + translation
-        error_P2 = np.linalg.norm(transformed_P2 - Q2)
+        right_distance = np.sqrt(
+            (right_actual[0] - actual_center[0]) ** 2
+            + (right_actual[1] - actual_center[1]) ** 2
+        )
 
-        # For compatibility with existing transformation code, use center=(tx, ty)
-        actual_center = tuple(translation)
+        left_error = abs(left_distance - expected_radius_left)
+        right_error = abs(right_distance - expected_radius_right)
 
         # Apply transformations to line segments
         self.adjusted_positioning_lines = self.apply_transformations_to_lines(
@@ -1288,29 +1339,34 @@ class GCodeAdjuster:
         )
 
         # Display results
-        results = f"""CALCULATION RESULTS (2-Point Transformation)
+        results = f"""CALCULATION RESULTS
 ========================
 
-Reference Points:
-  Point 1:
-    Expected: ({P1[0]:.3f}, {P1[1]:.3f}) mm
-    Actual:   ({Q1[0]:.3f}, {Q1[1]:.3f}) mm
-  
-  Point 2:
-    Expected: ({P2[0]:.3f}, {P2[1]:.3f}) mm
-    Actual:   ({Q2[0]:.3f}, {Q2[1]:.3f}) mm
-    Validation Error: {error_P2:.3f} mm
-    Status: {'✓ Valid' if error_P2 <= 0.01 else '✗ Error > 0.01mm'}
+Expected Circle (from left point):
+  Left Radius:      {expected_radius_left:.3f} mm
+  Right Radius:     {expected_radius_right:.3f} mm
+  Error in Radius:  {abs(expected_radius_left-expected_radius_right):.3f} mm
+  Center: (0.000, 0.000) mm
 
-Transformation:
-  Translation: ({translation[0]:.3f}, {translation[1]:.3f}) mm
-  Rotation: {np.degrees(rotation_angle):.3f}°
-  Scale Factor: {scale:.6f} (for reference only)
+Left Point Validation:
+  Actual radius: {left_distance:.3f} mm
+  Error: {left_error:.3f} mm
+  Status: {'✓ Valid' if left_error <= 0.01 else '✗ Error > 0.01mm'}
 
-Vector Analysis:
-  Expected Distance: {np.linalg.norm(v_expected):.3f} mm
-  Actual Distance: {np.linalg.norm(v_actual):.3f} mm
-  Distance Change: {np.linalg.norm(v_actual) - np.linalg.norm(v_expected):.3f} mm
+Right Point Validation:
+  Actual radius: {right_distance:.3f} mm
+  Error: {right_error:.3f} mm
+  Status: {'✓ Valid' if right_error <= 0.01 else '✗ Error > 0.01mm'}
+
+Actual Circle Center:
+  X: {actual_center[0]:.3f} mm
+  Y: {actual_center[1]:.3f} mm
+
+Rotation Angle: {np.degrees(rotation_angle):.3f} degrees
+
+Transformation Applied:
+- Translation: ({actual_center[0]:.3f}, {actual_center[1]:.3f})
+- Rotation: {np.degrees(rotation_angle):.3f}°
 """
 
         self.results_text.delete(1.0, tk.END)
@@ -1319,102 +1375,145 @@ Vector Analysis:
         # Update plot
         self.plot_toolpath()
 
-    def save_adjusted_gcode(self):
-        """Save the adjusted G-code with updated reference points to a file"""
-        if not hasattr(self, "adjusted_gcode") or not self.adjusted_gcode:
-            messagebox.showwarning(
-                "Warning", "No adjusted G-code to save. Please adjust the G-code first."
-            )
+    def _adjust_gcode_3point(self, expected_points, actual_points):
+        """Adjust G-code using 3-point planar transformation"""
+        if not self.original_positioning_lines and not self.original_engraving_lines:
+            messagebox.showwarning("Warning", "Please load a G-code file first!")
             return
 
-        try:
-            # Generate filename with _adjusted suffix and timestamp
-            if hasattr(self, "original_file_path"):
-                filename_only = os.path.basename(self.original_file_path)
-                base_name, extension = os.path.splitext(filename_only)
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                initial_name = f"{base_name}_adjusted_{timestamp}"
-            else:
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                initial_name = f"adjusted_gcode_{timestamp}"
+        # Calculate transformation using 3-point method
+        translation, rotation_angle, scale_factor = (
+            self.calculate_3point_transformation(expected_points, actual_points)
+        )
 
-            # Ask user for save location
-            file_path = filedialog.asksaveasfilename(
-                initialfile=initial_name,
-                defaultextension=".nc",
-                filetypes=[
-                    ("G-code files", "*.nc"),
-                    ("G-code files", "*.gcode"),
-                    ("Text files", "*.txt"),
-                    ("All files", "*.*"),
-                ],
-                title="Save Adjusted G-code",
+        # For compatibility with existing code, convert translation to center format
+        actual_center = translation
+
+        # Calculate error metrics for each point
+        errors = []
+        for i, (exp_pt, act_pt) in enumerate(zip(expected_points, actual_points)):
+            # Transform expected point and compare to actual
+            exp_array = np.array(exp_pt)
+            act_array = np.array(act_pt)
+
+            # Apply inverse transformation to actual point to get what it "should be"
+            cos_a = np.cos(-rotation_angle)
+            sin_a = np.sin(-rotation_angle)
+            rotated = np.array(
+                [
+                    cos_a * act_array[0] - sin_a * act_array[1],
+                    sin_a * act_array[0] + cos_a * act_array[1],
+                ]
             )
+            transformed = rotated - actual_center
 
-            if not file_path:
-                return  # User cancelled
+            error = np.linalg.norm(transformed - exp_array)
+            errors.append(error)
 
-            # Get actual reference point values
-            actual_points = []
-            for i in range(2):  # Always 2 points
-                act_x_var, act_y_var = self.ref_point_actual_vars[i]
-                act_x = float(act_x_var.get())
-                act_y = float(act_y_var.get())
-                actual_points.append((act_x, act_y))
+        # Apply transformations to line segments
+        self.adjusted_positioning_lines = self.apply_transformations_to_lines(
+            self.original_positioning_lines, actual_center, rotation_angle
+        )
+        self.adjusted_engraving_lines = self.apply_transformations_to_lines(
+            self.original_engraving_lines, actual_center, rotation_angle
+        )
 
-            # Update reference point comments in the G-code
-            updated_gcode = self._update_reference_points_in_gcode(
-                self.adjusted_gcode, actual_points
-            )
+        # Generate adjusted G-code
+        self.adjusted_gcode = self.generate_adjusted_gcode(
+            self.original_gcode, actual_center, rotation_angle
+        )
 
-            # Write to file
-            with open(file_path, "w") as f:
-                f.write(updated_gcode)
+        # Display results
+        results = f"""CALCULATION RESULTS (3-Point Transformation)
+========================
 
-            messagebox.showinfo(
-                "Success",
-                f"Adjusted G-code saved to:\n{file_path}\n\n"
-                f"Reference points updated to actual values:\n"
-                f"Point 1: ({actual_points[0][0]:.4f}, {actual_points[0][1]:.4f})\n"
-                f"Point 2: ({actual_points[1][0]:.4f}, {actual_points[1][1]:.4f})",
-            )
+Reference Points:"""
 
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to save adjusted G-code:\n{str(e)}")
+        for i, (exp_pt, act_pt, error) in enumerate(
+            zip(expected_points, actual_points, errors)
+        ):
+            results += f"""
 
-    def _update_reference_points_in_gcode(self, gcode, actual_points):
-        """Update reference point comments in G-code with actual values"""
-        lines = gcode.split("\n")
-        updated_lines = []
+Point {i+1}:
+  Expected: ({exp_pt[0]:.3f}, {exp_pt[1]:.3f}) mm
+  Actual:   ({act_pt[0]:.3f}, {act_pt[1]:.3f}) mm
+  Error:    {error:.3f} mm
+  Status:   {'✓ Valid' if error <= 0.01 else '✗ Error > 0.01mm'}"""
 
-        ref1_updated = False
-        ref2_updated = False
+        avg_error = np.mean(errors)
+        max_error = np.max(errors)
 
-        for line in lines:
-            line_stripped = line.strip()
-            line_lower = line_stripped.lower()
+        results += f"""
 
-            # Check if this is a reference point comment
-            if line_stripped.startswith(";") and "reference_point" in line_lower:
-                # Extract the point number (case-insensitive check)
-                if "reference_point1" in line_lower:
-                    # Update point 1
-                    new_line = f"; reference_point1 = ({actual_points[0][0]:.4f}, {actual_points[0][1]:.4f})"
-                    updated_lines.append(new_line)
-                    ref1_updated = True
-                elif "reference_point2" in line_lower:
-                    # Update point 2
-                    new_line = f"; reference_point2 = ({actual_points[1][0]:.4f}, {actual_points[1][1]:.4f})"
-                    updated_lines.append(new_line)
-                    ref2_updated = True
-                else:
-                    # Keep other reference point comments as-is
-                    updated_lines.append(line)
-            else:
-                # Keep all other lines unchanged
-                updated_lines.append(line)
+Summary:
+  Average Error: {avg_error:.3f} mm
+  Maximum Error: {max_error:.3f} mm
+  Overall Status: {'✓ All Valid' if max_error <= 0.01 else '✗ Exceeds tolerance'}
 
-        return "\n".join(updated_lines)
+Transformation Applied:
+  Translation: ({actual_center[0]:.3f}, {actual_center[1]:.3f}) mm
+  Rotation: {np.degrees(rotation_angle):.3f}°
+  Scale Factor: {scale_factor:.6f}
+"""
+
+        self.results_text.delete(1.0, tk.END)
+        self.results_text.insert(1.0, results)
+
+        # Update plot
+        self.plot_toolpath()
+
+    def calculate_corrections(self, left_actual, right_actual, expected_radius):
+        """Calculate the center and rotation needed for correction"""
+        # Calculate the actual circle center from the two actual points
+        mid_x = (left_actual[0] + right_actual[0]) / 2
+        mid_y = (left_actual[1] + right_actual[1]) / 2
+
+        # Distance between the two actual points
+        chord_length = np.sqrt(
+            (right_actual[0] - left_actual[0]) ** 2
+            + (right_actual[1] - left_actual[1]) ** 2
+        )
+
+        # Calculate the perpendicular distance from chord to center
+        if chord_length > 2 * expected_radius:
+            # Points are too far apart for the expected radius
+            actual_radius = chord_length / 2
+        else:
+            actual_radius = expected_radius
+
+        perpendicular_dist = np.sqrt(actual_radius**2 - (chord_length / 2) ** 2)
+
+        # Calculate perpendicular direction
+        dx = right_actual[0] - left_actual[0]
+        dy = right_actual[1] - left_actual[1]
+
+        # Perpendicular vector (rotated 90 degrees)
+        perp_x = -dy / chord_length
+        perp_y = dx / chord_length
+
+        # Calculate actual center (there are two possible centers, we'll use one)
+        actual_center_x = mid_x + perp_x * perpendicular_dist
+        actual_center_y = mid_y + perp_y * perpendicular_dist
+
+        # Calculate rotation angle to align the chord direction
+        # Expected: left at (-X, Y), right at (+X, Y) - horizontal line
+        # Actual: left at (x1, y1), right at (x2, y2)
+        # We want to rotate the actual chord to match the expected horizontal direction
+
+        # Expected direction (horizontal, left to right)
+        expected_dx = 1.0  # horizontal direction
+        expected_dy = 0.0
+
+        # Actual direction (normalized)
+        actual_dx = dx / chord_length
+        actual_dy = dy / chord_length
+
+        # Calculate rotation angle to align actual direction with expected direction
+        # This rotates the actual chord to be horizontal
+        # Use the angle of the actual chord from horizontal (expected is horizontal)
+        rotation_angle = np.arctan2(actual_dy, actual_dx)
+
+        return (actual_center_x, actual_center_y), rotation_angle
 
     def apply_transformations_to_lines(self, line_segments, center, rotation_angle):
         """Apply translation and rotation to line segments"""
@@ -1466,12 +1565,12 @@ Vector Analysis:
             adjusted_line = line
             line_upper = line.upper().strip()
 
-            # Skip empty lines (don't include them in adjusted G-code)
-            if not line_upper:
-                continue
-
-            # Keep comments but skip processing them
-            if line_upper.startswith(";") or line_upper.startswith("("):
+            # Skip comments and empty lines
+            if (
+                not line_upper
+                or line_upper.startswith(";")
+                or line_upper.startswith("(")
+            ):
                 adjusted_lines.append(adjusted_line)
                 continue
 
@@ -1645,28 +1744,26 @@ Vector Analysis:
             self.connect_button.config(text="Disconnect")
             self.status_label.config(text="Connected", foreground="green")
 
-            # Start serial reader thread
-            self.serial_reader_thread = SerialReaderThread(
-                self.serial_connection, self.response_queue
-            )
-            self.serial_reader_thread.start()
-            print("Serial reader thread started")
-
-            # Start processing responses from queue
-            self.start_response_processing()
-
             # Query all GRBL settings
             print("Querying all GRBL settings...")
             self.query_all_grbl_settings()
 
             # Set $10=3 to report both MPos and WPos
             print("Setting $10=3 to report both MPos and WPos")
-            self.send_gcode_async("$10=3")
+            result = self.send_gcode("$10=3")
+            print(f"$10 setting result: {result}")
 
-            # Update homing enabled flag from settings (will be set when settings query completes)
+            # Small delay to let GRBL process the setting
+            time.sleep(0.5)
 
-            # Start periodic position updates (now just sends ? commands)
-            self.start_status_updates()
+            # Update homing enabled flag from settings
+            self.homing_enabled = self.grbl_settings.get(22, 0) == 1
+            print(
+                f"Homing enabled: {self.homing_enabled} ($22={self.grbl_settings.get(22, 0)})"
+            )
+
+            # Start periodic position updates
+            self.update_position()
 
         else:
             self.disconnect_grbl()
@@ -1690,27 +1787,9 @@ Vector Analysis:
         was_connected = self.is_connected
         self.is_connected = False
 
-        # Stop processing responses
-        self.processing_responses = False
-
-        # Stop serial reader thread
-        if self.serial_reader_thread and self.serial_reader_thread.is_alive():
-            self.serial_reader_thread.stop()
-            self.serial_reader_thread.join(timeout=1.0)
-            print("Serial reader thread stopped")
-        self.serial_reader_thread = None
-
-        # Clear response queue
-        while not self.response_queue.empty():
-            try:
-                self.response_queue.get_nowait()
-            except queue.Empty:
-                break
-
         # Turn off laser if it's on
         if self.laser_on:
-            self.laser_on = False
-            self.laser_button.config(text="Laser OFF")
+            self.set_laser_state(False)
 
         if self.serial_connection:
             try:
@@ -1718,7 +1797,6 @@ Vector Analysis:
                 if was_connected and self.serial_connection.is_open:
                     try:
                         self.serial_connection.write(b"M5\n")
-                        time.sleep(0.1)  # Give it time to send
                     except:
                         pass
                 self.serial_connection.close()
@@ -1743,8 +1821,8 @@ Vector Analysis:
         if self.is_connected:
             self.disconnect_grbl()
 
-    def send_gcode(self, command):
-        """Send a G-code command to GRBL and wait for response"""
+    def send_gcode(self, command, wait_for_response=True):
+        """Send a G-code command to GRBL and optionally wait for response"""
         if not self.is_connected or not self.serial_connection:
             return None
 
@@ -1758,6 +1836,10 @@ Vector Analysis:
         try:
             # Send command
             self.serial_connection.write(f"{command}\n".encode())
+
+            # For jog commands and other non-blocking operations, return immediately
+            if not wait_for_response:
+                return "sent"
 
             # Wait for response
             response = ""
@@ -1778,7 +1860,74 @@ Vector Analysis:
             print(f"Error sending G-code: {e}")
             return None
 
-    # query_position() removed - now using threaded serial with async status queries
+    def wait_for_idle_and_update_position(self, timeout_seconds=10):
+        """Wait for GRBL to finish moving and update position"""
+        if not self.is_connected or not self.serial_connection:
+            return
+        
+        print("Waiting for move to complete...")
+        start_time = datetime.now()
+        
+        # Poll status until GRBL reports Idle state
+        while (datetime.now() - start_time).total_seconds() < timeout_seconds:
+            try:
+                # Query status
+                self.serial_connection.write(b"?")
+                time.sleep(0.1)  # Small delay for response
+                
+                if self.serial_connection.in_waiting > 0:
+                    response = self.serial_connection.readline().decode().strip()
+                    self.parse_status_response(response)
+                    
+                    # Check if in Idle state (move complete)
+                    if response.startswith("<Idle"):
+                        print("Move complete, updating position...")
+                        # Query position a few more times to ensure WCO is updated
+                        for _ in range(3):
+                            time.sleep(0.1)
+                            self.query_position()
+                        print(f"Position updated: WPos=({self.work_pos['x']:.3f}, {self.work_pos['y']:.3f})")
+                        return
+                
+            except Exception as e:
+                print(f"Error waiting for idle: {e}")
+                return
+            
+            # Wait a bit before next poll
+            time.sleep(0.2)
+        
+        print("Warning: Move timeout - position may not be accurate")
+    
+    def query_position(self):
+        """Query current position from GRBL"""
+        if not self.is_connected or not self.serial_connection:
+            return
+
+        # Check if serial port is still open
+        try:
+            if not self.serial_connection.is_open:
+                return
+        except:
+            return
+
+        try:
+            # Send status query (?)
+            self.serial_connection.write(b"?")
+
+            # Read response
+            start_time = datetime.now()
+            while (datetime.now() - start_time).total_seconds() < 0.5:
+                if self.serial_connection.in_waiting > 0:
+                    response = self.serial_connection.readline().decode().strip()
+                    self.parse_status_response(response)
+                    break
+
+        except (serial.SerialException, OSError, PermissionError) as e:
+            # Serial connection error - disconnect silently
+            print(f"Serial communication lost, disconnecting: {e}")
+            self.root.after(10, self.disconnect_grbl)
+        except Exception as e:
+            print(f"Error querying position: {e}")
 
     def parse_status_response(self, response):
         """Parse GRBL status response and update position"""
@@ -1824,38 +1973,11 @@ Vector Analysis:
                 # Update display
                 self.update_position_display()
 
-                # Update execution path and plot if executing
-                if self.is_executing:
-                    current_pos = (self.work_pos["x"], self.work_pos["y"])
-                    # Always add position if changed
-                    if (
-                        not self.execution_path
-                        or current_pos != self.execution_path[-1]
-                    ):
-                        self.execution_path.append(current_pos)
-
-                    # Force plot update in single-step mode, throttle in run mode
-                    if self.single_step_mode:
-                        # Always update plot immediately in single-step mode
-                        self.plot_toolpath()
-                        self.canvas.draw()
-                        self.canvas.flush_events()
-                    else:
-                        # Run mode - throttled updates for performance
-                        current_time = time.time()
-                        if (
-                            current_time - self._last_plot_update > 0.1
-                        ):  # 100ms throttle
-                            self.plot_toolpath()
-                            self.canvas.draw()
-                            self.canvas.flush_events()
-                            self._last_plot_update = current_time
-
         except Exception as e:
             print(f"Error parsing status: {e}")
 
     def update_position_display(self):
-        """Update position labels and laser marker on plot"""
+        """Update position labels and plot"""
         self.work_pos_label.config(
             text=f"X: {self.work_pos['x']:6.2f}  Y: {self.work_pos['y']:6.2f}  Z: {self.work_pos['z']:6.2f}"
         )
@@ -1863,34 +1985,50 @@ Vector Analysis:
             text=f"X: {self.machine_pos['x']:6.2f}  Y: {self.machine_pos['y']:6.2f}  Z: {self.machine_pos['z']:6.2f}"
         )
 
-        # Update laser position marker on plot if it exists
-        if hasattr(self, "laser_marker"):
-            self.laser_marker.set_data([self.work_pos["x"]], [self.work_pos["y"]])
+        # Update plot if we have toolpath loaded, but throttle during streaming
+        if self.original_positioning_lines or self.original_engraving_lines:
+            current_time = time.time()
+            
+            # During streaming, only update plot every 2 seconds (expensive operation!)
+            # When not streaming, update every time (for responsive jogging)
+            if self.streaming:
+                if current_time - self._last_plot_update > 2.0:
+                    self._last_plot_update = current_time
+                    self.plot_toolpath()
+            else:
+                # Not streaming - update plot for responsive feedback
+                self._last_plot_update = current_time
+                self.plot_toolpath()
 
-            # Auto-scale plot if laser moves outside current view (only when not executing)
-            if not self.is_executing:
-                xlim = self.ax.get_xlim()
-                ylim = self.ax.get_ylim()
-                x_pos = self.work_pos["x"]
-                y_pos = self.work_pos["y"]
+    def update_position(self):
+        """Periodically update position from GRBL - adaptive polling"""
+        if self.is_connected:
+            self.query_position()
+            
+            # Adaptive polling based on activity:
+            # - Fast (200ms) when streaming G-code, jogging, or laser is on
+            # - Slow (5000ms) when idle - just a heartbeat to check connection
+            is_active = (self.streaming or 
+                        self.is_executing or 
+                        self.laser_on)
+            
+            interval = 200 if is_active else 5000
+            
+            # Schedule next update
+            self.position_update_id = self.root.after(interval, self.update_position)
 
-                # Check if position is outside current view
-                margin = 5  # mm margin around position
-                need_rescale = False
-
-                if x_pos < xlim[0] or x_pos > xlim[1]:
-                    self.ax.set_xlim(x_pos - margin, x_pos + margin)
-                    need_rescale = True
-                if y_pos < ylim[0] or y_pos > ylim[1]:
-                    self.ax.set_ylim(y_pos - margin, y_pos + margin)
-                    need_rescale = True
-
-                # Redraw canvas
-                if need_rescale:
-                    self.ax.relim()
-                    self.ax.autoscale_view()
-                self.canvas.draw_idle()
-
+    def update_laser_button_state(self):
+        """Update laser button to reflect current state"""
+        if self.laser_on:
+            self.laser_button.config(text="Laser ON", style="")
+        else:
+            self.laser_button.config(text="Laser OFF", style="")
+    
+    def set_laser_state(self, state):
+        """Set laser state and update button - single source of truth"""
+        self.laser_on = state
+        self.update_laser_button_state()
+    
     def toggle_laser(self):
         """Toggle laser on/off at low power"""
         if not self.is_connected:
@@ -1899,15 +2037,19 @@ Vector Analysis:
 
         if self.laser_on:
             # Turn laser off
-            self.send_gcode_async("M5")
-            self.laser_on = False
-            self.laser_button.config(text="Laser OFF")
+            self.send_gcode("M5")
+            self.set_laser_state(False)
         else:
-            # Turn laser on at low power (S10 = 1% power for testing)
-            self.send_gcode_async("M3 S10")
-            self.send_gcode_async("G1 F100")
-            self.laser_on = True
-            self.laser_button.config(text="Laser ON")
+            # Turn laser on at low power (1% of max spindle speed for targeting)
+            max_spindle_speed = self.grbl_settings.get(30, 1000)  # Default to 1000 if not set
+            target_power_percent = 1.0  # 1% power for targeting
+            s_value = int(max_spindle_speed * target_power_percent / 100.0)
+            s_value = max(1, s_value)  # Ensure at least S1
+            
+            print(f"Laser targeting mode: Max spindle={max_spindle_speed}, Using S{s_value} ({target_power_percent}%)")
+            self.send_gcode(f"M3 S{s_value}")
+            self.send_gcode("G1 F100")
+            self.set_laser_state(True)
 
     def set_work_origin(self):
         """Set the current position as the work coordinate origin (0,0,0)"""
@@ -1915,19 +2057,35 @@ Vector Analysis:
             messagebox.showwarning("Warning", "Please connect to GRBL first!")
             return
 
-        # Confirm with user
-        response = messagebox.askyesno(
-            "Set Work Origin",
-            f"Set current position as work origin (0, 0, 0)?\n\n"
-            f"Current MPos: X={self.machine_pos['x']:.2f} Y={self.machine_pos['y']:.2f} Z={self.machine_pos['z']:.2f}\n\n"
-            f"This will execute: G10 L20 P1 X0 Y0 Z0",
-        )
+        # Query fresh position before prompting user
+        # This ensures we have current position, not stale data
+        self.query_position()
+        
+        # Wait a moment for position update to be processed
+        def show_origin_prompt():
+            # Confirm with user (now with fresh position data)
+            response = messagebox.askyesno(
+                "Set Work Origin",
+                f"Set current position as work origin (0, 0, 0)?\n\n"
+                f"Current MPos: X={self.machine_pos['x']:.2f} Y={self.machine_pos['y']:.2f} Z={self.machine_pos['z']:.2f}\n\n"
+                f"This will execute: G10 L20 P1 X0 Y0 Z0",
+            )
 
-        if response:
-            # Send G10 command to set current position as origin for G54 coordinate system
-            self.send_gcode_async("G10 L20 P1 X0 Y0 Z0")
-            messagebox.showinfo("Success", "Work origin set to current position")
-            # Position will update automatically from status responses
+            if response:
+                # Send G10 command to set current position as origin for G54 coordinate system
+                result = self.send_gcode("G10 L20 P1 X0 Y0 Z0")
+                if result:
+                    print("Work origin set, updating position...")
+                    # Query position multiple times to ensure WCO is updated
+                    # G10 changes the WCO, so we need fresh data
+                    for i in range(5):
+                        time.sleep(0.15)  # Wait between queries
+                        self.query_position()
+                    print(f"Position updated: WPos=({self.work_pos['x']:.3f}, {self.work_pos['y']:.3f}, {self.work_pos['z']:.3f})")
+                    messagebox.showinfo("Success", f"Work origin set to current position\n\nNew WPos: ({self.work_pos['x']:.2f}, {self.work_pos['y']:.2f}, {self.work_pos['z']:.2f})")
+        
+        # Schedule the prompt after position has been queried (200ms delay)
+        self.root.after(200, show_origin_prompt)
 
     def jog_move(self, x_dir, y_dir):
         """Jog move in X and Y direction"""
@@ -1947,7 +2105,9 @@ Vector Analysis:
         # Use $J jog command (GRBL 1.1+) which is safer
         # Format: $J=G91 X10 Y10 F1000 (relative move at feed rate 1000 mm/min)
         jog_cmd = f"$J=G91 X{x_move:.3f} Y{y_move:.3f} F1000"
-        self.send_gcode_async(jog_cmd)
+        # Send without waiting for response for instant feedback
+        self.send_gcode(jog_cmd, wait_for_response=False)
+        # Note: Position updates handled by adaptive polling (200ms when active)
 
     def jog_move_z(self, z_dir):
         """Jog move in Z direction"""
@@ -1965,7 +2125,9 @@ Vector Analysis:
 
         # Use $J jog command for Z axis
         jog_cmd = f"$J=G91 Z{z_move:.3f} F500"
-        self.send_gcode_async(jog_cmd)
+        # Send without waiting for response for instant feedback
+        self.send_gcode(jog_cmd, wait_for_response=False)
+        # Note: Position updates handled by adaptive polling (200ms when active)
 
     def execute_manual_gcode(self):
         """Execute a manually entered G-code command"""
@@ -1978,25 +2140,30 @@ Vector Analysis:
             return
 
         print(f"Executing manual G-code: {command}")
-
+        
         # Track laser state changes from M5/M3 commands
         command_upper = command.upper().strip()
-
-        # Send the command async
-        self.send_gcode_async(command)
-
-        # Update laser button state if M5 or M3/M4
         if command_upper.startswith("M5") or command_upper == "M5":
-            self.laser_on = False
-            self.laser_button.config(text="Laser OFF")
-            print("M5 command executed, laser state set to OFF")
+            # Laser off command
+            result = self.send_gcode(command)
+            self.set_laser_state(False)
+            print(f"M5 command executed, laser state set to OFF")
         elif command_upper.startswith("M3") or command_upper.startswith("M4"):
-            self.laser_on = True
-            self.laser_button.config(text="Laser ON")
-            print("M3/M4 command executed, laser state set to ON")
-
+            # Laser on command
+            result = self.send_gcode(command)
+            self.set_laser_state(True)
+            print(f"M3/M4 command executed, laser state set to ON")
+        else:
+            result = self.send_gcode(command)
+        
+        if result:
+            print(f"Response: {result}")
+        
         # Clear the entry field after execution
         self.gcode_cmd_var.set("")
+        
+        # Query position after command to update display
+        self.root.after(100, self.query_position)
 
     def query_all_grbl_settings(self):
         """Query all GRBL settings using $$ command"""
@@ -2064,7 +2231,7 @@ Vector Analysis:
         )
 
         if response:
-            self.send_gcode_async("$H")
+            self.send_gcode("$H")
 
     def clear_errors(self):
         """Clear GRBL errors and alarms"""
@@ -2073,7 +2240,7 @@ Vector Analysis:
             return
 
         # Send unlock command to clear alarms
-        self.send_gcode_async("$X")
+        self.send_gcode("$X")
         messagebox.showinfo(
             "Clear Errors", "Sent unlock command ($X) to clear GRBL alarms."
         )
@@ -2095,8 +2262,11 @@ Vector Analysis:
 
         if response:
             # Send commands to go to origin
-            self.send_gcode_async("G90")  # Absolute positioning mode
-            self.send_gcode_async("G0 X0 Y0 Z0")  # Rapid move to origin
+            self.send_gcode("G90")  # Absolute positioning mode
+            self.send_gcode("G0 X0 Y0 Z0")  # Rapid move to origin
+            
+            # Wait for move to complete and update position
+            self.wait_for_idle_and_update_position()
 
     def parse_gcode_position(self, line, current_pos):
         """Parse a G-code line and return the new position"""
@@ -2166,13 +2336,18 @@ Vector Analysis:
             self.stop_streaming()
 
             # Close progress window if exists
-            if hasattr(self, "progress_window") and self.progress_window.winfo_exists():
-                self.progress_window.destroy()
+            if hasattr(self, "progress_window"):
+                try:
+                    if self.progress_window.winfo_exists():
+                        print("Emergency stop: Destroying progress window")
+                        self.progress_window.destroy()
+                        self.root.update_idletasks()
+                except:
+                    print("Emergency stop: Progress window already destroyed or error")
 
             # Update laser button state
             if hasattr(self, "laser_button"):
-                self.laser_button.config(text="Laser OFF")
-                self.laser_on = False
+                self.set_laser_state(False)
 
             # Disable stop and next buttons
             if hasattr(self, "stop_button"):
@@ -2192,102 +2367,30 @@ Vector Analysis:
             print(f"Error during emergency stop: {e}")
             messagebox.showerror("Error", f"Emergency stop error:\n{str(e)}")
 
-    def start_response_processing(self):
-        """Start processing responses from the queue"""
-        if self.processing_responses:
-            return
-
-        self.processing_responses = True
-        self.process_responses()
-
-    def process_responses(self):
-        """Process all responses in the queue (runs on GUI thread)"""
-        if not self.processing_responses:
-            return
-
-        try:
-            # Process all queued responses (up to 10 per call to avoid blocking GUI)
-            for _ in range(10):
-                try:
-                    response = self.response_queue.get_nowait()
-                    self.handle_response(response)
-                except queue.Empty:
-                    break
-        except Exception as e:
-            print(f"Error processing responses: {e}")
-
-        # Schedule next processing
-        if self.processing_responses:
-            self.root.after(10, self.process_responses)  # Check every 10ms
-
-    def handle_response(self, response):
-        """Handle a single response from GRBL"""
-        # Status responses
-        if response.startswith("<"):
-            # Debug: show status responses
-            # if "WPos" in response or "MPos" in response:
-            #    print(f"Status: {response}")
-            self.parse_status_response(response)
-
-        # OK responses - command completed
-        elif response.strip().lower() == "ok":
-            self.handle_grbl_ok()
-
-        # Error responses
-        elif "error" in response.lower():
-            print(f"GRBL Error: {response}")
-
-        # Settings responses ($N=value)
-        elif response.startswith("$"):
-            # Parse setting
-            try:
-                parts = response[1:].split("=")
-                if len(parts) == 2:
-                    setting_num = int(parts[0])
-                    value = float(parts[1])
-                    self.grbl_settings.set(setting_num, value)
-
-                    # Update homing flag if $22
-                    if setting_num == 22:
-                        self.homing_enabled = value == 1
-            except:
-                pass
-
-        # Other responses
-        else:
-            print(f"GRBL: {response}")
-
-    def send_gcode_async(self, command):
-        """Send G-code without waiting for response (async)"""
-        if not self.is_connected or not self.serial_connection:
-            return False
-
-        try:
-            self.serial_connection.write((command + "\n").encode())
-            return True
-        except Exception as e:
-            print(f"Error sending command: {e}")
-            return False
-
     def start_status_updates(self):
-        """Start periodic status updates (every 100ms for faster updates)"""
+        """Start periodic status updates (slower during streaming)"""
         if not self.is_connected or self.status_update_id is not None:
             return
 
         def update_status():
             if self.is_connected and self.serial_connection:
                 try:
-                    # Send status query (response handled by thread)
-                    self.serial_connection.write(b"?")
-                except Exception as e:
-                    print(f"Error sending status query: {e}")
+                    # Only send status query if not currently streaming
+                    # (to avoid interference with G-code flow)
+                    if not self.streaming:
+                        self.serial_connection.write(b"?")
+                    # Response will be handled by parse_status_response
+                except:
+                    pass
 
-            # Schedule next update (faster: 100ms instead of 250ms)
+            # Schedule next update - use longer interval during streaming
             if self.is_connected:
-                self.status_update_id = self.root.after(100, update_status)
+                # 1000ms during streaming, 250ms when idle
+                interval = 1000 if self.streaming else 250
+                self.status_update_id = self.root.after(interval, update_status)
 
         # Start the updates
-        self.status_update_id = self.root.after(100, update_status)
+        self.status_update_id = self.root.after(250, update_status)
 
     def stop_status_updates(self):
         """Stop periodic status updates"""
@@ -2301,6 +2404,9 @@ Vector Analysis:
             # Remove oldest command and reduce buffer
             cmd = self.command_queue.pop(0)
             self.buffer_size = max(0, self.buffer_size - cmd["size"])
+            # Reduced debug output for performance
+        else:
+            print("Warning: Received 'ok' but command queue is empty!")
 
     def stream_gcode_line(self):
         """Wrapper to call the streaming function (with or without step support)"""
@@ -2312,40 +2418,98 @@ Vector Analysis:
         if not self.streaming:
             return
 
-        # Track completion checks to prevent infinite waiting
-        if not hasattr(self, "_completion_checks"):
-            self._completion_checks = 0
+        # Read any pending responses from GRBL before checking completion
+        # This is critical - after all commands are sent, we still need to read the final 'ok' responses
+        try:
+            reads_count = 0
+            max_reads = 30  # Increased to handle any backlog
+            
+            # Wait a moment for responses to arrive (GRBL may still be processing)
+            time.sleep(0.05)
+            
+            # Read ALL available responses
+            while reads_count < max_reads:
+                # Check if data is waiting
+                if self.serial_connection.in_waiting == 0:
+                    # No data - wait a bit and check again
+                    time.sleep(0.02)
+                    if self.serial_connection.in_waiting == 0:
+                        break  # Really no data
+                
+                response = self.serial_connection.readline().decode().strip()
+                if response:  # Only process non-empty responses
+                    reads_count += 1
+                    if response == "ok":
+                        self.handle_grbl_ok()
+                        print(f"  Processed 'ok' #{reads_count}, queue now has {len(self.command_queue)} commands")
+                    elif response == "error" or response.startswith("error:"):
+                        print(f"GRBL Error during completion: {response}")
+                    elif response.startswith("<"):
+                        # Status response, parse it silently
+                        self.parse_status_response(response)
+                    
+        except Exception as e:
+            print(f"Error reading responses during completion check: {e}")
 
-        self._completion_checks += 1
-
-        print(
-            f"Completion check #{self._completion_checks}: buffer={self.buffer_size}, queue={len(self.command_queue)}"
-        )
-
+        # Check if all lines have been sent AND all commands have been acknowledged
+        all_sent = len(self.gcode_buffer) == 0
+        all_acknowledged = self.buffer_size <= 0 and len(self.command_queue) == 0
+        
+        print(f"Completion check #{self.completion_checks}: all_sent={all_sent}, all_ack={all_acknowledged}, buffer_size={self.buffer_size}, queue_len={len(self.command_queue)}")
+        
+        # Increment completion check counter
+        self.completion_checks += 1
+        
         # If buffer is empty and command queue is empty, we're done
-        # OR if we've waited too long (100 checks = 10 seconds)
-        buffer_empty = self.buffer_size <= 0 and len(self.command_queue) == 0
-        timeout_reached = self._completion_checks > 100
-
-        if buffer_empty or timeout_reached:
-            if timeout_reached:
-                print(
-                    f"Warning: Completion timeout after 10 seconds. Force completing."
-                )
-
-            self._completion_checks = 0
+        if all_sent and all_acknowledged:
+            print(f"G-code execution complete! Sent {self.sent_lines} lines.")
+            
+            # Stop streaming first
+            self.completion_checks = 0  # Reset counter
             self.stop_streaming()
-
-            # Close progress window
-            try:
-                if (
-                    hasattr(self, "progress_window")
-                    and self.progress_window.winfo_exists()
-                ):
-                    self.progress_window.destroy()
-                    print(f"G-code execution complete - sent {self.sent_lines} lines")
-            except Exception as e:
-                print(f"Error destroying progress window: {e}")
+            
+            # Destroy progress window if it exists
+            if hasattr(self, "progress_window"):
+                try:
+                    if self.progress_window.winfo_exists():
+                        self.progress_window.destroy()
+                        # Force GUI update to process window destruction
+                        self.root.update_idletasks()
+                except:
+                    pass  # Window already destroyed or error
+            
+            # Show completion message after a small delay to ensure window is closed
+            def show_completion_message():
+                messagebox.showinfo(
+                    "Complete",
+                    f"G-code execution complete!\n\nSent {self.sent_lines} lines.",
+                )
+            
+            self.root.after(100, show_completion_message)
+        elif self.completion_checks > 100:
+            # Timeout after 10 seconds (100 checks × 100ms)
+            print(f"WARNING: Completion timeout after {self.completion_checks} checks. Force completing.")
+            print(f"  Remaining in queue: {len(self.command_queue)} commands, buffer_size={self.buffer_size}")
+            
+            # Force complete
+            self.completion_checks = 0
+            self.stop_streaming()
+            
+            if hasattr(self, "progress_window"):
+                try:
+                    if self.progress_window.winfo_exists():
+                        self.progress_window.destroy()
+                        self.root.update_idletasks()
+                except:
+                    pass
+            
+            messagebox.showwarning(
+                "Execution Complete (with timeout)",
+                f"G-code execution finished but some responses may not have been received.\n\n"
+                f"Sent: {self.sent_lines} lines\n"
+                f"Remaining in queue: {len(self.command_queue)} commands\n\n"
+                f"The laser likely completed all moves successfully."
+            )
         else:
             # Check again in 100ms
             self.root.after(100, self.check_streaming_complete)
@@ -2359,6 +2523,21 @@ Vector Analysis:
         self.is_executing = False
         self.single_step_mode = False
         self.step_paused = False
+
+        # Restore original serial timeout
+        if hasattr(self, "original_timeout") and self.serial_connection:
+            try:
+                self.serial_connection.timeout = self.original_timeout
+                print(f"Restored serial timeout to {self.original_timeout}")
+            except:
+                pass
+
+        # Stop the status updates that were started during streaming
+        self.stop_status_updates()
+
+        # Restart normal position updates if still connected
+        if self.is_connected and self.position_update_id is None:
+            self.update_position()
 
         # Disable stop and next buttons
         if hasattr(self, "stop_button"):
@@ -2393,73 +2572,141 @@ Vector Analysis:
         if not self.streaming or not self.gcode_buffer:
             return
 
-        # Check if we have space in GRBL's buffer (use 80% to keep headroom)
-        if self.buffer_size >= (self.max_buffer_size * 0.8):
-            # Wait for buffer to clear, check again in 10ms
-            self.root.after(10, self.stream_gcode_line_with_step)
-            return
+        # Log timing for first iteration
+        if self.sent_lines == 0:
+            print(f"First call to stream_gcode_line_with_step() at {datetime.now().strftime('%H:%M:%S.%f')[:-3]}")
 
-        # Get next line
-        line_data = self.gcode_buffer.pop(0)
-        line = line_data["line"]
-
-        # Store current line for display
-        self.current_line_text = line
-
-        # Send the line (async, no waiting)
+        # Read any pending responses from GRBL (limit reads to prevent delays)
         try:
-            if not self.send_gcode_async(line):
-                print(f"Failed to send line: {line}")
+            reads_count = 0
+            max_reads = 10
+            bytes_waiting = self.serial_connection.in_waiting
+            
+            if bytes_waiting > 0 and self.sent_lines == 0:
+                print(f"  {bytes_waiting} bytes waiting in serial buffer before first send")
+            
+            # Read if there's ANY data waiting (even 1 byte)
+            # 'ok' responses are only 3-4 bytes, so we need to be aggressive about reading
+            while self.serial_connection.in_waiting > 0 and reads_count < max_reads:
+                response = self.serial_connection.readline().decode().strip()
+                if response:  # Only process non-empty responses
+                    reads_count += 1
+                    if response == "ok":
+                        self.handle_grbl_ok()
+                    elif response == "error" or response.startswith("error:"):
+                        print(f"GRBL Error: {response}")
+                        messagebox.showerror("GRBL Error", f"GRBL reported an error:\n{response}")
+                        self.stop_streaming()
+                        return
+                    elif response.startswith("<"):
+                        # Status response, parse it silently
+                        self.parse_status_response(response)
+            
+            if self.sent_lines == 0 and reads_count > 0:
+                print(f"  Read {reads_count} responses, took until {datetime.now().strftime('%H:%M:%S.%f')[:-3]}")
+                    
+        except Exception as e:
+            print(f"Error reading responses: {e}")
+
+        # Send multiple commands if buffer allows (improves throughput)
+        commands_sent = 0
+        max_commands_per_batch = 5
+        
+        while (self.gcode_buffer and 
+               commands_sent < max_commands_per_batch and 
+               self.buffer_size < (self.max_buffer_size * 0.95)):  # Increased to 95%
+            
+            # Get next line
+            line_data = self.gcode_buffer.pop(0)
+            line = line_data["line"]
+            
+            # Store current line for display
+            self.current_line_text = line
+            
+            # Send the line
+            try:
+                command = line + "\n"
+                # Log timing for first command only
+                if commands_sent == 0 and self.sent_lines == 0:
+                    print(f"Sending first command at {datetime.now().strftime('%H:%M:%S.%f')[:-3]}: {line}")
+                
+                # Track laser state changes from M5/M3 commands in G-code
+                line_upper = line.upper().strip()
+                if line_upper.startswith("M5") or line_upper == "M5":
+                    # Laser off command
+                    self.set_laser_state(False)
+                    print(f"Detected M5 in G-code, laser state set to OFF")
+                elif line_upper.startswith("M3") or line_upper.startswith("M4"):
+                    # Laser on command (M3 or M4)
+                    self.set_laser_state(True)
+                    print(f"Detected M3/M4 in G-code, laser state set to ON")
+                
+                self.serial_connection.write(command.encode())
+                
+                # Track command size
+                cmd_size = len(command)
+                self.buffer_size += cmd_size
+                self.command_queue.append({"size": cmd_size, "line": line})
+                commands_sent += 1
+                
+                # Update progress (only on first command to reduce GUI updates)
+                if commands_sent == 1 and hasattr(self, "progress_bar"):
+                    self.sent_lines += commands_sent
+                    self.progress_bar["value"] = self.sent_lines
+                    
+                    # In single-step mode, ALWAYS show the command
+                    # Otherwise, only update status text occasionally to reduce overhead
+                    if self.single_step_mode:
+                        # Always show command in single-step mode
+                        self.status_label.config(
+                            text=f"Line {self.sent_lines} / {self.total_lines}: {line}"
+                        )
+                    elif self.sent_lines % 10 == 0:
+                        # Show command every 10 lines in run mode (not too spammy)
+                        self.status_label.config(
+                            text=f"Line {self.sent_lines} / {self.total_lines}: {line}"
+                        )
+                
+            except Exception as e:
+                print(f"Error streaming line: {e}")
                 self.stop_streaming()
                 return
+            
+            # Handle single-step mode
+            if self.single_step_mode:
+                # Check if this was the last line
+                if len(self.gcode_buffer) == 0:
+                    # Last line sent in single-step mode - check for completion
+                    print("Single-step: Last line sent, checking completion")
+                    self.check_streaming_complete()
+                    return
+                else:
+                    # More lines to go - pause for user to click Next
+                    self.step_paused = True
+                    # Enable next buttons
+                    if hasattr(self, "next_step_button"):
+                        self.next_step_button.config(state="normal")
+                    if hasattr(self, "step_next_button"):
+                        self.step_next_button.config(state="normal")
+                    return
 
-            # Track command size
-            cmd_size = len(line) + 1  # +1 for newline
-            self.buffer_size += cmd_size
-            self.command_queue.append({"size": cmd_size, "line": line})
+        # Update sent_lines count for any additional commands sent
+        if commands_sent > 1 and hasattr(self, "progress_bar"):
+            self.sent_lines += (commands_sent - 1)
+            self.progress_bar["value"] = self.sent_lines
 
-            # Update progress
-            if hasattr(self, "progress_bar"):
-                self.sent_lines += 1
-                self.progress_bar["value"] = self.sent_lines
-                self.status_label.config(
-                    text=f"Line {self.sent_lines} / {self.total_lines}: {line}"
-                )
-
-        except Exception as e:
-            print(f"Error streaming line: {e}")
-            self.stop_streaming()
-            return
-
-        # Handle single-step mode
-        if self.single_step_mode:
-            # Check if there are more lines
-            if self.gcode_buffer:
-                # More lines to go - pause for user to click Next
-                self.step_paused = True
-                # Enable next buttons (both in left panel and progress window)
-                if hasattr(self, "next_step_button"):
-                    self.next_step_button.config(state="normal")
-                if hasattr(self, "step_next_button"):
-                    self.step_next_button.config(state="normal")
-                # Don't automatically continue
-                return
-            else:
-                # No more lines - this was the last line
-                # Wait a bit for GRBL to execute and send final status before completing
-                print(
-                    "Single-step: Last line sent, waiting for execution before completion check"
-                )
-                self.root.after(
-                    500, self.check_streaming_complete
-                )  # 500ms delay for final move
-                return
-
-        # Continue streaming if there are more lines (run mode)
+        # Continue streaming if there are more lines
         if self.gcode_buffer:
-            self.root.after(1, self.stream_gcode_line_with_step)
+            # Use immediate callback (0ms) for faster streaming
+            self.root.after(0, self.stream_gcode_line_with_step)
         else:
             # All lines sent, wait for completion
+            print(f"All lines sent ({self.sent_lines}/{self.total_lines}), waiting for GRBL to finish...")
+            # Force update the status label to show final line count
+            if hasattr(self, "status_label"):
+                self.status_label.config(
+                    text=f"Line {self.sent_lines} / {self.total_lines} - Waiting for completion..."
+                )
             self.check_streaming_complete()
 
     def run_adjusted_gcode(self):
@@ -2470,6 +2717,11 @@ Vector Analysis:
 
         if not self.is_connected:
             messagebox.showwarning("Warning", "Please connect to GRBL first!")
+            return
+
+        # Check if already streaming
+        if self.streaming:
+            messagebox.showwarning("Warning", "G-code execution is already in progress!\n\nPlease stop the current execution before starting a new one.")
             return
 
         # Confirm with user
@@ -2496,9 +2748,6 @@ Vector Analysis:
                 line = line.strip()
                 if line and not line.startswith(";") and not line.startswith("("):
                     filtered_lines.append({"line": line, "num": i + 1})
-                    # Debug: Check for G0 commands
-                    if line.upper().startswith("G0"):
-                        print(f"Found G0 at line {i+1}: {line}")
 
             self.total_lines = len(filtered_lines)
             self.sent_lines = 0
@@ -2508,12 +2757,13 @@ Vector Analysis:
                 return
 
             # Create progress window
+            print("DEBUG - Creating progress window")
             self.progress_window = tk.Toplevel(self.root)
             mode_text = (
                 "Single-Step Mode" if self.single_step_mode else "Streaming G-code"
             )
             self.progress_window.title(mode_text)
-            self.progress_window.geometry("550x220")
+            self.progress_window.geometry("500x180")
             self.progress_window.transient(self.root)
 
             # Progress label
@@ -2535,15 +2785,11 @@ Vector Analysis:
             self.progress_bar.pack(pady=10)
             self.progress_bar["maximum"] = self.total_lines
 
-            # Status label - shows current G-code line
+            # Status label
             self.status_label = ttk.Label(
-                self.progress_window,
-                text=f"Line 0 / {self.total_lines}",
-                font=("Courier", 9),
-                wraplength=480,
-                justify="left",
+                self.progress_window, text=f"Line 0 / {self.total_lines}"
             )
-            self.status_label.pack(pady=5, padx=10)
+            self.status_label.pack(pady=5)
 
             # Control buttons in progress window
             button_frame = ttk.Frame(self.progress_window)
@@ -2580,9 +2826,34 @@ Vector Analysis:
             self.gcode_buffer = filtered_lines
             self.buffer_size = 0
             self.command_queue = []
+            self.completion_checks = 0  # Reset completion check counter
+            
+            # Stop position updates to prevent race conditions
+            if self.position_update_id is not None:
+                self.root.after_cancel(self.position_update_id)
+                self.position_update_id = None
+                print("Stopped position updates before streaming")
+            
+            # Small delay to let any in-flight queries complete
+            time.sleep(0.1)
+            
+            # Flush any stale data from serial buffer before starting
+            if self.serial_connection and self.serial_connection.in_waiting > 0:
+                print(f"Flushing {self.serial_connection.in_waiting} bytes from serial buffer before streaming")
+                self.serial_connection.reset_input_buffer()
+            
+            # Set a short timeout for streaming to prevent blocking
+            self.original_timeout = self.serial_connection.timeout
+            self.serial_connection.timeout = 0.05  # 50ms timeout during streaming
+            print(f"Set serial timeout to 50ms for streaming (was {self.original_timeout})")
+            
+            # NOW set streaming flag (after stopping position updates and flushing)
             self.streaming = True
+            
+            print(f"Starting G-code streaming: {len(self.gcode_buffer)} lines at {datetime.now().strftime('%H:%M:%S.%f')[:-3]}")
 
-            # Start the streaming process
+            # Start the streaming process immediately (don't schedule, call directly)
+            print(f"Calling stream_gcode_line() at {datetime.now().strftime('%H:%M:%S.%f')[:-3]}")
             self.stream_gcode_line()
 
             # Start status updates (250ms) if not already running
@@ -2595,6 +2866,82 @@ Vector Analysis:
             if hasattr(self, "stop_button"):
                 self.stop_button.config(state="disabled")
             messagebox.showerror("Error", f"Failed to run G-code:\n{str(e)}")
+
+    def update_reference_points_in_gcode(self, gcode_text):
+        """Update reference point comments in G-code to reflect actual measured positions"""
+        lines = gcode_text.split("\n")
+        updated_lines = []
+        
+        for line in lines:
+            line_lower = line.lower().strip()
+            
+            # Check if this is a reference point comment line
+            if "reference_point" in line_lower and "=" in line_lower:
+                # Extract the point number
+                match = re.search(r"reference_point(\d+)", line_lower)
+                if match:
+                    point_num = int(match.group(1))
+                    point_index = point_num - 1  # Convert to 0-based index
+                    
+                    # Get the actual position for this point
+                    if point_index < len(self.reference_points_actual):
+                        actual_x, actual_y = self.reference_points_actual[point_index]
+                        # Create updated comment line with actual positions
+                        updated_line = f"; reference_point{point_num} = ({actual_x:8.4f}, {actual_y:8.4f})"
+                        updated_lines.append(updated_line)
+                        print(f"Updated reference_point{point_num} to actual position: ({actual_x:.4f}, {actual_y:.4f})")
+                        continue
+            
+            # Keep the line as-is if it's not a reference point comment
+            updated_lines.append(line)
+        
+        return "\n".join(updated_lines)
+
+    def save_adjusted_gcode(self):
+        """Save the adjusted G-code to a new file"""
+        if not self.adjusted_gcode:
+            messagebox.showwarning("Warning", "Please adjust the G-code first!")
+            return
+
+        try:
+            # Update reference points in the adjusted G-code
+            gcode_to_save = self.update_reference_points_in_gcode(self.adjusted_gcode)
+            
+            # Generate filename with _adjusted suffix and timestamp
+            if hasattr(self, "original_file_path"):
+                # 1. First, get just the filename from the full path (e.g., "my_gcode.nc")
+                filename_only = os.path.basename(self.original_file_path)
+                # 2. Now, split that filename to get its base and extension
+                base_name, extension = os.path.splitext(filename_only)
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                # 3. Build the new initial name using ONLY the base_name
+                initial_name = f"{base_name}_adjusted_{timestamp}"
+            else:
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                initial_name = f"adjusted_gcode_{timestamp}"
+
+            # Ask user for save location
+            print(f"Suggested name for adjusted G-code: {initial_name}.nc")
+            save_path = filedialog.asksaveasfilename(
+                initialfile=initial_name,
+                defaultextension=".nc",
+                filetypes=[
+                    ("G-code files", "*.nc"),
+                    ("G-code files", "*.gcode"),
+                    ("Text files", "*.txt"),
+                    ("All files", "*.*"),
+                ],
+                title="Save Adjusted G-code File",
+            )
+
+            if save_path:
+                print(f"Saving adjusted G-code to: {save_path}")
+                with open(save_path, "w") as f:
+                    f.write(gcode_to_save)
+                messagebox.showinfo("Success", f"Adjusted G-code saved successfully!\n\nReference points updated to actual measured positions.")
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to save adjusted G-code:\n{str(e)}")
 
 
 def main():

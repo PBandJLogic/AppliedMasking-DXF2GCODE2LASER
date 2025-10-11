@@ -36,18 +36,23 @@ class SerialReaderThread(threading.Thread):
     Background thread for reading from serial port.
     Continuously reads responses and puts them in a queue for processing.
     """
+
     def __init__(self, serial_connection, response_queue):
         super().__init__(daemon=True)
         self.serial_connection = serial_connection
         self.response_queue = response_queue
         self.running = True
-    
+
     def run(self):
         """Continuously read from serial and queue responses"""
         while self.running:
             try:
                 if self.serial_connection and self.serial_connection.in_waiting > 0:
-                    response = self.serial_connection.readline().decode('utf-8', errors='ignore').strip()
+                    response = (
+                        self.serial_connection.readline()
+                        .decode("utf-8", errors="ignore")
+                        .strip()
+                    )
                     if response:
                         self.response_queue.put(response)
                 else:
@@ -56,7 +61,7 @@ class SerialReaderThread(threading.Thread):
                 if self.running:  # Only log if not shutting down
                     print(f"Serial read error: {e}")
                 time.sleep(0.01)
-    
+
     def stop(self):
         """Stop the reading thread"""
         self.running = False
@@ -103,19 +108,19 @@ class GRBLSettings:
             131: "Y-axis max travel (mm)",
             132: "Z-axis max travel (mm)",
         }
-    
+
     def set(self, setting_num, value):
         """Store a setting value"""
         self.settings[setting_num] = value
-    
+
     def get(self, setting_num, default=None):
         """Get a setting value"""
         return self.settings.get(setting_num, default)
-    
+
     def get_description(self, setting_num):
         """Get the description of a setting"""
         return self.descriptions.get(setting_num, "Unknown setting")
-    
+
     def __str__(self):
         """String representation of all settings"""
         output = "GRBL Settings:\n"
@@ -157,14 +162,14 @@ class GCodeAdjuster:
         self.work_pos = {"x": 0.0, "y": 0.0, "z": 0.0}
         self.wco = {"x": 0.0, "y": 0.0, "z": 0.0}
         self.position_update_id = None
-        
+
         # Laser state
         self.laser_on = False
-        
+
         # GRBL settings
         self.grbl_settings = GRBLSettings()
         self.homing_enabled = False
-        
+
         # Execution tracking
         self.execution_path = []  # List of (x, y) tuples for execution trace
         self.is_executing = False
@@ -208,32 +213,32 @@ class GCodeAdjuster:
         left_scrollbar = ttk.Scrollbar(
             left_container, orient="vertical", command=left_canvas.yview
         )
-        
+
         # Create a frame inside the canvas to hold all controls
         left_panel = ttk.Frame(left_canvas)
-        
+
         # Configure canvas
         left_canvas.configure(yscrollcommand=left_scrollbar.set)
-        
+
         # Pack scrollbar and canvas
         left_scrollbar.pack(side="right", fill="y")
         left_canvas.pack(side="left", fill="both", expand=True)
-        
+
         # Create window in canvas
         canvas_frame = left_canvas.create_window((0, 0), window=left_panel, anchor="nw")
-        
+
         # Configure scroll region when frame changes size
         def configure_scroll_region(event):
             left_canvas.configure(scrollregion=left_canvas.bbox("all"))
-        
+
         left_panel.bind("<Configure>", configure_scroll_region)
-        
+
         # Bind mousewheel to scroll
         def on_mousewheel(event):
             left_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-        
+
         left_canvas.bind_all("<MouseWheel>", on_mousewheel)
-        
+
         # Store canvas reference for cleanup
         self.left_canvas = left_canvas
 
@@ -261,7 +266,7 @@ class GCodeAdjuster:
             com_port_row, textvariable=self.com_port_var, width=12, state="readonly"
         )
         self.com_port_combo.pack(side="left", padx=(0, 5))
-        
+
         # Refresh COM ports button
         ttk.Button(
             com_port_row, text="⟳", command=self.refresh_com_ports, width=3
@@ -319,7 +324,7 @@ class GCodeAdjuster:
         # Position display - compact format
         pos_display_frame = ttk.Frame(jog_frame)
         pos_display_frame.pack(fill="x", pady=(0, 5))
-        
+
         # Work Position - all on one row
         wpos_row = ttk.Frame(pos_display_frame)
         wpos_row.pack(fill="x")
@@ -330,7 +335,7 @@ class GCodeAdjuster:
             wpos_row, text="X: 0.00  Y: 0.00  Z: 0.00", font=("Courier", 10)
         )
         self.work_pos_label.pack(side="left")
-        
+
         # Machine Position - all on one row
         mpos_row = ttk.Frame(pos_display_frame)
         mpos_row.pack(fill="x")
@@ -365,7 +370,7 @@ class GCodeAdjuster:
         # Set origin button
         origin_frame = ttk.Frame(jog_frame)
         origin_frame.pack(fill="x", pady=(0, 5))
-        
+
         self.set_origin_button = ttk.Button(
             origin_frame,
             text="Set Origin (G92 X0 Y0 Z0)",
@@ -388,14 +393,14 @@ class GCodeAdjuster:
             command=lambda: self.jog_move(-1, 1),
             width=button_width,
         ).grid(row=0, column=0, padx=2, pady=2, sticky="ew")
-        
+
         ttk.Button(
             jog_buttons_frame,
             text="↑ Y+",
             command=lambda: self.jog_move(0, 1),
             width=button_width,
         ).grid(row=0, column=1, padx=2, pady=2, sticky="ew")
-        
+
         ttk.Button(
             jog_buttons_frame,
             text="↗ X+Y+",
@@ -410,11 +415,11 @@ class GCodeAdjuster:
             command=lambda: self.jog_move(-1, 0),
             width=button_width,
         ).grid(row=1, column=0, padx=2, pady=2, sticky="ew")
-        
+
         ttk.Button(
             jog_buttons_frame, text="⌂ Origin", command=self.go_home, width=button_width
         ).grid(row=1, column=1, padx=2, pady=2, sticky="ew")
-        
+
         ttk.Button(
             jog_buttons_frame,
             text="→ X+",
@@ -429,14 +434,14 @@ class GCodeAdjuster:
             command=lambda: self.jog_move(-1, -1),
             width=button_width,
         ).grid(row=2, column=0, padx=2, pady=2, sticky="ew")
-        
+
         ttk.Button(
             jog_buttons_frame,
             text="↓ Y-",
             command=lambda: self.jog_move(0, -1),
             width=button_width,
         ).grid(row=2, column=1, padx=2, pady=2, sticky="ew")
-        
+
         ttk.Button(
             jog_buttons_frame,
             text="↘ X+Y-",
@@ -447,7 +452,7 @@ class GCodeAdjuster:
         # Row 3: Z controls
         z_frame = ttk.Frame(jog_buttons_frame)
         z_frame.grid(row=3, column=0, columnspan=3, pady=(5, 0))
-        
+
         ttk.Button(
             z_frame, text="Z+", command=lambda: self.jog_move_z(1), width=button_width
         ).pack(side="left", padx=2)
@@ -469,7 +474,7 @@ class GCodeAdjuster:
         ttk.Label(
             notes_frame,
             text="The 2 reference points are used to calculate translation and rotation corrections. "
-                 "Point 1 should be to the left of Point 2.",
+            "Point 1 should be to the left of Point 2.",
             font=("TkDefaultFont", 8),
             foreground="#666666",
             wraplength=440,
@@ -537,7 +542,7 @@ class GCodeAdjuster:
             state="disabled",  # Disabled until streaming starts
         )
         self.stop_button.pack(side="left", padx=(0, 0))
-        
+
         ttk.Button(
             parent, text="Save Adjusted G-code", command=self.save_adjusted_gcode
         ).pack(fill="x")
@@ -1035,7 +1040,7 @@ class GCodeAdjuster:
                 label="Execution Path",
                 zorder=90,
             )
-        
+
         # Plot current position marker if connected
         if self.is_connected:
             x = self.work_pos["x"]
@@ -1050,7 +1055,7 @@ class GCodeAdjuster:
                 label="Current Position",
                 zorder=100,
             )
-            
+
             # Add crosshair at current position
             xlim = self.ax.get_xlim()
             ylim = self.ax.get_ylim()
@@ -1119,7 +1124,7 @@ class GCodeAdjuster:
             if len(self.ref_point_expected_vars) < 2:
                 messagebox.showerror("Error", "Need 2 reference points!")
                 return
-            
+
             expected_points = []
             actual_points = []
 
@@ -1173,17 +1178,15 @@ class GCodeAdjuster:
 
         # Compute translation: Q1 = R × P1 + T
         # Therefore: T = Q1 - R × P1
-        rotated_P1 = np.array([
-            cos_r * P1[0] - sin_r * P1[1],
-            sin_r * P1[0] + cos_r * P1[1]
-        ])
+        rotated_P1 = np.array(
+            [cos_r * P1[0] - sin_r * P1[1], sin_r * P1[0] + cos_r * P1[1]]
+        )
         translation = Q1 - rotated_P1
 
         # Validate: Apply transformation to P2 and check if it matches Q2
-        rotated_P2 = np.array([
-            cos_r * P2[0] - sin_r * P2[1],
-            sin_r * P2[0] + cos_r * P2[1]
-        ])
+        rotated_P2 = np.array(
+            [cos_r * P2[0] - sin_r * P2[1], sin_r * P2[0] + cos_r * P2[1]]
+        )
         transformed_P2 = rotated_P2 + translation
         error_P2 = np.linalg.norm(transformed_P2 - Q2)
 
@@ -1411,92 +1414,92 @@ Vector Analysis:
         """Scan and populate COM port dropdown"""
         ports = serial.tools.list_ports.comports()
         port_list = [port.device for port in ports]
-        
+
         self.com_port_combo["values"] = port_list
-        
+
         if port_list:
             if not self.com_port_var.get() or self.com_port_var.get() not in port_list:
                 self.com_port_combo.current(0)
         else:
             self.com_port_var.set("")
-            
+
     def toggle_connection(self):
         """Connect or disconnect from the GRBL controller"""
         if self.is_connected:
             self.disconnect_grbl()
         else:
             self.connect_grbl()
-            
+
     def connect_grbl(self):
         """Connect to GRBL controller"""
         com_port = self.com_port_var.get()
-        
+
         if not com_port:
             messagebox.showerror("Error", "Please select a COM port!")
             return
-            
+
         try:
             # Open serial connection (GRBL typically uses 115200 baud)
             self.serial_connection = serial.Serial(
                 port=com_port, baudrate=115200, timeout=2, write_timeout=2
             )
-            
+
             # Wait for GRBL to initialize
             self.root.after(2000, self.complete_connection)
-            
+
             # Disable COM port selection while connected
             self.com_port_combo.config(state="disabled")
             self.status_label.config(text="Connecting...", foreground="orange")
-            
+
         except serial.SerialException as e:
             messagebox.showerror(
                 "Connection Error", f"Failed to connect to {com_port}:\n{str(e)}"
             )
             self.serial_connection = None
-            
+
     def complete_connection(self):
         """Complete the connection after GRBL initializes"""
         if self.serial_connection and self.serial_connection.is_open:
             # Flush any startup messages
             self.serial_connection.reset_input_buffer()
-            
+
             self.is_connected = True
             self.connect_button.config(text="Disconnect")
             self.status_label.config(text="Connected", foreground="green")
-            
+
             # Start serial reader thread
             self.serial_reader_thread = SerialReaderThread(
                 self.serial_connection, self.response_queue
             )
             self.serial_reader_thread.start()
             print("Serial reader thread started")
-            
+
             # Start processing responses from queue
             self.start_response_processing()
-            
+
             # Query all GRBL settings
             print("Querying all GRBL settings...")
             self.query_all_grbl_settings()
-            
+
             # Set $10=3 to report both MPos and WPos
             print("Setting $10=3 to report both MPos and WPos")
             self.send_gcode_async("$10=3")
-            
+
             # Update homing enabled flag from settings (will be set when settings query completes)
-            
+
             # Start periodic position updates (now just sends ? commands)
             self.start_status_updates()
-            
+
         else:
             self.disconnect_grbl()
             messagebox.showerror("Error", "Connection timed out")
-            
+
     def disconnect_grbl(self):
         """Disconnect from GRBL controller"""
         # Prevent multiple disconnect attempts
         if not self.is_connected and not self.serial_connection:
             return
-            
+
         # Stop position updates first
         if self.position_update_id:
             try:
@@ -1504,21 +1507,21 @@ Vector Analysis:
             except:
                 pass
             self.position_update_id = None
-        
+
         # Update state immediately to prevent new commands
         was_connected = self.is_connected
         self.is_connected = False
-        
+
         # Stop processing responses
         self.processing_responses = False
-        
+
         # Stop serial reader thread
         if self.serial_reader_thread and self.serial_reader_thread.is_alive():
             self.serial_reader_thread.stop()
             self.serial_reader_thread.join(timeout=1.0)
             print("Serial reader thread stopped")
         self.serial_reader_thread = None
-        
+
         # Clear response queue
         while not self.response_queue.empty():
             try:
@@ -1548,17 +1551,17 @@ Vector Analysis:
         self.connect_button.config(text="Connect")
         self.status_label.config(text="Disconnected", foreground="red")
         self.com_port_combo.config(state="readonly")
-        
+
         # Clear position display
         self.work_pos_label.config(text="X: 0.00  Y: 0.00  Z: 0.00")
         self.machine_pos_label.config(text="X: 0.00  Y: 0.00  Z: 0.00")
-        
+
     def cleanup(self):
         """Clean up resources before closing"""
         # Unbind mousewheel
         if hasattr(self, "left_canvas"):
             self.left_canvas.unbind_all("<MouseWheel>")
-        
+
         if self.is_connected:
             self.disconnect_grbl()
 
@@ -1566,18 +1569,18 @@ Vector Analysis:
         """Send a G-code command to GRBL and wait for response"""
         if not self.is_connected or not self.serial_connection:
             return None
-        
+
         # Check if serial port is still open
         try:
             if not self.serial_connection.is_open:
                 return None
         except:
             return None
-            
+
         try:
             # Send command
             self.serial_connection.write(f"{command}\n".encode())
-            
+
             # Wait for response
             response = ""
             start_time = datetime.now()
@@ -1587,7 +1590,7 @@ Vector Analysis:
                     response += line + "\n"
                     if line in ["ok", "error"]:
                         break
-            
+
             return response
         except (serial.SerialException, OSError, PermissionError) as e:
             print(f"Serial communication lost: {e}")
@@ -1596,12 +1599,12 @@ Vector Analysis:
         except Exception as e:
             print(f"Error sending G-code: {e}")
             return None
-    
+
     def query_position(self):
         """Query current position from GRBL"""
         if not self.is_connected or not self.serial_connection:
             return
-        
+
         # Check if serial port is still open
         try:
             if not self.serial_connection.is_open:
@@ -1610,12 +1613,12 @@ Vector Analysis:
         except:
             print("DEBUG - Error checking if serial port is open")
             return
-            
+
         try:
             # Send status query (?)
             print("DEBUG - Sending ? query to GRBL")
             self.serial_connection.write(b"?")
-            
+
             # Read response
             start_time = datetime.now()
             response_received = False
@@ -1626,27 +1629,27 @@ Vector Analysis:
                     self.parse_status_response(response)
                     response_received = True
                     break
-            
+
             if not response_received:
                 print("DEBUG - No response received from GRBL within timeout")
-                
+
         except (serial.SerialException, OSError, PermissionError) as e:
             # Serial connection error - disconnect silently
             print(f"Serial communication lost, disconnecting: {e}")
             self.root.after(10, self.disconnect_grbl)
         except Exception as e:
             print(f"Error querying position: {e}")
-    
+
     def parse_status_response(self, response):
         """Parse GRBL status response and update position"""
         try:
             # Debug: Print what we received
             print(f"DEBUG - GRBL Response: {response}")
-            
+
             # GRBL status format: <Idle|MPos:0.000,0.000,0.000|FS:0,0|WCO:0.000,0.000,0.000>
             if response.startswith("<") and response.endswith(">"):
                 parts = response[1:-1].split("|")
-                
+
                 for part in parts:
                     if part.startswith("MPos:"):
                         coords = part[5:].split(",")
@@ -1657,7 +1660,7 @@ Vector Analysis:
                             print(
                                 f"DEBUG - MPos updated: X={self.machine_pos['x']:.2f} Y={self.machine_pos['y']:.2f} Z={self.machine_pos['z']:.2f}"
                             )
-                    
+
                     elif part.startswith("WPos:"):
                         coords = part[5:].split(",")
                         if len(coords) >= 3:
@@ -1667,7 +1670,7 @@ Vector Analysis:
                             print(
                                 f"DEBUG - WPos updated: X={self.work_pos['x']:.2f} Y={self.work_pos['y']:.2f} Z={self.work_pos['z']:.2f}"
                             )
-                    
+
                     elif part.startswith("WCO:"):
                         coords = part[4:].split(",")
                         if len(coords) >= 3:
@@ -1677,7 +1680,7 @@ Vector Analysis:
                             print(
                                 f"DEBUG - WCO updated: X={self.wco['x']:.2f} Y={self.wco['y']:.2f} Z={self.wco['z']:.2f}"
                             )
-                
+
                 # Calculate missing positions
                 if "MPos:" in response and "WPos:" not in response:
                     # Calculate WPos from MPos - WCO
@@ -1693,18 +1696,23 @@ Vector Analysis:
                     print(
                         f"DEBUG - MPos calculated from WPos+WCO: X={self.machine_pos['x']:.2f} Y={self.machine_pos['y']:.2f} Z={self.machine_pos['z']:.2f}"
                     )
-                
+
                 # Update display
                 self.update_position_display()
-                
+
                 # Update execution path and plot if executing
                 if self.is_executing:
                     current_pos = (self.work_pos["x"], self.work_pos["y"])
-                    if not self.execution_path or current_pos != self.execution_path[-1]:
+                    if (
+                        not self.execution_path
+                        or current_pos != self.execution_path[-1]
+                    ):
                         self.execution_path.append(current_pos)
                         # Update plot (throttled)
                         current_time = time.time()
-                        if current_time - self._last_plot_update > 0.1:  # 100ms throttle
+                        if (
+                            current_time - self._last_plot_update > 0.1
+                        ):  # 100ms throttle
                             self.plot_toolpath()
                             self.canvas.draw_idle()
                             self._last_plot_update = current_time
@@ -1722,14 +1730,14 @@ Vector Analysis:
         self.machine_pos_label.config(
             text=f"X: {self.machine_pos['x']:6.2f}  Y: {self.machine_pos['y']:6.2f}  Z: {self.machine_pos['z']:6.2f}"
         )
-    
+
     def update_position(self):
         """Periodically update position from GRBL"""
         if self.is_connected:
             self.query_position()
             # Schedule next update in 200ms
             self.position_update_id = self.root.after(200, self.update_position)
-    
+
     def toggle_laser(self):
         """Toggle laser on/off at low power"""
         if not self.is_connected:
@@ -1747,13 +1755,13 @@ Vector Analysis:
             self.send_gcode_async("G1 F100")
             self.laser_on = True
             self.laser_button.config(text="Laser ON")
-    
+
     def set_work_origin(self):
         """Set the current position as the work coordinate origin (0,0,0)"""
         if not self.is_connected:
             messagebox.showwarning("Warning", "Please connect to GRBL first!")
             return
-        
+
         # Confirm with user
         response = messagebox.askyesno(
             "Set Work Origin",
@@ -1761,28 +1769,28 @@ Vector Analysis:
             f"Current MPos: X={self.machine_pos['x']:.2f} Y={self.machine_pos['y']:.2f} Z={self.machine_pos['z']:.2f}\n\n"
             f"This will execute: G92 X0 Y0 Z0",
         )
-        
+
         if response:
             # Send G92 command to set current position as origin
             self.send_gcode_async("G92 X0 Y0 Z0")
             messagebox.showinfo("Success", "Work origin set to current position")
             # Position will update automatically from status responses
-    
+
     def jog_move(self, x_dir, y_dir):
         """Jog move in X and Y direction"""
         if not self.is_connected:
             messagebox.showwarning("Warning", "Please connect to GRBL first!")
             return
-        
+
         try:
             step = float(self.jog_step_var.get())
         except ValueError:
             messagebox.showerror("Error", "Invalid step size!")
             return
-        
+
         x_move = x_dir * step
         y_move = y_dir * step
-        
+
         # Use $J jog command (GRBL 1.1+) which is safer
         # Format: $J=G91 X10 Y10 F1000 (relative move at feed rate 1000 mm/min)
         jog_cmd = f"$J=G91 X{x_move:.3f} Y{y_move:.3f} F1000"
@@ -1805,24 +1813,24 @@ Vector Analysis:
         # Use $J jog command for Z axis
         jog_cmd = f"$J=G91 Z{z_move:.3f} F500"
         self.send_gcode_async(jog_cmd)
-    
+
     def query_all_grbl_settings(self):
         """Query all GRBL settings using $$ command"""
         if not self.is_connected or not self.serial_connection:
             return
-        
+
         try:
             # Send $$ to get all settings
             print("Sending $$ command to GRBL...")
             self.serial_connection.write(b"$$\n")
-            
+
             # Read responses
             start_time = datetime.now()
             settings_count = 0
             while (datetime.now() - start_time).total_seconds() < 3:
                 if self.serial_connection.in_waiting > 0:
                     line = self.serial_connection.readline().decode().strip()
-                    
+
                     # Parse setting lines (format: $123=456.789)
                     if line.startswith("$") and "=" in line:
                         try:
@@ -1830,47 +1838,47 @@ Vector Analysis:
                             parts = line[1:].split("=")
                             setting_num = int(parts[0])
                             setting_value = float(parts[1])
-                            
+
                             # Store the setting
                             self.grbl_settings.set(setting_num, setting_value)
                             settings_count += 1
                             print(
                                 f"  ${setting_num}={setting_value} - {self.grbl_settings.get_description(setting_num)}"
                             )
-                            
+
                         except (ValueError, IndexError) as e:
                             print(f"  Error parsing setting line '{line}': {e}")
-                    
+
                     # Check for end of settings
                     if line == "ok":
                         print(f"Received all GRBL settings ({settings_count} settings)")
                         break
-                        
+
         except Exception as e:
             print(f"Error querying GRBL settings: {e}")
-    
+
     def home_machine(self):
         """Send machine to home position (only if homing is enabled)"""
         if not self.is_connected:
             messagebox.showwarning("Warning", "Please connect to GRBL first!")
             return
-        
+
         # Check if homing is enabled
         if not self.homing_enabled:
             messagebox.showerror(
-                "Homing Disabled", 
+                "Homing Disabled",
                 "Homing cycle is disabled in GRBL settings.\n\n"
                 "To enable homing, send: $22=1\n"
                 "Then reboot GRBL and reconnect.",
             )
             return
-        
+
         # Send homing cycle command
         response = messagebox.askyesno(
-            "Home Machine", 
+            "Home Machine",
             "This will run the homing cycle. Make sure the machine is clear!\n\nContinue?",
         )
-        
+
         if response:
             self.send_gcode_async("$H")
 
@@ -1910,7 +1918,7 @@ Vector Analysis:
         """Parse a G-code line and return the new position"""
         new_pos = current_pos.copy()
         line_upper = line.upper().strip()
-        
+
         # Parse movement commands (G0, G1, G2, G3)
         if line_upper.startswith(("G0", "G1", "G2", "G3")):
             # Extract X, Y, Z coordinates
@@ -1931,7 +1939,7 @@ Vector Analysis:
                         new_pos["z"] = float(part[1:])
                     except ValueError:
                         pass
-        
+
         # Handle G92 (set position)
         elif line_upper.startswith("G92"):
             parts = line_upper.replace(",", " ").split()
@@ -1952,9 +1960,9 @@ Vector Analysis:
                         new_pos["z"] = float(part[1:])
                     except ValueError:
                         pass
-        
+
         return new_pos
-    
+
     def emergency_stop(self):
         """Emergency stop - halt execution, clear buffer, turn off laser"""
         try:
@@ -2004,15 +2012,15 @@ Vector Analysis:
         """Start processing responses from the queue"""
         if self.processing_responses:
             return
-        
+
         self.processing_responses = True
         self.process_responses()
-    
+
     def process_responses(self):
         """Process all responses in the queue (runs on GUI thread)"""
         if not self.processing_responses:
             return
-        
+
         try:
             # Process all queued responses (up to 10 per call to avoid blocking GUI)
             for _ in range(10):
@@ -2023,25 +2031,25 @@ Vector Analysis:
                     break
         except Exception as e:
             print(f"Error processing responses: {e}")
-        
+
         # Schedule next processing
         if self.processing_responses:
             self.root.after(10, self.process_responses)  # Check every 10ms
-    
+
     def handle_response(self, response):
         """Handle a single response from GRBL"""
         # Status responses
         if response.startswith("<"):
             self.parse_status_response(response)
-        
+
         # OK responses - command completed
         elif response.strip().lower() == "ok":
             self.handle_grbl_ok()
-        
+
         # Error responses
         elif "error" in response.lower():
             print(f"GRBL Error: {response}")
-        
+
         # Settings responses ($N=value)
         elif response.startswith("$"):
             # Parse setting
@@ -2051,29 +2059,29 @@ Vector Analysis:
                     setting_num = int(parts[0])
                     value = float(parts[1])
                     self.grbl_settings.set(setting_num, value)
-                    
+
                     # Update homing flag if $22
                     if setting_num == 22:
-                        self.homing_enabled = (value == 1)
+                        self.homing_enabled = value == 1
             except:
                 pass
-        
+
         # Other responses
         else:
             print(f"GRBL: {response}")
-    
+
     def send_gcode_async(self, command):
         """Send G-code without waiting for response (async)"""
         if not self.is_connected or not self.serial_connection:
             return False
-        
+
         try:
-            self.serial_connection.write((command + '\n').encode())
+            self.serial_connection.write((command + "\n").encode())
             return True
         except Exception as e:
             print(f"Error sending command: {e}")
             return False
-    
+
     def start_status_updates(self):
         """Start periodic status updates (every 100ms for faster updates)"""
         if not self.is_connected or self.status_update_id is not None:
@@ -2235,11 +2243,11 @@ Vector Analysis:
         if not self.adjusted_gcode:
             messagebox.showwarning("Warning", "Please adjust the G-code first!")
             return
-        
+
         if not self.is_connected:
             messagebox.showwarning("Warning", "Please connect to GRBL first!")
             return
-        
+
         # Confirm with user
         response = messagebox.askyesno(
             "Run Adjusted G-code",
@@ -2250,10 +2258,10 @@ Vector Analysis:
             "- The work area is clear\n\n"
             "Continue?",
         )
-        
+
         if not response:
             return
-        
+
         try:
             # Prepare G-code lines
             lines = self.adjusted_gcode.split("\n")
@@ -2271,7 +2279,7 @@ Vector Analysis:
             if self.total_lines == 0:
                 messagebox.showwarning("Warning", "No G-code to send!")
                 return
-            
+
             # Create progress window
             self.progress_window = tk.Toplevel(self.root)
             mode_text = (
@@ -2280,7 +2288,7 @@ Vector Analysis:
             self.progress_window.title(mode_text)
             self.progress_window.geometry("500x180")
             self.progress_window.transient(self.root)
-            
+
             # Progress label
             header_text = (
                 "Single-Step Mode - Click 'Next' to advance"
@@ -2292,14 +2300,14 @@ Vector Analysis:
                 text=header_text,
                 font=("TkDefaultFont", 10, "bold"),
             ).pack(pady=10)
-            
+
             # Progress bar
             self.progress_bar = ttk.Progressbar(
                 self.progress_window, length=350, mode="determinate"
             )
             self.progress_bar.pack(pady=10)
             self.progress_bar["maximum"] = self.total_lines
-            
+
             # Status label
             self.status_label = ttk.Label(
                 self.progress_window, text=f"Line 0 / {self.total_lines}"
@@ -2328,7 +2336,7 @@ Vector Analysis:
             ttk.Button(button_frame, text="Stop", command=cancel_run, width=12).pack(
                 side="left", padx=5
             )
-            
+
             # Initialize execution tracking
             self.is_executing = True
             self.execution_path = [(self.work_pos["x"], self.work_pos["y"])]
@@ -2349,14 +2357,14 @@ Vector Analysis:
             # Start status updates (250ms) if not already running
             if self.status_update_id is None:
                 self.start_status_updates()
-            
+
         except Exception as e:
             self.is_executing = False
             self.streaming = False
             if hasattr(self, "stop_button"):
                 self.stop_button.config(state="disabled")
             messagebox.showerror("Error", f"Failed to run G-code:\n{str(e)}")
-    
+
     def save_adjusted_gcode(self):
         """Save the adjusted G-code to a new file"""
         if not self.adjusted_gcode:
@@ -2403,10 +2411,10 @@ Vector Analysis:
 def main():
     root = tk.Tk()
     app = GCodeAdjuster(root)
-    
+
     # Register cleanup on window close
     root.protocol("WM_DELETE_WINDOW", lambda: (app.cleanup(), root.destroy()))
-    
+
     root.mainloop()
 
 
