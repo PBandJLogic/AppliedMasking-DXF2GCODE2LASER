@@ -557,7 +557,7 @@ class GCodeAdjuster:
 
         # Create new targets container - pack before adjust button
         self.targets_container = ttk.LabelFrame(
-            self.targets_parent, text="Reference Points (2)", padding=10
+            self.targets_parent, text="Reference Points", padding=10
         )
         # Find adjust button and pack before it
         children = self.targets_parent.winfo_children()
@@ -604,14 +604,14 @@ class GCodeAdjuster:
             # Point label
             ttk.Label(
                 point_frame,
-                text=f"Pt {point_num}:",
+                text=f"Pt{point_num}:",
                 width=4,
                 font=("TkDefaultFont", 9, "bold"),
-            ).pack(side="left", padx=(0, 5))
+            ).pack(side="left")
 
             # Expected label and entry
             ttk.Label(
-                point_frame, text="Exp:", foreground="orange", font=("TkDefaultFont", 9)
+                point_frame, text="Exp:", foreground="black", font=("TkDefaultFont", 9)
             ).pack(side="left", padx=(0, 2))
 
             # Expected X, Y in single entry
@@ -629,7 +629,7 @@ class GCodeAdjuster:
                 width=12,
                 font=("TkDefaultFont", 9),
             )
-            expected_entry.pack(side="left", padx=(0, 5))
+            expected_entry.pack(side="left", padx=(0, 4))
 
             # Link the combined entry to individual vars
             def update_expected_vars(combined_var, x_var, y_var, *args):
@@ -844,7 +844,7 @@ class GCodeAdjuster:
                     x = float(match.group(1))
                     y = float(match.group(2))
                     expected_points.append((x, y))
-                    
+
                     # Stop after finding 2 points
                     if len(expected_points) >= 2:
                         break
@@ -852,7 +852,7 @@ class GCodeAdjuster:
         # Always return 2 points (pad with zeros if needed)
         while len(expected_points) < 2:
             expected_points.append((0.0, 0.0))
-            
+
         # Always return exactly 2 points
         return 2, expected_points[:2]
 
