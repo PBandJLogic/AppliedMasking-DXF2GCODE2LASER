@@ -959,7 +959,7 @@ class GCodeAdjuster:
                 # Draw engraving move (but not if it's the very first move from origin)
                 if not first_move:
                     engraving_lines.append([(last_x, last_y), (current_x, current_y)])
-                
+
                 last_x = current_x
                 last_y = current_y
                 first_move = False
@@ -1095,26 +1095,25 @@ class GCodeAdjuster:
                 zorder=90,
             )
 
-        # Plot current position marker if connected
-        if self.is_connected:
-            x = self.work_pos["x"]
-            y = self.work_pos["y"]
-            self.ax.plot(
-                x,
-                y,
-                "ro",
-                markersize=10,
-                markeredgecolor="black",
-                markeredgewidth=2,
-                label="Current Position",
-                zorder=100,
-            )
+        # Plot current position marker (always show it)
+        x = self.work_pos["x"]
+        y = self.work_pos["y"]
+        self.laser_marker = self.ax.plot(
+            x,
+            y,
+            "ro",
+            markersize=10,
+            markeredgecolor="black",
+            markeredgewidth=2,
+            label="Current Position",
+            zorder=100,
+        )[0]
 
-            # Add crosshair at current position
-            xlim = self.ax.get_xlim()
-            ylim = self.ax.get_ylim()
-            self.ax.plot([x, x], ylim, "r--", alpha=0.3, linewidth=1)
-            self.ax.plot(xlim, [y, y], "r--", alpha=0.3, linewidth=1)
+        # Add crosshair at current position
+        xlim = self.ax.get_xlim()
+        ylim = self.ax.get_ylim()
+        self.ax.plot([x, x], ylim, "r--", alpha=0.3, linewidth=1)
+        self.ax.plot(xlim, [y, y], "r--", alpha=0.3, linewidth=1)
 
         # Set plot properties
         self.ax.set_xlabel("X (mm)")
