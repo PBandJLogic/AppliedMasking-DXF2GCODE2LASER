@@ -901,7 +901,7 @@ class GCodeAdjuster:
 
         positioning_lines = []
         engraving_lines = []
-        
+
         # Track if we've made the first move
         first_move = True
 
@@ -933,7 +933,7 @@ class GCodeAdjuster:
                 # Draw positioning move (but not for the very first G0)
                 if not first_move:
                     positioning_lines.append([(last_x, last_y), (current_x, current_y)])
-                
+
                 last_x = current_x
                 last_y = current_y
                 first_move = False
@@ -956,10 +956,13 @@ class GCodeAdjuster:
                 if y_pos is not None:
                     current_y = y_pos
 
-                # Draw engraving move
-                engraving_lines.append([(last_x, last_y), (current_x, current_y)])
+                # Draw engraving move (but not if it's the very first move from origin)
+                if not first_move:
+                    engraving_lines.append([(last_x, last_y), (current_x, current_y)])
+                
                 last_x = current_x
                 last_y = current_y
+                first_move = False
 
             # Parse G2 (clockwise arc) and G3 (counterclockwise arc) moves
             elif line_upper.startswith("G2") or line_upper.startswith("G3"):
@@ -2097,6 +2100,9 @@ Vector Analysis:
         """Handle a single response from GRBL"""
         # Status responses
         if response.startswith("<"):
+            # Debug: show status responses
+            if "WPos" in response or "MPos" in response:
+                print(f"Status: {response}")
             self.parse_status_response(response)
 
         # OK responses - command completed
