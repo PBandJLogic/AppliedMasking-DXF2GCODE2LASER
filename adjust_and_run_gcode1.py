@@ -687,6 +687,25 @@ class GCodeAdjuster:
                 ),
             )
 
+            # "Goto" button to move to expected position
+            def goto_expected_pos(exp_x, exp_y):
+                """Move laser to the expected reference point position"""
+                if not self.is_connected:
+                    messagebox.showwarning("Warning", "Please connect to GRBL first!")
+                    return
+
+                # Send commands to move to the expected position
+                self.send_gcode_async("G90")  # Absolute positioning mode
+                self.send_gcode_async(f"G0 X{exp_x:.4f} Y{exp_y:.4f}")  # Rapid move
+
+            goto_button = ttk.Button(
+                point_frame,
+                text="Goto",
+                command=lambda x=expected_point[0], y=expected_point[1]: goto_expected_pos(x, y),
+                width=4,
+            )
+            goto_button.pack(side="left", padx=(0, 3))
+
             # "Set" button to capture current work position
             def set_from_wpos(combined_var):
                 """Set actual coordinates from current work position"""
