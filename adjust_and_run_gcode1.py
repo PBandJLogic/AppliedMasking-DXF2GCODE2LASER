@@ -1292,13 +1292,6 @@ class GCodeAdjuster:
         )
 
         # Generate adjusted G-code
-        # Debug: Check original G-code content before generating adjusted
-        print(
-            f"DEBUG: self.original_gcode length: {len(self.original_gcode)} characters"
-        )
-        print(f"DEBUG: First 500 characters of self.original_gcode:")
-        print(self.original_gcode[:500])
-
         self.adjusted_gcode = self.generate_adjusted_gcode(
             self.original_gcode, actual_center, rotation_angle
         )
@@ -1379,34 +1372,10 @@ Vector Analysis:
                 act_y = float(act_y_var.get())
                 actual_points.append((act_x, act_y))
 
-            # Debug: Print actual reference point values
-            print(f"DEBUG save_adjusted_gcode: Actual reference points to save:")
-            print(f"  Point 1: ({actual_points[0][0]:.4f}, {actual_points[0][1]:.4f})")
-            print(f"  Point 2: ({actual_points[1][0]:.4f}, {actual_points[1][1]:.4f})")
-
             # Update reference point comments in the G-code
             updated_gcode = self._update_reference_points_in_gcode(
                 self.adjusted_gcode, actual_points
             )
-
-            # Debug: Check for G0 commands in the adjusted and updated G-code
-            g0_in_adjusted = sum(
-                1
-                for line in self.adjusted_gcode.split("\n")
-                if line.strip().upper().startswith("G0")
-            )
-            g0_in_updated = sum(
-                1
-                for line in updated_gcode.split("\n")
-                if line.strip().upper().startswith("G0")
-            )
-            print(f"DEBUG: G0 commands in adjusted_gcode: {g0_in_adjusted}")
-            print(f"DEBUG: G0 commands in updated_gcode: {g0_in_updated}")
-
-            # Print first 20 lines for inspection
-            print("DEBUG: First 20 lines of updated G-code:")
-            for i, line in enumerate(updated_gcode.split("\n")[:20]):
-                print(f"  {i+1}: {line}")
 
             # Write to file
             with open(file_path, "w") as f:
@@ -1441,17 +1410,11 @@ Vector Analysis:
                 if "reference_point1" in line_lower:
                     # Update point 1
                     new_line = f"; reference_point1 = ({actual_points[0][0]:.4f}, {actual_points[0][1]:.4f})"
-                    print(f"DEBUG _update_reference_points: Replacing point 1")
-                    print(f"  Old: {line}")
-                    print(f"  New: {new_line}")
                     updated_lines.append(new_line)
                     ref1_updated = True
                 elif "reference_point2" in line_lower:
                     # Update point 2
                     new_line = f"; reference_point2 = ({actual_points[1][0]:.4f}, {actual_points[1][1]:.4f})"
-                    print(f"DEBUG _update_reference_points: Replacing point 2")
-                    print(f"  Old: {line}")
-                    print(f"  New: {new_line}")
                     updated_lines.append(new_line)
                     ref2_updated = True
                 else:
@@ -1460,10 +1423,6 @@ Vector Analysis:
             else:
                 # Keep all other lines unchanged
                 updated_lines.append(line)
-
-        print(
-            f"DEBUG _update_reference_points: ref1_updated={ref1_updated}, ref2_updated={ref2_updated}"
-        )
 
         return "\n".join(updated_lines)
 
@@ -1513,14 +1472,6 @@ Vector Analysis:
         last_x = 0.0
         last_y = 0.0
 
-        # Debug: Count G0 commands in original
-        g0_count_original = sum(
-            1 for line in lines if line.strip().upper().startswith("G0")
-        )
-        print(
-            f"DEBUG generate_adjusted_gcode: Original G-code has {g0_count_original} G0 commands"
-        )
-
         for line in lines:
             adjusted_line = line
             line_upper = line.upper().strip()
@@ -1554,17 +1505,6 @@ Vector Analysis:
                 last_x = float(x_match.group(1))
             if y_match:
                 last_y = float(y_match.group(1))
-
-        # Debug: Count G0 commands in adjusted
-        g0_count_adjusted = sum(
-            1 for line in adjusted_lines if line.strip().upper().startswith("G0")
-        )
-        print(
-            f"DEBUG generate_adjusted_gcode: Adjusted G-code has {g0_count_adjusted} G0 commands"
-        )
-        print(f"DEBUG generate_adjusted_gcode: First 15 lines of adjusted:")
-        for i, line in enumerate(adjusted_lines[:15]):
-            print(f"  {i+1}: {line}")
 
         return "\n".join(adjusted_lines)
 
@@ -2665,6 +2605,7 @@ Vector Analysis:
             if hasattr(self, "stop_button"):
                 self.stop_button.config(state="disabled")
             messagebox.showerror("Error", f"Failed to run G-code:\n{str(e)}")
+
 
 def main():
     root = tk.Tk()
