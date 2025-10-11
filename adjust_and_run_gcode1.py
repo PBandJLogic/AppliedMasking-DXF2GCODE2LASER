@@ -711,7 +711,9 @@ class GCodeAdjuster:
 
                 # If laser was on, turn it back on at low power (same as toggle_laser)
                 if was_laser_on:
-                    self.send_gcode_async("M3 S10")  # Turn on laser at 10% power (constant mode)
+                    self.send_gcode_async(
+                        "M3 S10"
+                    )  # Turn on laser at 10% power (constant mode)
                     self.send_gcode_async("G1 F100")  # Set feed rate for laser mode
                     self.laser_on = True
                     self.laser_button.config(text="Laser ON")
@@ -743,6 +745,20 @@ class GCodeAdjuster:
 
     def setup_right_panel(self, parent):
         """Set up the right plot panel"""
+        # Create control frame for plot options
+        control_frame = ttk.Frame(parent)
+        control_frame.pack(side="top", fill="x", pady=5)
+        
+        # Add checkbox for showing original G-code
+        self.show_original_var = tk.BooleanVar(value=True)  # Default to showing original
+        show_original_check = ttk.Checkbutton(
+            control_frame,
+            text="Show Original G-code",
+            variable=self.show_original_var,
+            command=self.plot_toolpath
+        )
+        show_original_check.pack(side="left", padx=10)
+        
         # Create matplotlib figure
         self.fig = Figure(figsize=(10, 8), dpi=100)
         self.ax = self.fig.add_subplot(111)
@@ -1079,14 +1095,17 @@ class GCodeAdjuster:
         """Plot the toolpath on the canvas"""
         self.ax.clear()
 
-        if self.original_positioning_lines or self.original_engraving_lines:
-            # Plot original toolpath with color coding
-            self.plot_gcode_toolpath(
-                self.original_positioning_lines,
-                self.original_engraving_lines,
-                "Original",
-                self.ax,
-            )
+        # Check if we should show original G-code (only if checkbox exists and is checked)
+        show_original = getattr(self, 'show_original_var', None)
+        if show_original is None or show_original.get():
+            if self.original_positioning_lines or self.original_engraving_lines:
+                # Plot original toolpath with color coding
+                self.plot_gcode_toolpath(
+                    self.original_positioning_lines,
+                    self.original_engraving_lines,
+                    "Original",
+                    self.ax,
+                )
 
         if self.adjusted_positioning_lines or self.adjusted_engraving_lines:
             # Plot adjusted toolpath with color coding
