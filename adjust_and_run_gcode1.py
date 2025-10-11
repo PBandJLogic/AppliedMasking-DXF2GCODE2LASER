@@ -1623,38 +1623,7 @@ Vector Analysis:
             print(f"Error sending G-code: {e}")
             return None
 
-    def query_position(self):
-        """Query current position from GRBL"""
-        if not self.is_connected or not self.serial_connection:
-            return
-
-        # Check if serial port is still open
-        try:
-            if not self.serial_connection.is_open:
-                return
-        except:
-            return
-
-        try:
-            # Send status query (?)
-            self.serial_connection.write(b"?")
-
-            # Read response
-            start_time = datetime.now()
-            response_received = False
-            while (datetime.now() - start_time).total_seconds() < 0.5:
-                if self.serial_connection.in_waiting > 0:
-                    response = self.serial_connection.readline().decode().strip()
-                    self.parse_status_response(response)
-                    response_received = True
-                    break
-
-        except (serial.SerialException, OSError, PermissionError) as e:
-            # Serial connection error - disconnect silently
-            print(f"Serial communication lost, disconnecting: {e}")
-            self.root.after(10, self.disconnect_grbl)
-        except Exception as e:
-            print(f"Error querying position: {e}")
+    # query_position() removed - now using threaded serial with async status queries
 
     def parse_status_response(self, response):
         """Parse GRBL status response and update position"""
@@ -1704,9 +1673,12 @@ Vector Analysis:
                 if self.is_executing:
                     current_pos = (self.work_pos["x"], self.work_pos["y"])
                     # Always add position if changed
-                    if not self.execution_path or current_pos != self.execution_path[-1]:
+                    if (
+                        not self.execution_path
+                        or current_pos != self.execution_path[-1]
+                    ):
                         self.execution_path.append(current_pos)
-                    
+
                     # Force plot update in single-step mode, throttle in run mode
                     if self.single_step_mode:
                         # Always update plot immediately in single-step mode
@@ -1716,7 +1688,9 @@ Vector Analysis:
                     else:
                         # Run mode - throttled updates for performance
                         current_time = time.time()
-                        if current_time - self._last_plot_update > 0.1:  # 100ms throttle
+                        if (
+                            current_time - self._last_plot_update > 0.1
+                        ):  # 100ms throttle
                             self.plot_toolpath()
                             self.canvas.draw()
                             self.canvas.flush_events()
@@ -2126,8 +2100,8 @@ Vector Analysis:
                 try:
                     # Send status query (response handled by thread)
                     self.serial_connection.write(b"?")
-                except:
-                    pass
+                except Exception as e:
+                    print(f"Error sending status query: {e}")
 
             # Schedule next update (faster: 100ms instead of 250ms)
             if self.is_connected:
