@@ -628,10 +628,10 @@ class GCodeAdjuster:
             expected_entry = ttk.Entry(
                 point_frame,
                 textvariable=expected_combined,
-                width=12,
+                width=11,
                 font=("TkDefaultFont", 9),
             )
-            expected_entry.pack(side="left", padx=(0, 4))
+            expected_entry.pack(side="left", padx=(0, 3))
 
             # Link the combined entry to individual vars
             def update_expected_vars(combined_var, x_var, y_var, *args):
@@ -668,7 +668,7 @@ class GCodeAdjuster:
             actual_entry = ttk.Entry(
                 point_frame,
                 textvariable=actual_combined,
-                width=12,
+                width=11,
                 font=("TkDefaultFont", 9),
             )
             actual_entry.pack(side="left", padx=(0, 2))
@@ -708,7 +708,7 @@ class GCodeAdjuster:
                 command=lambda x=expected_point[0], y=expected_point[
                     1
                 ]: goto_expected_pos(x, y),
-                width=4,
+                width=3,
             )
             goto_button.pack(side="left", padx=(0, 2))
 
@@ -723,9 +723,9 @@ class GCodeAdjuster:
                 point_frame,
                 text="Set",
                 command=lambda c=actual_combined: set_from_wpos(c),
-                width=4,
+                width=3,
             )
-            set_button.pack(side="left")
+            set_button.pack(side="left", padx=(0, 5))
 
     def setup_right_panel(self, parent):
         """Set up the right plot panel"""
