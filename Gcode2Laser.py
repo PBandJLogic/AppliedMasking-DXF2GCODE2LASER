@@ -37,11 +37,13 @@ class SerialReaderThread(threading.Thread):
     Continuously reads responses and puts them in a queue for processing.
     """
 
-    def __init__(self, serial_connection, response_queue):
+    def __init__(self, serial_connection, response_queue, disconnect_callback=None):
         super().__init__(daemon=True)
         self.serial_connection = serial_connection
         self.response_queue = response_queue
+        self.disconnect_callback = disconnect_callback
         self.running = True
+        self.consecutive_errors = 0
 
     def run(self):
         """Continuously read from serial and queue responses"""
@@ -55,11 +57,27 @@ class SerialReaderThread(threading.Thread):
                     )
                     if response:
                         self.response_queue.put(response)
+                    self.consecutive_errors = 0  # Reset error counter on success
                 else:
                     time.sleep(0.001)  # 1ms sleep when no data
+            except (OSError, serial.SerialException) as e:
+                # These exceptions typically indicate USB disconnect
+                if self.running:
+                    self.consecutive_errors += 1
+                    print(f"Serial read error (attempt {self.consecutive_errors}): {e}")
+                    
+                    # If we get multiple consecutive errors, likely disconnected
+                    if self.consecutive_errors >= 3:
+                        print("Serial connection lost - USB likely disconnected")
+                        if self.disconnect_callback:
+                            # Signal disconnect to main thread
+                            self.response_queue.put("__DISCONNECTED__")
+                        self.running = False
+                        break
+                time.sleep(0.01)
             except Exception as e:
                 if self.running:  # Only log if not shutting down
-                    print(f"Serial read error: {e}")
+                    print(f"Unexpected serial error: {e}")
                 time.sleep(0.01)
 
     def stop(self):
@@ -346,61 +364,69 @@ class GCodeAdjuster:
         file_frame = ttk.LabelFrame(parent, text="File Operations", padding=10)
         file_frame.pack(fill="x", pady=(0, 10))
 
+        # Create a row frame for the two buttons
+        file_buttons_frame = ttk.Frame(file_frame)
+        file_buttons_frame.pack(fill="x")
+
         ttk.Button(
-            file_frame, text="Load G-code File", command=self.load_gcode_file, width=20
-        ).pack()
+            file_buttons_frame, text="Load G-code File", command=self.load_gcode_file, width=20
+        ).pack(side="left", padx=(0, 5))
+
+        ttk.Button(
+            file_buttons_frame,
+            text="Save Adjusted G-code",
+            command=self.save_adjusted_gcode,
+            width=20,
+        ).pack(side="left")
+
+        # G-code Execution section
+        execution_frame = ttk.LabelFrame(parent, text="G-code Execution", padding=10)
+        execution_frame.pack(fill="x", pady=(0, 10))
+
+        # Run, Step, Next, and STOP buttons
+        buttons_frame = ttk.Frame(execution_frame)
+        buttons_frame.pack(fill="x")
+
+        # Run button
+        ttk.Button(
+            buttons_frame, text="Run", command=self.run_adjusted_gcode, width=8
+        ).pack(side="left", padx=(0, 3))
+
+        # Step button
+        ttk.Button(
+            buttons_frame, text="Step", command=self.run_single_step, width=8
+        ).pack(side="left", padx=(0, 3))
+
+        # Next Step button (for paused single-step mode)
+        self.next_step_button = ttk.Button(
+            buttons_frame,
+            text="Next",
+            command=self.continue_step,
+            width=8,
+            state="disabled",
+        )
+        self.next_step_button.pack(side="left", padx=(0, 10))
+
+        # STOP button (red background)
+        self.stop_button = tk.Button(
+            buttons_frame,
+            text="STOP",
+            command=self.emergency_stop,
+            bg="red",
+            fg="white",
+            font=("TkDefaultFont", 10, "bold"),
+            relief="raised",
+            bd=3,
+            width=6,
+            state="disabled",  # Disabled until streaming starts
+        )
+        self.stop_button.pack(side="left", padx=(0, 0))
 
         # Laser Jog Controls section
         jog_frame = ttk.LabelFrame(
             parent, text="Jog Laser to Set Reference Points", padding=10
         )
         jog_frame.pack(fill="x", pady=(0, 10))
-
-        # Position display - compact format
-        pos_display_frame = ttk.Frame(jog_frame)
-        pos_display_frame.pack(fill="x", pady=(0, 5))
-
-        # Work Position - all on one row
-        wpos_row = ttk.Frame(pos_display_frame)
-        wpos_row.pack(fill="x")
-        ttk.Label(
-            wpos_row, text="WPos:", font=("TkDefaultFont", 10, "bold"), width=6
-        ).pack(side="left")
-        self.work_pos_label = ttk.Label(
-            wpos_row, text="X: 0.00  Y: 0.00  Z: 0.00", font=("Courier", 10)
-        )
-        self.work_pos_label.pack(side="left")
-
-        # Machine Position - all on one row
-        mpos_row = ttk.Frame(pos_display_frame)
-        mpos_row.pack(fill="x")
-        ttk.Label(
-            mpos_row, text="MPos:", font=("TkDefaultFont", 10, "bold"), width=6
-        ).pack(side="left")
-        self.machine_pos_label = ttk.Label(
-            mpos_row, text="X: 0.00  Y: 0.00  Z: 0.00", font=("Courier", 10)
-        )
-        self.machine_pos_label.pack(side="left")
-
-        # Laser control and step size row
-        laser_control_frame = ttk.Frame(jog_frame)
-        laser_control_frame.pack(fill="x", pady=(5, 5))
-
-        self.laser_button = ttk.Button(
-            laser_control_frame, text="Laser OFF", command=self.toggle_laser, width=12
-        )
-        self.laser_button.pack(side="left", padx=(0, 5))
-
-        ttk.Label(laser_control_frame, text="Step:").pack(side="left", padx=(5, 2))
-        self.jog_step_var = tk.StringVar(value="10")
-        step_entry = ttk.Entry(
-            laser_control_frame,
-            textvariable=self.jog_step_var,
-            width=6,
-            justify="right",
-        )
-        step_entry.pack(side="left", padx=(0, 2))
-        ttk.Label(laser_control_frame, text="mm").pack(side="left")
 
         # Set origin button
         origin_frame = ttk.Frame(jog_frame)
@@ -437,9 +463,38 @@ class GCodeAdjuster:
             width=8,
         ).pack(side="left")
 
-        # Jog buttons in a grid
-        jog_buttons_frame = ttk.Frame(jog_frame)
-        jog_buttons_frame.pack(pady=(5, 0))
+        # Create main frame to hold jog buttons and controls side-by-side
+        jog_main_frame = ttk.Frame(jog_frame)
+        jog_main_frame.pack(pady=(5, 0))
+
+        # Jog buttons in a grid (left side)
+        jog_buttons_frame = ttk.Frame(jog_main_frame)
+        jog_buttons_frame.pack(side="left", padx=(0, 10))
+        
+        # Step size and laser control (right side)
+        right_controls_frame = ttk.Frame(jog_main_frame)
+        right_controls_frame.pack(side="left")
+        
+        # Laser ON/OFF button on top
+        self.laser_button = ttk.Button(
+            right_controls_frame, text="Laser OFF", command=self.toggle_laser, width=12
+        )
+        self.laser_button.pack(pady=(0, 5))
+        
+        # Step size below
+        step_frame = ttk.Frame(right_controls_frame)
+        step_frame.pack()
+        
+        ttk.Label(step_frame, text="Step:").pack(side="left", padx=(0, 2))
+        self.jog_step_var = tk.StringVar(value="10")
+        step_entry = ttk.Entry(
+            step_frame,
+            textvariable=self.jog_step_var,
+            width=6,
+            justify="right",
+        )
+        step_entry.pack(side="left", padx=(0, 2))
+        ttk.Label(step_frame, text="mm").pack(side="left")
 
         # Button styling - fixed width for consistent layout
         button_width = 8
@@ -541,52 +596,6 @@ class GCodeAdjuster:
         self.results_text.pack(side="left", fill="both", expand=True)
         results_text_scroll.pack(side="right", fill="y")
 
-        # Run, Step, Stop, and Save buttons
-        run_stop_frame = ttk.Frame(parent)
-        run_stop_frame.pack(fill="x", pady=(0, 5))
-
-        # Run button
-        ttk.Button(
-            run_stop_frame, text="Run", command=self.run_adjusted_gcode, width=8
-        ).pack(side="left", padx=(0, 3))
-
-        # Step button
-        ttk.Button(
-            run_stop_frame, text="Step", command=self.run_single_step, width=8
-        ).pack(side="left", padx=(0, 3))
-
-        # Next Step button (for paused single-step mode)
-        self.next_step_button = ttk.Button(
-            run_stop_frame,
-            text="Next",
-            command=self.continue_step,
-            width=8,
-            state="disabled",
-        )
-        self.next_step_button.pack(side="left", padx=(0, 10))
-
-        # STOP button (red background)
-        self.stop_button = tk.Button(
-            run_stop_frame,
-            text="STOP",
-            command=self.emergency_stop,
-            bg="red",
-            fg="white",
-            font=("TkDefaultFont", 10, "bold"),
-            relief="raised",
-            bd=3,
-            width=6,
-            state="disabled",  # Disabled until streaming starts
-        )
-        self.stop_button.pack(side="left", padx=(0, 0))
-
-        ttk.Button(
-            parent,
-            text="Save Adjusted G-code",
-            command=self.save_adjusted_gcode,
-            width=20,
-        ).pack()
-
     def update_reference_points_display(self):
         """Update the reference points display based on loaded data"""
         # Destroy the old targets container
@@ -669,20 +678,29 @@ class GCodeAdjuster:
             expected_entry.pack(side="left", padx=(0, 3))
 
             # Link the combined entry to individual vars
-            def update_expected_vars(combined_var, x_var, y_var, *args):
+            def update_expected_vars(combined_var, x_var, y_var, idx, *args):
                 try:
                     val = combined_var.get()
                     parts = val.replace(" ", "").split(",")
                     if len(parts) == 2:
                         x_var.set(parts[0])
                         y_var.set(parts[1])
+                        # Update the reference_points_expected list
+                        try:
+                            x_val = float(parts[0])
+                            y_val = float(parts[1])
+                            if idx < len(self.reference_points_expected):
+                                self.reference_points_expected[idx] = (x_val, y_val)
+                                print(f"Updated expected point {idx+1}: ({x_val:.2f}, {y_val:.2f})")
+                        except ValueError:
+                            pass
                 except:
                     pass
 
             expected_combined.trace_add(
                 "write",
-                lambda *args, c=expected_combined, x=expected_x_var, y=expected_y_var: update_expected_vars(
-                    c, x, y, *args
+                lambda *args, c=expected_combined, x=expected_x_var, y=expected_y_var, idx=i: update_expected_vars(
+                    c, x, y, idx, *args
                 ),
             )
 
@@ -709,20 +727,29 @@ class GCodeAdjuster:
             actual_entry.pack(side="left", padx=(0, 2))
 
             # Link the combined entry to individual vars
-            def update_actual_vars(combined_var, x_var, y_var, *args):
+            def update_actual_vars(combined_var, x_var, y_var, idx, *args):
                 try:
                     val = combined_var.get()
                     parts = val.replace(" ", "").split(",")
                     if len(parts) == 2:
                         x_var.set(parts[0])
                         y_var.set(parts[1])
+                        # Update the reference_points_actual list
+                        try:
+                            x_val = float(parts[0])
+                            y_val = float(parts[1])
+                            if idx < len(self.reference_points_actual):
+                                self.reference_points_actual[idx] = (x_val, y_val)
+                                print(f"Updated actual point {idx+1}: ({x_val:.2f}, {y_val:.2f})")
+                        except ValueError:
+                            pass
                 except:
                     pass
 
             actual_combined.trace_add(
                 "write",
-                lambda *args, c=actual_combined, x=actual_x_var, y=actual_y_var: update_actual_vars(
-                    c, x, y, *args
+                lambda *args, c=actual_combined, x=actual_x_var, y=actual_y_var, idx=i: update_actual_vars(
+                    c, x, y, idx, *args
                 ),
             )
 
@@ -796,6 +823,32 @@ class GCodeAdjuster:
         )
         show_original_check.pack(side="left", padx=10)
 
+        # Position display on the right side
+        pos_display_frame = ttk.Frame(control_frame)
+        pos_display_frame.pack(side="right", padx=10)
+
+        # Work Position
+        wpos_row = ttk.Frame(pos_display_frame)
+        wpos_row.pack(side="top", anchor="e")
+        ttk.Label(
+            wpos_row, text="WPos:", font=("TkDefaultFont", 9, "bold")
+        ).pack(side="left", padx=(0, 5))
+        self.work_pos_label = ttk.Label(
+            wpos_row, text="X: 0.00  Y: 0.00  Z: 0.00", font=("Courier", 9)
+        )
+        self.work_pos_label.pack(side="left")
+
+        # Machine Position
+        mpos_row = ttk.Frame(pos_display_frame)
+        mpos_row.pack(side="top", anchor="e")
+        ttk.Label(
+            mpos_row, text="MPos:", font=("TkDefaultFont", 9, "bold")
+        ).pack(side="left", padx=(0, 5))
+        self.machine_pos_label = ttk.Label(
+            mpos_row, text="X: 0.00  Y: 0.00  Z: 0.00", font=("Courier", 9)
+        )
+        self.machine_pos_label.pack(side="left")
+
         # Create matplotlib figure
         self.fig = Figure(figsize=(10, 8), dpi=100)
         self.ax = self.fig.add_subplot(111)
@@ -832,9 +885,9 @@ class GCodeAdjuster:
         self.ax.grid(True, alpha=0.3)
         self.ax.set_aspect("equal")
 
-        # Set initial view limits
-        self.ax.set_xlim(-10, 10)
-        self.ax.set_ylim(-10, 10)
+        # Set initial view limits (default workspace size)
+        self.ax.set_xlim(0, 400)
+        self.ax.set_ylim(0, 400)
 
         # Add laser position marker (red circle)
         self.laser_marker = self.ax.plot(
@@ -1679,10 +1732,14 @@ Vector Analysis:
             self.is_connected = True
             self.connect_button.config(text="Disconnect")
             self.status_label.config(text="Connected", foreground="green")
+            
+            # Initialize laser state to OFF
+            self.laser_on = False
+            self.laser_button.config(text="Laser OFF")
 
-            # Start serial reader thread
+            # Start serial reader thread with disconnect callback
             self.serial_reader_thread = SerialReaderThread(
-                self.serial_connection, self.response_queue
+                self.serial_connection, self.response_queue, disconnect_callback=self.handle_usb_disconnect
             )
             self.serial_reader_thread.start()
             print("Serial reader thread started")
@@ -1706,6 +1763,89 @@ Vector Analysis:
         else:
             self.disconnect_grbl()
             messagebox.showerror("Error", "Connection timed out")
+
+    def handle_usb_disconnect(self):
+        """Handle unexpected USB disconnect - called from serial thread"""
+        print("\n⚠️ USB DISCONNECT DETECTED ⚠️")
+        
+        # Must use root.after to update GUI from thread safely
+        def disconnect_ui():
+            # Stop any ongoing operations first
+            if self.streaming:
+                print("Stopping streaming due to disconnect...")
+                self.stop_streaming()
+            
+            # Stop position updates
+            if self.position_update_id:
+                try:
+                    self.root.after_cancel(self.position_update_id)
+                except:
+                    pass
+                self.position_update_id = None
+            
+            # Stop status updates
+            if self.status_update_id:
+                try:
+                    self.root.after_cancel(self.status_update_id)
+                except:
+                    pass
+                self.status_update_id = None
+            
+            # Update connection state
+            self.is_connected = False
+            self.processing_responses = False
+            
+            # Update UI
+            self.connect_button.config(text="Connect")
+            self.status_label.config(text="Disconnected - USB Lost", foreground="red")
+            self.com_port_combo.config(state="readonly")
+            
+            # Update laser state
+            self.laser_on = False
+            self.laser_button.config(text="Laser OFF")
+            
+            # Disable control buttons
+            if hasattr(self, "stop_button"):
+                self.stop_button.config(state="disabled")
+            if hasattr(self, "next_step_button"):
+                self.next_step_button.config(state="disabled")
+            
+            # Close progress window if exists
+            if hasattr(self, "progress_window"):
+                try:
+                    if self.progress_window.winfo_exists():
+                        self.progress_window.destroy()
+                except:
+                    pass
+            
+            # Clear position display
+            self.work_pos_label.config(text="X: 0.00  Y: 0.00  Z: 0.00")
+            self.machine_pos_label.config(text="X: 0.00  Y: 0.00  Z: 0.00")
+            
+            # Close serial connection
+            if self.serial_connection:
+                try:
+                    self.serial_connection.close()
+                except:
+                    pass
+            self.serial_connection = None
+            
+            # Show alert to user
+            messagebox.showerror(
+                "USB Disconnected",
+                "⚠️ USB CONNECTION LOST ⚠️\n\n"
+                "The GRBL controller has been disconnected.\n\n"
+                "Possible causes:\n"
+                "- USB cable unplugged\n"
+                "- Power loss to controller\n"
+                "- USB communication error\n\n"
+                "⚠️ VERIFY LASER IS OFF\n"
+                "⚠️ Machine position has been lost\n\n"
+                "Reconnect and rehome before continuing."
+            )
+        
+        # Schedule UI update in main thread
+        self.root.after(0, disconnect_ui)
 
     def disconnect_grbl(self):
         """Disconnect from GRBL controller"""
@@ -1910,21 +2050,32 @@ Vector Analysis:
                 y_pos = self.work_pos["y"]
 
                 # Check if position is outside current view
-                margin = 5  # mm margin around position
+                margin = 10  # mm margin around position
                 need_rescale = False
 
-                if x_pos < xlim[0] or x_pos > xlim[1]:
-                    self.ax.set_xlim(x_pos - margin, x_pos + margin)
+                # If position is outside view, EXPAND the view to include it
+                # Don't shrink the view to just the position
+                if x_pos < xlim[0]:
+                    new_xlim = (x_pos - margin, xlim[1])
+                    self.ax.set_xlim(new_xlim)
                     need_rescale = True
-                if y_pos < ylim[0] or y_pos > ylim[1]:
-                    self.ax.set_ylim(y_pos - margin, y_pos + margin)
+                elif x_pos > xlim[1]:
+                    new_xlim = (xlim[0], x_pos + margin)
+                    self.ax.set_xlim(new_xlim)
+                    need_rescale = True
+                
+                if y_pos < ylim[0]:
+                    new_ylim = (y_pos - margin, ylim[1])
+                    self.ax.set_ylim(new_ylim)
+                    need_rescale = True
+                elif y_pos > ylim[1]:
+                    new_ylim = (ylim[0], y_pos + margin)
+                    self.ax.set_ylim(new_ylim)
                     need_rescale = True
 
-                # Redraw canvas
+                # Redraw canvas only if needed
                 if need_rescale:
-                    self.ax.relim()
-                    self.ax.autoscale_view()
-                self.canvas.draw_idle()
+                    self.canvas.draw_idle()
 
     def toggle_laser(self):
         """Toggle laser on/off at low power"""
@@ -2014,21 +2165,8 @@ Vector Analysis:
 
         print(f"Executing manual G-code: {command}")
 
-        # Track laser state changes from M5/M3 commands
-        command_upper = command.upper().strip()
-
-        # Send the command async
+        # Send the command async (laser state tracking is handled in send_gcode_async)
         self.send_gcode_async(command)
-
-        # Update laser button state if M5 or M3/M4
-        if command_upper.startswith("M5") or command_upper == "M5":
-            self.laser_on = False
-            self.laser_button.config(text="Laser OFF")
-            print("M5 command executed, laser state set to OFF")
-        elif command_upper.startswith("M3") or command_upper.startswith("M4"):
-            self.laser_on = True
-            self.laser_button.config(text="Laser ON")
-            print("M3/M4 command executed, laser state set to ON")
 
         # Clear the entry field after execution
         self.gcode_cmd_var.set("")
@@ -2184,21 +2322,68 @@ Vector Analysis:
 
     def emergency_stop(self):
         """Emergency stop - halt execution, clear buffer, turn off laser"""
+        print("\n=== EMERGENCY STOP ACTIVATED ===")
         try:
+            # Clear local command buffers first
+            self.gcode_buffer = []
+            self.command_queue = []
+            self.buffer_size = 0
+            print("Emergency stop: Local buffers cleared")
+
             if self.is_connected and self.serial_connection:
+                # Flush any pending serial data
+                try:
+                    self.serial_connection.reset_output_buffer()
+                    self.serial_connection.reset_input_buffer()
+                    print("Emergency stop: Serial buffers flushed")
+                except Exception as e:
+                    print(f"Warning: Could not flush serial buffers: {e}")
+
                 # Send soft reset (Ctrl-X) to clear GRBL buffer and stop immediately
-                self.serial_connection.write(b"\x18")
-                print("Emergency stop: Sent soft reset to GRBL")
+                # This is the most critical command - send multiple times to ensure receipt
+                for i in range(3):
+                    try:
+                        self.serial_connection.write(b"\x18")
+                        time.sleep(0.05)  # Brief delay between resets
+                    except:
+                        pass
+                print("Emergency stop: Sent soft reset (Ctrl-X) to GRBL")
 
-                # Wait a moment for reset
-                time.sleep(0.1)
+                # Wait for GRBL to reset
+                time.sleep(0.2)
 
-                # Turn off laser (M5)
-                self.serial_connection.write(b"M5\n")
-                print("Emergency stop: Laser off command sent")
+                # Flush again after reset
+                try:
+                    self.serial_connection.reset_input_buffer()
+                except:
+                    pass
+
+                # Turn off laser (M5) - send multiple times for safety
+                for i in range(2):
+                    try:
+                        self.serial_connection.write(b"M5\n")
+                        time.sleep(0.05)
+                    except:
+                        pass
+                print("Emergency stop: Laser off command (M5) sent")
+
+                # Set spindle speed to 0 as additional safety
+                try:
+                    self.serial_connection.write(b"S0\n")
+                    print("Emergency stop: Spindle speed set to 0")
+                except:
+                    pass
 
             # Stop streaming
             self.stop_streaming()
+
+            # Stop any position updates temporarily
+            if self.position_update_id:
+                try:
+                    self.root.after_cancel(self.position_update_id)
+                    self.position_update_id = None
+                except:
+                    pass
 
             # Close progress window if exists
             if hasattr(self, "progress_window") and self.progress_window.winfo_exists():
@@ -2215,17 +2400,37 @@ Vector Analysis:
             if hasattr(self, "next_step_button"):
                 self.next_step_button.config(state="disabled")
 
+            # Restart position updates after a delay
+            if self.is_connected:
+                self.root.after(500, self.start_status_updates)
+
+            print("=== EMERGENCY STOP COMPLETE ===\n")
+
             messagebox.showwarning(
                 "Emergency Stop",
-                "Execution stopped!\n\n"
-                "- GRBL buffer cleared\n"
-                "- Laser turned off\n"
-                "- Machine may need rehoming",
+                "⚠️ EMERGENCY STOP EXECUTED ⚠️\n\n"
+                "Safety actions taken:\n"
+                "✓ GRBL buffer cleared (Ctrl-X sent)\n"
+                "✓ Laser turned OFF (M5 sent)\n"
+                "✓ Spindle speed set to 0\n"
+                "✓ All local buffers cleared\n"
+                "✓ Motion stopped immediately\n\n"
+                "⚠️ Machine position may be lost\n"
+                "⚠️ Rehoming may be required\n\n"
+                "Please verify laser is OFF before continuing!",
             )
 
         except Exception as e:
             print(f"Error during emergency stop: {e}")
-            messagebox.showerror("Error", f"Emergency stop error:\n{str(e)}")
+            messagebox.showerror(
+                "Emergency Stop Error",
+                f"⚠️ CRITICAL ERROR ⚠️\n\n"
+                f"Emergency stop encountered an error:\n{str(e)}\n\n"
+                f"MANUALLY VERIFY:\n"
+                f"- Laser is OFF\n"
+                f"- Machine has stopped moving\n"
+                f"- Power off equipment if necessary!"
+            )
 
     def start_response_processing(self):
         """Start processing responses from the queue"""
@@ -2257,6 +2462,11 @@ Vector Analysis:
 
     def handle_response(self, response):
         """Handle a single response from GRBL"""
+        # Check for disconnect signal from serial thread
+        if response == "__DISCONNECTED__":
+            self.handle_usb_disconnect()
+            return
+        
         # Status responses
         if response.startswith("<"):
             # Debug: show status responses
@@ -2299,13 +2509,23 @@ Vector Analysis:
 
         try:
             self.serial_connection.write((command + "\n").encode())
+            
+            # Track laser state based on M commands
+            command_upper = command.upper().strip()
+            if command_upper.startswith("M5") or command_upper == "M5":
+                self.laser_on = False
+                self.laser_button.config(text="Laser OFF")
+            elif command_upper.startswith("M3") or command_upper.startswith("M4"):
+                self.laser_on = True
+                self.laser_button.config(text="Laser ON")
+            
             return True
         except Exception as e:
             print(f"Error sending command: {e}")
             return False
 
     def start_status_updates(self):
-        """Start periodic status updates (every 100ms for faster updates)"""
+        """Start periodic status updates (faster during execution for better path tracking)"""
         if not self.is_connected or self.status_update_id is not None:
             return
 
@@ -2317,12 +2537,15 @@ Vector Analysis:
                 except Exception as e:
                     print(f"Error sending status query: {e}")
 
-            # Schedule next update (faster: 100ms instead of 250ms)
+            # Schedule next update - faster during execution for better path capture
             if self.is_connected:
-                self.status_update_id = self.root.after(100, update_status)
+                # Use 50ms interval during execution for smoother path tracking
+                # Use 100ms interval when idle to reduce overhead
+                interval = 50 if self.is_executing else 100
+                self.status_update_id = self.root.after(interval, update_status)
 
         # Start the updates
-        self.status_update_id = self.root.after(100, update_status)
+        self.status_update_id = self.root.after(50 if self.is_executing else 100, update_status)
 
     def stop_status_updates(self):
         """Stop periodic status updates"""
@@ -2369,18 +2592,66 @@ Vector Analysis:
                 )
 
             self._completion_checks = 0
-            self.stop_streaming()
-
-            # Close progress window
-            try:
-                if (
-                    hasattr(self, "progress_window")
-                    and self.progress_window.winfo_exists()
-                ):
-                    self.progress_window.destroy()
-                    print(f"G-code execution complete - sent {self.sent_lines} lines")
-            except Exception as e:
-                print(f"Error destroying progress window: {e}")
+            
+            # Capture final position before stopping
+            if self.is_executing:
+                # Wait a moment for machine to settle and get final position
+                def finalize_execution():
+                    # Query position one more time
+                    if self.is_connected and self.serial_connection:
+                        try:
+                            self.serial_connection.write(b"?")
+                        except:
+                            pass
+                    
+                    # Wait for response and then capture final position
+                    def capture_final():
+                        if self.is_executing:
+                            current_pos = (self.work_pos["x"], self.work_pos["y"])
+                            if (
+                                not self.execution_path
+                                or current_pos != self.execution_path[-1]
+                            ):
+                                self.execution_path.append(current_pos)
+                                print(f"Captured final position: ({current_pos[0]:.2f}, {current_pos[1]:.2f})")
+                            
+                            # Update plot with final position
+                            self.plot_toolpath()
+                            self.canvas.draw()
+                        
+                        # Now stop streaming
+                        self.stop_streaming()
+                        
+                        # Close progress window
+                        try:
+                            if (
+                                hasattr(self, "progress_window")
+                                and self.progress_window.winfo_exists()
+                            ):
+                                self.progress_window.destroy()
+                                print(f"G-code execution complete - sent {self.sent_lines} lines")
+                        except Exception as e:
+                            print(f"Error destroying progress window: {e}")
+                    
+                    # Wait for position update
+                    self.root.after(200, capture_final)
+                
+                # Start finalization sequence
+                self.root.after(50, finalize_execution)
+            else:
+                # Not executing, just stop
+                self.stop_streaming()
+                
+                # Close progress window
+                try:
+                    if (
+                        hasattr(self, "progress_window")
+                        and self.progress_window.winfo_exists()
+                    ):
+                        self.progress_window.destroy()
+                        print(f"G-code execution complete - sent {self.sent_lines} lines")
+                except Exception as e:
+                    print(f"Error destroying progress window: {e}")
         else:
             # Check again in 100ms
             self.root.after(100, self.check_streaming_complete)

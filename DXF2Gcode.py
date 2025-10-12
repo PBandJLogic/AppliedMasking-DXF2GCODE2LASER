@@ -1689,6 +1689,158 @@ Colors:
             alpha=alpha,
         )
 
+    def optimize_gcode(self, gcode_lines):
+        """
+        Optimize generated G-code by:
+        1. Removing zero-length G0 commands
+        2. Look-ahead optimization: G1/G2/G3 → G0 → G2/G3 patterns
+        3. Eliminating unnecessary repositioning moves
+        """
+        import re
+        optimized_lines = []
+        current_x, current_y = None, None
+        
+        i = 0
+        while i < len(gcode_lines):
+            line = gcode_lines[i].strip()
+            
+            if not line or line.startswith(';'):
+                optimized_lines.append(gcode_lines[i])
+                i += 1
+                continue
+            
+            # Parse G0 commands
+            g0_match = re.match(r'G0\s+X([\d.-]+)\s+Y([\d.-]+)\s+Z([\d.-]+)', line)
+            if g0_match:
+                target_x, target_y, target_z = float(g0_match.group(1)), float(g0_match.group(2)), float(g0_match.group(3))
+                
+                # Check if this is a zero-length move
+                if current_x is not None and current_y is not None:
+                    dist = ((target_x - current_x)**2 + (target_y - current_y)**2)**0.5
+                    if dist < 0.001:  # Zero-length move
+                        i += 1
+                        continue
+                
+                # Normal G0 move
+                optimized_lines.append(gcode_lines[i])
+                current_x, current_y = target_x, target_y
+                i += 1
+                continue
+            
+            # Parse G1/G2/G3 commands and look ahead for optimization opportunities
+            move_match = re.match(r'G([123])\s+X([\d.-]+)\s+Y([\d.-]+)', line)
+            if move_match:
+                move_type, end_x, end_y = move_match.group(1), float(move_match.group(2)), float(move_match.group(3))
+                
+                # Look ahead for G0 → G2/G3 pattern
+                j = i + 1
+                g0_found = False
+                g0_x, g0_y = None, None
+                g0_index = -1
+                
+                # Find next G0 command (skip blank lines and comments)
+                while j < len(gcode_lines):
+                    next_line = gcode_lines[j].strip()
+                    if not next_line or next_line.startswith(';'):
+                        j += 1
+                        continue
+                    
+                    g0_lookahead = re.match(r'G0\s+X([\d.-]+)\s+Y([\d.-]+)\s+Z([\d.-]+)', next_line)
+                    if g0_lookahead:
+                        g0_found = True
+                        g0_x, g0_y = float(g0_lookahead.group(1)), float(g0_lookahead.group(2))
+                        g0_index = j
+                        break
+                    elif re.match(r'G([123])', next_line):  # Another move command
+                        break
+                    j += 1
+                
+                # Flag to track if optimization was applied
+                optimization_applied = False
+                
+                # If we found a G0, look for the following G2/G3
+                if g0_found:
+                    k = j + 1
+                    while k < len(gcode_lines):
+                        next_line = gcode_lines[k].strip()
+                        if not next_line or next_line.startswith(';'):
+                            k += 1
+                            continue
+                        
+                        # Check for G2/G3 arc
+                        arc_match = re.match(r'G([23])\s+X([\d.-]+)\s+Y([\d.-]+)\s+I([\d.-]+)\s+J([\d.-]+)', next_line)
+                        if arc_match:
+                            arc_type, arc_end_x, arc_end_y, i_offset, j_offset = arc_match.group(1), float(arc_match.group(2)), float(arc_match.group(3)), float(arc_match.group(4)), float(arc_match.group(5))
+                            
+                            # Check if current move ends where the arc ends
+                            dist_to_arc_end = ((end_x - arc_end_x)**2 + (end_y - arc_end_y)**2)**0.5
+                            if dist_to_arc_end < 0.001:  # Current move ends where arc ends
+                                # Calculate arc center from G0 position
+                                arc_center_x = g0_x + i_offset
+                                arc_center_y = g0_y + j_offset
+                                
+                                # Reverse the arc: swap start/end and flip direction
+                                new_start_x, new_start_y = arc_end_x, arc_end_y
+                                new_end_x, new_end_y = g0_x, g0_y
+                                new_i_offset = arc_center_x - new_start_x
+                                new_j_offset = arc_center_y - new_start_y
+                                new_arc_type = "3" if arc_type == "2" else "2"  # Flip G2<->G3
+                                
+                                # Add the current move and optimized arc
+                                optimized_lines.append(gcode_lines[i])
+                                
+                                # Replace G0 + G2/G3 with optimized arc
+                                optimized_arc = f"G{new_arc_type} X{new_end_x:.3f} Y{new_end_y:.3f} I{new_i_offset:.3f} J{new_j_offset:.3f}"
+                                if "S" in next_line:
+                                    s_match = re.search(r'S(\d+)', next_line)
+                                    if s_match:
+                                        optimized_arc += f" S{s_match.group(1)}"
+                                
+                                optimized_lines.append(f"; Optimized arc (reversed direction)\n{optimized_arc}")
+                                current_x, current_y = new_end_x, new_end_y
+                                i = k + 1  # Skip original G0 and arc
+                                optimization_applied = True
+                                break  # Break inner loop
+                            # If arc doesn't match optimization criteria, stop looking
+                            break
+                        # Check for G1 line
+                        elif re.match(r'G1\s+X([\d.-]+)\s+Y([\d.-]+)', next_line):
+                            # If G0 target matches the G1 start, we can eliminate the G0
+                            g1_match = re.match(r'G1\s+X([\d.-]+)\s+Y([\d.-]+)', next_line)
+                            if g1_match:
+                                g1_start_x, g1_start_y = float(g1_match.group(1)), float(g1_match.group(2))
+                                dist_to_g1_start = ((g0_x - g1_start_x)**2 + (g0_y - g1_start_y)**2)**0.5
+                                if dist_to_g1_start < 0.001:  # G0 target matches G1 start
+                                    # Add the current move
+                                    optimized_lines.append(gcode_lines[i])
+                                    
+                                    # Skip the G0 and add the G1 directly
+                                    optimized_lines.append(gcode_lines[k])
+                                    current_x, current_y = g1_start_x, g1_start_y
+                                    i = k + 1  # Skip original G0 and G1
+                                    optimization_applied = True
+                                    break  # Break inner loop
+                            break
+                        elif re.match(r'G([123])', next_line):  # Another move command
+                            break
+                        k += 1
+                
+                # If optimization was applied, continue to next iteration
+                if optimization_applied:
+                    continue
+                
+                # Normal move command - no optimization applied
+                optimized_lines.append(gcode_lines[i])
+                current_x, current_y = end_x, end_y
+                i += 1
+                continue
+            
+            # All other lines pass through unchanged
+            optimized_lines.append(gcode_lines[i])
+            i += 1
+        
+        return optimized_lines
+
     def generate_arc_gcode(
         self,
         start_x,
@@ -4172,7 +4324,10 @@ DXF Units: {self.dxf_units}"""
         gcode.append("; postscript")
         gcode.extend(postscript_lines)
 
-        return "\n".join(gcode)
+        # Optimize the G-code before returning
+        optimized_gcode = self.optimize_gcode(gcode)
+        
+        return "\n".join(optimized_gcode)
 
     def is_within_workspace(self, x, y):
         """Check if a point (in WPos) is within workspace limits (in MPos)
@@ -4449,6 +4604,7 @@ DXF Units: {self.dxf_units}"""
             )
 
             try:
+                # G-code is already optimized during generation, just save it
                 with open(save_file_path, "w") as f:
                     f.write(preview_window.gcode_content)
                 print(f"Successfully saved G-code to: {save_file_path}")
@@ -4943,7 +5099,7 @@ DXF Units: {self.dxf_units}"""
         # Laser Power
         power_frame = ttk.Frame(settings_frame)
         power_frame.pack(fill="x", pady=(0, 5))
-        ttk.Label(power_frame, text="Laser Power (0-255):").pack(side="left")
+        ttk.Label(power_frame, text="Laser Power:").pack(side="left")
         power_spinbox = ttk.Spinbox(
             power_frame, from_=0, to=255, width=10, textvariable=laser_power_var
         )
