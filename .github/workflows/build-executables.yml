@@ -1,0 +1,214 @@
+name: Build Executables
+
+on:
+  push:
+    branches: [ main, master ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:  # Allows manual triggering
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+    
+    - name: Build DXF2Laser
+      run: pyinstaller DXF2Laser.spec
+    
+    - name: Build GCodeAdjuster
+      run: pyinstaller GCodeAdjuster.spec
+    
+    - name: Create distribution package
+      run: |
+        mkdir release
+        copy dist\DXF2Laser.exe release\
+        copy dist\GCodeAdjuster.exe release\
+        copy logo.png release\
+        copy dist\Run_DXF2Laser.bat release\
+        copy dist\Run_GCodeAdjuster.bat release\
+        copy dist\README_EXECUTABLES.md release\
+    
+    - name: Upload Windows artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: DXF2Laser-Windows
+        path: release/
+        retention-days: 30
+
+  build-macos:
+    runs-on: macos-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+    
+    - name: Build DXF2Laser
+      run: pyinstaller DXF2Laser.spec
+    
+    - name: Build GCodeAdjuster
+      run: pyinstaller GCodeAdjuster.spec
+    
+    - name: Create distribution package
+      run: |
+        mkdir release
+        cp dist/DXF2Laser release/
+        cp dist/GCodeAdjuster release/
+        cp logo.png release/
+        cp dist/README_EXECUTABLES.md release/
+    
+    - name: Upload macOS artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: DXF2Laser-macOS
+        path: release/
+        retention-days: 30
+
+  build-linux:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y python3-tk
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+    
+    - name: Build DXF2Laser
+      run: pyinstaller DXF2Laser.spec
+    
+    - name: Build GCodeAdjuster
+      run: pyinstaller GCodeAdjuster.spec
+    
+    - name: Create distribution package
+      run: |
+        mkdir release
+        cp dist/DXF2Laser release/
+        cp dist/GCodeAdjuster release/
+        cp logo.png release/
+        cp dist/README_EXECUTABLES.md release/
+    
+    - name: Upload Linux artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: DXF2Laser-Linux
+        path: release/
+        retention-days: 30
+
+  create-release:
+    # Only create release on tags
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [build-windows, build-macos, build-linux]
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts/
+    
+    - name: Create release packages
+      run: |
+        cd artifacts
+        zip -r ../DXF2Laser-Windows.zip DXF2Laser-Windows/
+        zip -r ../DXF2Laser-macOS.zip DXF2Laser-macOS/
+        zip -r ../DXF2Laser-Linux.zip DXF2Laser-Linux/
+    
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          DXF2Laser-Windows.zip
+          DXF2Laser-macOS.zip
+          DXF2Laser-Linux.zip
+        body: |
+          ## Downloads
+          
+          Choose the download for your operating system:
+          
+          - **Windows**: DXF2Laser-Windows.zip
+          - **macOS**: DXF2Laser-macOS.zip
+          - **Linux**: DXF2Laser-Linux.zip
+          
+          ## What's Included
+          
+          Each package contains:
+          - DXF2Laser executable
+          - GCodeAdjuster executable
+          - README with usage instructions
+          - Supporting files (logo, batch scripts for Windows)
+          
+          ## Installation
+          
+          1. Download the appropriate ZIP file for your OS
+          2. Extract the contents to a folder
+          3. Run the executable directly (no installation needed)
+          
+          ## Windows Users
+          
+          On Windows, you may need to:
+          - Right-click the .exe file → Properties → Unblock (if downloaded from web)
+          - Allow the app through Windows Defender/Firewall if prompted
+          
+          ## macOS Users
+          
+          On macOS, you may need to:
+          - Right-click the app → Open (first time only)
+          - Or go to System Preferences → Security & Privacy → Allow
+          
+          ## Linux Users
+          
+          Make the executables runnable:
+          ```bash
+          chmod +x DXF2Laser
+          chmod +x GCodeAdjuster
+          ```
+          
+          ## Troubleshooting
+          
+          See the README_EXECUTABLES.md file included in each package for detailed instructions and troubleshooting.
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
