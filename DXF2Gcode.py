@@ -4272,22 +4272,22 @@ DXF Units: {self.dxf_units}"""
                 if geom_type == "LWPOLYLINE" and element_id in self.element_data:
                     # Use detailed points from element_data for LWPOLYLINE (includes arc segments)
                     _, _, _, _, polyline_points = self.element_data[element_id]
-                    #print(f"\nG-code generation for LWPOLYLINE element {element_id}:")
-                    #print(f"  Total points: {len(polyline_points)}")
-                    for idx, pt in enumerate(polyline_points):
-                        if len(pt) > 3 and pt[2] == "ARC_END":
-                            # print(
-                            #     f"  Point {idx}: ARC_END at ({pt[0]:.3f}, {pt[1]:.3f}), center=({pt[3].x:.3f}, {pt[3].y:.3f}), radius={pt[4]:.3f}, ccw={pt[7]}"
-                            # )
-                            pass
-                        elif len(pt) > 2:
-                            # print(
-                            #     f"  Point {idx}: {pt[2]} at ({pt[0]:.3f}, {pt[1]:.3f})"
-                            # )
-                            pass
-                        else:
-                            # print(f"  Point {idx}: ({pt[0]:.3f}, {pt[1]:.3f})")
-                            pass
+                    # print(f"\nG-code generation for LWPOLYLINE element {element_id}:")
+                    # print(f"  Total points: {len(polyline_points)}")
+                    # for idx, pt in enumerate(polyline_points):
+                    #   if len(pt) > 3 and pt[2] == "ARC_END":
+                    # print(
+                    #     f"  Point {idx}: ARC_END at ({pt[0]:.3f}, {pt[1]:.3f}), center=({pt[3].x:.3f}, {pt[3].y:.3f}), radius={pt[4]:.3f}, ccw={pt[7]}"
+                    # )
+                    #        pass
+                    #    elif len(pt) > 2:
+                    # print(
+                    #     f"  Point {idx}: {pt[2]} at ({pt[0]:.3f}, {pt[1]:.3f})"
+                    # )
+                    #        pass
+                    #    else:
+                    # print(f"  Point {idx}: ({pt[0]:.3f}, {pt[1]:.3f})")
+                    #        pass
                 else:
                     # Use the offset coordinates from current_points for other types
                     polyline_points = element_info["points"]
@@ -5326,6 +5326,16 @@ DXF Units: {self.dxf_units}"""
             settings_frame,
             text="Optimize toolpath (reduce travel distance)",
             variable=optimize_toolpath_var,
+        ).pack(anchor="w", pady=(5, 0))
+
+        # Force CCW arcs checkbox
+        force_ccw_arcs_var = tk.BooleanVar(
+            value=self.gcode_settings.get("force_ccw_arcs", True)
+        )
+        ttk.Checkbutton(
+            settings_frame,
+            text="Force CCW arcs (counter-clockwise direction)",
+            variable=force_ccw_arcs_var,
         ).pack(anchor="w", pady=(5, 0))
 
         # File operations frame
