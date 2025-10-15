@@ -1,0 +1,5 @@
+matplotlib
+numpy
+ezdxf
+Pillow
+pyserial

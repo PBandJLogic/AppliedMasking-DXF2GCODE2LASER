@@ -1,0 +1,24 @@
+Transformation)
+========================
+
+Reference Points:
+  Point 1:
+    Expected: (100.000, 100.000) mm
+    Actual:   (100.300, 100.300) mm
+  
+  Point 2:
+    Expected: (300.000, 300.000) mm
+    Actual:   (262.800, 333.400) mm
+    Validation Error: 1.308 mm
+    Status: ✗ Error > 0.01mm
+
+Transformation:
+  Translation: (19.424, -15.713) mm
+  Rotation: 10.119°
+  Scale Factor: 1.004626 (for reference only)
+
+Vector Analysis:
+  Expected Distance: 282.843 mm
+  Actual Distance: 284.151 mm
+  Distance Change: 1.308 mm
+

@@ -1,0 +1,18 @@
+{
+  "preamble": "G21 ; Set units to millimeters\nG90 ; Absolute positioning\nG54 ; Use work coordinate system\nM4 S0 ; laser on at zero power\n",
+  "postscript": "M5 ; Turn off laser\nG0 X50 Y375 ; Send to unload position\n",
+  "laser_power": 200,
+  "cutting_z": -30.0,
+  "feedrate": 2000,
+  "mpos_home_x": -400.0,
+  "mpos_home_y": -400.0,
+  "mpos_home_z": -3.0,
+  "max_travel_x": 400.0,
+  "max_travel_y": 400.0,
+  "max_travel_z": -92.0,
+  "wpos_home_x": -400.0,
+  "wpos_home_y": -400.0,
+  "wpos_home_z": -74.9,
+  "raise_laser_between_paths": false,
+  "optimize_toolpath": true
+}

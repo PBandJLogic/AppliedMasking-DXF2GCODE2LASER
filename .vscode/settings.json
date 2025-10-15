@@ -1,0 +1,26 @@
+{
+    // Use a Windows-style path for the interpreter. If you use a folder named
+    // .venv in the workspace root this will point VS Code at its python.exe.
+    "python.defaultInterpreterPath": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
+    "python.terminal.activateEnvironment": true,
+
+    // Custom PowerShell profile that ensures the workspace venv Scripts is
+    // at the front of PATH for terminals launched from VS Code. Providing the
+    // full path to PowerShell avoids ambiguity; ${env:windir} expands to
+    // the Windows folder (usually C:\\Windows).
+    "terminal.integrated.profiles.windows": {
+        "PowerShell-venv": {
+            "path": "${env:windir}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+            "args": ["-NoExit"],
+            "env": {
+                // Only prepend the venv Scripts folder if it exists; this helps the
+                // Run button and integrated terminal pick the venv's python.
+                "PATH": "${workspaceFolder}\\.venv\\Scripts;${env:PATH}"
+            }
+        }
+    },
+
+    // Use the custom profile by default so the Run button opens a terminal
+    // that has the venv's Scripts in PATH.
+    "terminal.integrated.defaultProfile.windows": "PowerShell-venv"
+}
