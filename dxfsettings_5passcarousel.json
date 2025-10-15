@@ -1,0 +1,18 @@
+{
+  "preamble": "G21 ; Set units to millimeters\nG90 ; Absolute positioning\nM4 S0 ; laser on at zero power\n",
+  "postscript": "M5 ; Turn off laser\n",
+  "laser_power": 100,
+  "cutting_z": 0.0,
+  "feedrate": 1500,
+  "mpos_home_x": -797.0,
+  "mpos_home_y": -397.0,
+  "mpos_home_z": -3.0,
+  "max_travel_x": 794.0,
+  "max_travel_y": 394.0,
+  "max_travel_z": -92.0,
+  "wpos_home_x": -477.0,
+  "wpos_home_y": -197.0,
+  "wpos_home_z": -68.1,
+  "raise_laser_between_paths": false,
+  "optimize_toolpath": true
+}
