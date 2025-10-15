@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Interactive DXF 2 Laser Editor
+Interactive DXF 2 G-code Editor
 Allows loading DXF files, adjusting origin, and marking elements for engraving or removal.
 Must install libraries: pip3 install matplotlib numpy ezdxf Pillow
 """
@@ -21,7 +21,7 @@ import json
 class DXFGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("Interactive DXF 2 Laser Editor")
+        self.root.title("Interactive DXF 2 G-code Editor")
         self.root.geometry("1400x900")
 
         # Data storage
@@ -159,7 +159,7 @@ class DXFGUI:
 
         # Title
         title_label = ttk.Label(
-            header_frame, text="DXF to\nLaser\nEditor", font=("Arial", 16, "bold")
+            header_frame, text="DXF to\nG-code\nEditor", font=("Arial", 16, "bold")
         )
         title_label.pack(side="left", pady=10)
 
@@ -5101,7 +5101,7 @@ DXF Units: {self.dxf_units}"""
         power_frame.pack(fill="x", pady=(0, 5))
         ttk.Label(power_frame, text="Laser Power:").pack(side="left")
         power_spinbox = ttk.Spinbox(
-            power_frame, from_=0, to=255, width=10, textvariable=laser_power_var
+            power_frame, from_=0, to=10000, width=10, textvariable=laser_power_var
         )
         power_spinbox.pack(side="right")
 

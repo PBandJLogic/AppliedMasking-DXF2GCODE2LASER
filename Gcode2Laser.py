@@ -61,25 +61,42 @@ class SerialReaderThread(threading.Thread):
                 else:
                     time.sleep(0.001)  # 1ms sleep when no data
             except (OSError, serial.SerialException) as e:
-                # These exceptions typically indicate USB disconnect
-                if self.running:
+                # Check if this is a real disconnect error
+                error_str = str(e).lower()
+                is_disconnect = any([
+                    "access is denied" in error_str,
+                    "invalid handle" in error_str,
+                    "device not configured" in error_str,
+                    "device is not open" in error_str,
+                    "i/o error" in error_str,
+                    not self.serial_connection.is_open if self.serial_connection else True
+                ])
+                
+                if self.running and is_disconnect:
                     self.consecutive_errors += 1
-                    print(f"Serial read error (attempt {self.consecutive_errors}): {e}")
+                    print(f"Serial disconnect error (attempt {self.consecutive_errors}): {e}")
                     
-                    # If we get multiple consecutive errors, likely disconnected
+                    # If we get multiple consecutive disconnect errors, USB is disconnected
                     if self.consecutive_errors >= 3:
-                        print("Serial connection lost - USB likely disconnected")
+                        print("Serial connection lost - USB disconnected")
                         if self.disconnect_callback:
                             # Signal disconnect to main thread
                             self.response_queue.put("__DISCONNECTED__")
                         self.running = False
                         break
+                elif self.running:
+                    # Non-disconnect error (e.g., timeout) - just log and continue
+                    print(f"Serial error (non-fatal): {e}")
+                    self.consecutive_errors = 0  # Reset counter for non-disconnect errors
+                    
                 time.sleep(0.01)
             except Exception as e:
                 if self.running:  # Only log if not shutting down
                     print(f"Unexpected serial error: {e}")
+                    import traceback
+                    traceback.print_exc()
                 time.sleep(0.01)
-
+        
     def stop(self):
         """Stop the reading thread"""
         self.running = False
@@ -691,7 +708,6 @@ class GCodeAdjuster:
                             y_val = float(parts[1])
                             if idx < len(self.reference_points_expected):
                                 self.reference_points_expected[idx] = (x_val, y_val)
-                                print(f"Updated expected point {idx+1}: ({x_val:.2f}, {y_val:.2f})")
                         except ValueError:
                             pass
                 except:
@@ -740,7 +756,6 @@ class GCodeAdjuster:
                             y_val = float(parts[1])
                             if idx < len(self.reference_points_actual):
                                 self.reference_points_actual[idx] = (x_val, y_val)
-                                print(f"Updated actual point {idx+1}: ({x_val:.2f}, {y_val:.2f})")
                         except ValueError:
                             pass
                 except:
@@ -1742,17 +1757,14 @@ Vector Analysis:
                 self.serial_connection, self.response_queue, disconnect_callback=self.handle_usb_disconnect
             )
             self.serial_reader_thread.start()
-            print("Serial reader thread started")
 
             # Start processing responses from queue
             self.start_response_processing()
 
             # Query all GRBL settings
-            print("Querying all GRBL settings...")
             self.query_all_grbl_settings()
 
             # Set $10=3 to report both MPos and WPos
-            print("Setting $10=3 to report both MPos and WPos")
             self.send_gcode_async("$10=3")
 
             # Update homing enabled flag from settings (will be set when settings query completes)
@@ -1766,10 +1778,18 @@ Vector Analysis:
 
     def handle_usb_disconnect(self):
         """Handle unexpected USB disconnect - called from serial thread"""
+        # Prevent multiple simultaneous disconnect handlers
+        if not self.is_connected:
+            return
+        
         print("\n⚠️ USB DISCONNECT DETECTED ⚠️")
         
         # Must use root.after to update GUI from thread safely
         def disconnect_ui():
+            # Check again if already disconnected
+            if not self.is_connected:
+                return
+                
             # Stop any ongoing operations first
             if self.streaming:
                 print("Stopping streaming due to disconnect...")
@@ -1791,9 +1811,24 @@ Vector Analysis:
                     pass
                 self.status_update_id = None
             
-            # Update connection state
-            self.is_connected = False
+            # Stop processing responses
             self.processing_responses = False
+            
+            # Stop serial reader thread
+            if self.serial_reader_thread and self.serial_reader_thread.is_alive():
+                self.serial_reader_thread.stop()
+                self.serial_reader_thread.join(timeout=0.5)
+            self.serial_reader_thread = None
+            
+            # Clear response queue
+            while not self.response_queue.empty():
+                try:
+                    self.response_queue.get_nowait()
+                except queue.Empty:
+                    break
+            
+            # Update connection state AFTER stopping threads
+            self.is_connected = False
             
             # Update UI
             self.connect_button.config(text="Connect")
@@ -1822,12 +1857,14 @@ Vector Analysis:
             self.work_pos_label.config(text="X: 0.00  Y: 0.00  Z: 0.00")
             self.machine_pos_label.config(text="X: 0.00  Y: 0.00  Z: 0.00")
             
-            # Close serial connection
+            # Close serial connection properly
             if self.serial_connection:
                 try:
-                    self.serial_connection.close()
-                except:
-                    pass
+                    if self.serial_connection.is_open:
+                        self.serial_connection.close()
+                    print("Serial connection closed")
+                except Exception as e:
+                    print(f"Error closing serial: {e}")
             self.serial_connection = None
             
             # Show alert to user
@@ -1872,7 +1909,6 @@ Vector Analysis:
         if self.serial_reader_thread and self.serial_reader_thread.is_alive():
             self.serial_reader_thread.stop()
             self.serial_reader_thread.join(timeout=1.0)
-            print("Serial reader thread stopped")
         self.serial_reader_thread = None
 
         # Clear response queue
@@ -1901,13 +1937,38 @@ Vector Analysis:
                 print(f"Error closing serial connection: {e}")
 
         self.serial_connection = None
-        self.connect_button.config(text="Connect")
-        self.status_label.config(text="Disconnected", foreground="red")
-        self.com_port_combo.config(state="readonly")
+        
+        # Update UI widgets only if they still exist
+        try:
+            if self.connect_button.winfo_exists():
+                self.connect_button.config(text="Connect")
+        except:
+            pass
+            
+        try:
+            if self.status_label.winfo_exists():
+                self.status_label.config(text="Disconnected", foreground="red")
+        except:
+            pass
+            
+        try:
+            if self.com_port_combo.winfo_exists():
+                self.com_port_combo.config(state="readonly")
+        except:
+            pass
 
         # Clear position display
-        self.work_pos_label.config(text="X: 0.00  Y: 0.00  Z: 0.00")
-        self.machine_pos_label.config(text="X: 0.00  Y: 0.00  Z: 0.00")
+        try:
+            if self.work_pos_label.winfo_exists():
+                self.work_pos_label.config(text="X: 0.00  Y: 0.00  Z: 0.00")
+        except:
+            pass
+            
+        try:
+            if self.machine_pos_label.winfo_exists():
+                self.machine_pos_label.config(text="X: 0.00  Y: 0.00  Z: 0.00")
+        except:
+            pass
 
     def cleanup(self):
         """Clean up resources before closing"""
@@ -2029,6 +2090,13 @@ Vector Analysis:
         except Exception as e:
             print(f"Error parsing status: {e}")
 
+    def update_laser_marker_and_plot(self):
+        """Update laser marker on plot and redraw"""
+        if hasattr(self, "laser_marker"):
+            self.laser_marker.set_data([self.work_pos["x"]], [self.work_pos["y"]])
+            self.canvas.draw()
+            self.canvas.flush_events()
+
     def update_position_display(self):
         """Update position labels and laser marker on plot"""
         self.work_pos_label.config(
@@ -2073,9 +2141,8 @@ Vector Analysis:
                     self.ax.set_ylim(new_ylim)
                     need_rescale = True
 
-                # Redraw canvas only if needed
-                if need_rescale:
-                    self.canvas.draw_idle()
+                # Always redraw to show laser marker position updates
+                self.canvas.draw_idle()
 
     def toggle_laser(self):
         """Toggle laser on/off at low power"""
@@ -2112,8 +2179,25 @@ Vector Analysis:
         if response:
             # Send G10 command to set current position as origin for G54 coordinate system
             self.send_gcode_async("G10 L20 P1 X0 Y0 Z0")
-            messagebox.showinfo("Success", "Work origin set to current position")
-            # Position will update automatically from status responses
+            
+            # Query position multiple times to ensure WCO updates
+            def query_updated_position(count=0):
+                if count < 5 and self.is_connected and self.serial_connection:
+                    try:
+                        self.serial_connection.write(b"?")
+                    except:
+                        pass
+                    # Query again after a short delay
+                    if count < 4:
+                        self.root.after(150, lambda: query_updated_position(count + 1))
+                    else:
+                        # After final query, update the plot
+                        self.root.after(100, self.update_laser_marker_and_plot)
+            
+            # Start querying after a brief delay to let G10 process
+            self.root.after(100, lambda: query_updated_position(0))
+            
+            messagebox.showinfo("Success", "Work origin set to current position\n\nPosition display will update shortly.")
 
     def jog_move(self, x_dir, y_dir):
         """Jog move in X and Y direction"""
@@ -2177,39 +2261,9 @@ Vector Analysis:
             return
 
         try:
-            # Send $$ to get all settings
-            print("Sending $$ command to GRBL...")
-            self.serial_connection.write(b"$$\n")
-
-            # Read responses
-            start_time = datetime.now()
-            settings_count = 0
-            while (datetime.now() - start_time).total_seconds() < 3:
-                if self.serial_connection.in_waiting > 0:
-                    line = self.serial_connection.readline().decode().strip()
-
-                    # Parse setting lines (format: $123=456.789)
-                    if line.startswith("$") and "=" in line:
-                        try:
-                            # Remove the $ and split on =
-                            parts = line[1:].split("=")
-                            setting_num = int(parts[0])
-                            setting_value = float(parts[1])
-
-                            # Store the setting
-                            self.grbl_settings.set(setting_num, setting_value)
-                            settings_count += 1
-                            print(
-                                f"  ${setting_num}={setting_value} - {self.grbl_settings.get_description(setting_num)}"
-                            )
-
-                        except (ValueError, IndexError) as e:
-                            print(f"  Error parsing setting line '{line}': {e}")
-
-                    # Check for end of settings
-                    if line == "ok":
-                        print(f"Received all GRBL settings ({settings_count} settings)")
-                        break
+            # Send $$ to get all settings (responses handled by SerialReaderThread)
+            self.send_gcode_async("$$")
+            # Settings will be parsed in handle_response() when they arrive
 
         except Exception as e:
             print(f"Error querying GRBL settings: {e}")
@@ -2528,7 +2582,7 @@ Vector Analysis:
         """Start periodic status updates (faster during execution for better path tracking)"""
         if not self.is_connected or self.status_update_id is not None:
             return
-
+        
         def update_status():
             if self.is_connected and self.serial_connection:
                 try:
@@ -2536,6 +2590,10 @@ Vector Analysis:
                     self.serial_connection.write(b"?")
                 except Exception as e:
                     print(f"Error sending status query: {e}")
+                    # If we can't send, we're probably disconnected
+                    if isinstance(e, (OSError, serial.SerialException)):
+                        self.handle_usb_disconnect()
+                        return
 
             # Schedule next update - faster during execution for better path capture
             if self.is_connected:
@@ -2576,9 +2634,6 @@ Vector Analysis:
 
         self._completion_checks += 1
 
-        print(
-            f"Completion check #{self._completion_checks}: buffer={self.buffer_size}, queue={len(self.command_queue)}"
-        )
 
         # If buffer is empty and command queue is empty, we're done
         # OR if we've waited too long (100 checks = 10 seconds)
@@ -2595,16 +2650,22 @@ Vector Analysis:
             
             # Capture final position before stopping
             if self.is_executing:
-                # Wait a moment for machine to settle and get final position
-                def finalize_execution():
-                    # Query position one more time
-                    if self.is_connected and self.serial_connection:
+                # Query position multiple times to ensure we get the final position
+                def query_final_position(count=0):
+                    if count < 3 and self.is_connected and self.serial_connection:
                         try:
                             self.serial_connection.write(b"?")
                         except:
                             pass
+                        # Query again after a short delay
+                        self.root.after(100, lambda: query_final_position(count + 1))
+                
+                # Wait a moment for machine to settle and get final position
+                def finalize_execution():
+                    # Start querying final position
+                    query_final_position()
                     
-                    # Wait for response and then capture final position
+                    # Wait for responses and then capture final position
                     def capture_final():
                         if self.is_executing:
                             current_pos = (self.work_pos["x"], self.work_pos["y"])
@@ -2615,9 +2676,14 @@ Vector Analysis:
                                 self.execution_path.append(current_pos)
                                 print(f"Captured final position: ({current_pos[0]:.2f}, {current_pos[1]:.2f})")
                             
+                            # Update laser marker to final position
+                            if hasattr(self, "laser_marker"):
+                                self.laser_marker.set_data([self.work_pos["x"]], [self.work_pos["y"]])
+                            
                             # Update plot with final position
                             self.plot_toolpath()
                             self.canvas.draw()
+                            self.canvas.flush_events()
                         
                         # Now stop streaming
                         self.stop_streaming()
@@ -2633,11 +2699,11 @@ Vector Analysis:
                         except Exception as e:
                             print(f"Error destroying progress window: {e}")
                     
-                    # Wait for position update
-                    self.root.after(200, capture_final)
+                    # Wait for position updates (3 queries * 100ms each + processing time)
+                    self.root.after(400, capture_final)
                 
-                # Start finalization sequence
-                self.root.after(50, finalize_execution)
+                # Start finalization sequence after a brief delay
+                self.root.after(100, finalize_execution)
             else:
                 # Not executing, just stop
                 self.stop_streaming()
