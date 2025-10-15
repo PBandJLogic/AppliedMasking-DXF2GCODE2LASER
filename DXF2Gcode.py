@@ -4262,29 +4262,32 @@ DXF Units: {self.dxf_units}"""
                                 current_x, current_y = cx, cy
 
             elif geom_type in ["LWPOLYLINE", "POLYLINE", "ELLIPSE", "SPLINE"]:
-                print(
-                    f"\n=== Processing {geom_type} element {element_id} for G-code ==="
-                )
-                print(
-                    f"  element_id in self.element_data: {element_id in self.element_data}"
-                )
+                # print(
+                #     f"\n=== Processing {geom_type} element {element_id} for G-code ==="
+                # )
+                # print(
+                #     f"  element_id in self.element_data: {element_id in self.element_data}"
+                # )
                 # Get detailed points from element_data for LWPOLYLINE (includes arc info)
                 if geom_type == "LWPOLYLINE" and element_id in self.element_data:
                     # Use detailed points from element_data for LWPOLYLINE (includes arc segments)
                     _, _, _, _, polyline_points = self.element_data[element_id]
-                    print(f"\nG-code generation for LWPOLYLINE element {element_id}:")
-                    print(f"  Total points: {len(polyline_points)}")
+                    #print(f"\nG-code generation for LWPOLYLINE element {element_id}:")
+                    #print(f"  Total points: {len(polyline_points)}")
                     for idx, pt in enumerate(polyline_points):
                         if len(pt) > 3 and pt[2] == "ARC_END":
-                            print(
-                                f"  Point {idx}: ARC_END at ({pt[0]:.3f}, {pt[1]:.3f}), center=({pt[3].x:.3f}, {pt[3].y:.3f}), radius={pt[4]:.3f}, ccw={pt[7]}"
-                            )
+                            # print(
+                            #     f"  Point {idx}: ARC_END at ({pt[0]:.3f}, {pt[1]:.3f}), center=({pt[3].x:.3f}, {pt[3].y:.3f}), radius={pt[4]:.3f}, ccw={pt[7]}"
+                            # )
+                            pass
                         elif len(pt) > 2:
-                            print(
-                                f"  Point {idx}: {pt[2]} at ({pt[0]:.3f}, {pt[1]:.3f})"
-                            )
+                            # print(
+                            #     f"  Point {idx}: {pt[2]} at ({pt[0]:.3f}, {pt[1]:.3f})"
+                            # )
+                            pass
                         else:
-                            print(f"  Point {idx}: ({pt[0]:.3f}, {pt[1]:.3f})")
+                            # print(f"  Point {idx}: ({pt[0]:.3f}, {pt[1]:.3f})")
+                            pass
                 else:
                     # Use the offset coordinates from current_points for other types
                     polyline_points = element_info["points"]
