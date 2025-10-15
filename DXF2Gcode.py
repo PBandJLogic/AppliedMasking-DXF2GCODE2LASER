@@ -599,7 +599,7 @@ Colors:
         visited = set()
         chains = []
 
-                # print(f"Finding connected chains among {len(elements_list)} elements...")
+        # print(f"Finding connected chains among {len(elements_list)} elements...")
 
         for start_idx, (element_id, element_info) in enumerate(elements_list):
             if element_id in visited:
@@ -1032,7 +1032,7 @@ Colors:
 
             elif entity_type == "LWPOLYLINE":
                 # Extract LWPOLYLINE points (top-level, not in block)
-                print(f"Processing LWPOLYLINE entity: {entity.dxf.handle}")
+                # print(f"Processing LWPOLYLINE entity: {entity.dxf.handle}")
                 polyline_points = self.extract_lwpolyline_geometry(entity)
                 element_id = self.get_next_element_id()
 
@@ -1395,7 +1395,7 @@ Colors:
             polyline_points = list(entity.get_points("xyb"))  # x, y, bulge
             is_closed = entity.closed
 
-            print(f"  LWPOLYLINE: Processing {len(polyline_points)} vertices manually")
+            # print(f"  LWPOLYLINE: Processing {len(polyline_points)} vertices manually")
 
             for i in range(len(polyline_points)):
                 start_point = polyline_points[i]
@@ -1429,7 +1429,7 @@ Colors:
                 end_ty = self.convert_units(end_ty)
 
                 if abs(bulge) > 1e-6:  # Curved segment
-                    print(f"    Processing curved segment {i}: bulge={bulge:.6f}")
+                    # print(f"    Processing curved segment {i}: bulge={bulge:.6f}")
 
                     # Use ezdxf's bulge_to_arc function
                     # Returns: (center, start_angle, end_angle, radius)
@@ -1470,7 +1470,7 @@ Colors:
                         points.append((start_tx, start_ty, "LINE_START"))
                     points.append((end_tx, end_ty, "LINE_END"))
 
-            print(f"  LWPOLYLINE: Manual processing generated {len(points)} points")
+            # print(f"  LWPOLYLINE: Manual processing generated {len(points)} points")
             return points
 
         except Exception as e:
@@ -1501,7 +1501,7 @@ Colors:
 
             # If this segment has a bulge (curved), flatten it to line segments
             if abs(bulge) > 1e-6:  # Non-zero bulge indicates an arc
-                print(f"  Processing curved segment: bulge={bulge:.6f}")
+                # print(f"  Processing curved segment: bulge={bulge:.6f}")
                 # Get the next vertex for the arc
                 next_i = (i + 1) % len(polyline_points)
                 next_point_data = polyline_points[next_i]
@@ -2204,9 +2204,9 @@ Colors:
             # Apply offset to element_data
             import copy
 
-            print(
-                f"Original element_data has {len(self.original_element_data)} elements"
-            )
+            # print(
+            #     f"Original element_data has {len(self.original_element_data)} elements"
+            # )
             for eid in self.original_element_data.keys():
                 # print(f"  Element {eid} in original_element_data")
                 pass
@@ -4215,21 +4215,21 @@ DXF Units: {self.dxf_units}"""
                                 # This is a fundamental property of DXF format
                                 ccw = True
 
-                                print(
-                                    f"\nG-code generation for ARC element {element_id}:"
-                                )
-                                print(
-                                    f"  Center: ({cx:.3f}, {cy:.3f}), Radius: {radius:.3f}"
-                                )
-                                print(
-                                    f"  Start angle: {start_angle:.1f}° ({start_rad:.3f} rad)"
-                                )
-                                print(
-                                    f"  End angle: {end_angle:.1f}° ({end_rad:.3f} rad)"
-                                )
-                                print(f"  Start point: ({start_x:.3f}, {start_y:.3f})")
-                                print(f"  End point: ({end_x:.3f}, {end_y:.3f})")
-                                print(f"  Direction: {'CCW' if ccw else 'CW'}")
+                                # print(
+                                #     f"\nG-code generation for ARC element {element_id}:"
+                                # )
+                                # print(
+                                #     f"  Center: ({cx:.3f}, {cy:.3f}), Radius: {radius:.3f}"
+                                # )
+                                # print(
+                                #     f"  Start angle: {start_angle:.1f}° ({start_rad:.3f} rad)"
+                                # )
+                                # print(
+                                #     f"  End angle: {end_angle:.1f}° ({end_rad:.3f} rad)"
+                                # )
+                                # print(f"  Start point: ({start_x:.3f}, {start_y:.3f})")
+                                # print(f"  End point: ({end_x:.3f}, {end_y:.3f})")
+                                # print(f"  Direction: {'CCW' if ccw else 'CW'}")
 
                                 # Use unified arc G-code generation
                                 arc_gcode, new_x, new_y = self.generate_arc_gcode(
