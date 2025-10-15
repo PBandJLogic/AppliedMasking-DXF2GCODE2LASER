@@ -2287,14 +2287,14 @@ Colors:
 
                 # Apply offset to detailed points (includes arc data)
                 new_detailed_points = []
-                print(
-                    f"  Element {element_id}: geom_type={geom_type}, detailed_points is {detailed_points is not None}, type: {type(detailed_points)}"
-                )
+                # print(
+                #     f"  Element {element_id}: geom_type={geom_type}, detailed_points is {detailed_points is not None}, type: {type(detailed_points)}"
+                # )
 
                 # Handle different detailed_points formats based on geometry type
-                print(
-                    f"    Checking geom_type={geom_type}, has detailed_points={detailed_points is not None}"
-                )
+                # print(
+                #     f"    Checking geom_type={geom_type}, has detailed_points={detailed_points is not None}"
+                # )
                 if geom_type == "CIRCLE" and detailed_points:
                     # CIRCLE format: (x, y, radius, 'CIRCLE')
                     print(f"    CIRCLE detailed_points: {detailed_points}")
@@ -2491,9 +2491,9 @@ Colors:
                                 detailed_points  # Fallback to original
                             )
 
-                print(
-                    f"  Final new_detailed_points count: {len(new_detailed_points) if new_detailed_points else 0}"
-                )
+                # print(
+                #     f"  Final new_detailed_points count: {len(new_detailed_points) if new_detailed_points else 0}"
+                # )
                 if new_detailed_points:
                     arc_final_count = sum(
                         1
