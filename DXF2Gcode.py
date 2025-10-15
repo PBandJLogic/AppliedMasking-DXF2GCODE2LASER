@@ -684,6 +684,7 @@ Colors:
             # print(f"  Found {len(multi_element_chains)} connected chains:")
             # for i, chain in enumerate(multi_element_chains):
             #     print(f"    Chain {i+1}: {len(chain)} connected elements")
+            pass
         # else:
         #     print(f"  No connected chains found - all elements are disconnected")
 
@@ -2208,6 +2209,7 @@ Colors:
             )
             for eid in self.original_element_data.keys():
                 # print(f"  Element {eid} in original_element_data")
+                pass
 
             self.element_data = {}
             for element_id, element_info in self.original_element_data.items():
