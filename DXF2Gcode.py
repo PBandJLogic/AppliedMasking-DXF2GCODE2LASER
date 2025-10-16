@@ -1836,11 +1836,7 @@ Colors:
                                 optimized_lines.append(gcode_lines[i])
 
                                 # Replace G0 + G2/G3 with optimized arc
-                                optimized_arc = f"G{new_arc_type} X{new_end_x:.3f} Y{new_end_y:.3f} I{new_i_offset:.3f} J{new_j_offset:.3f}"
-                                if "S" in next_line:
-                                    s_match = re.search(r"S(\d+)", next_line)
-                                    if s_match:
-                                        optimized_arc += f" S{s_match.group(1)}"
+                                optimized_arc = f"G{new_arc_type} X{new_end_x:.3f} Y{new_end_y:.3f} I{new_i_offset:.3f} J{new_j_offset:.3f} F{self.gcode_settings['feedrate']} S{self.gcode_settings['laser_power']}"
 
                                 optimized_lines.append(
                                     f"; Optimized arc (reversed direction)\n{optimized_arc}"
@@ -2084,7 +2080,7 @@ Colors:
                 # Cut through remaining inside points
                 for pt_x, pt_y in inside_points[1:]:
                     gcode_lines.append(
-                        f"G1 X{pt_x:.3f} Y{pt_y:.3f} S{self.gcode_settings['laser_power']}"
+                        f"G1 X{pt_x:.3f} Y{pt_y:.3f} F{self.gcode_settings['feedrate']} S{self.gcode_settings['laser_power']}"
                     )
                     segments_added += 1
 
@@ -4092,7 +4088,7 @@ DXF Units: {self.dxf_units}"""
                                         # Cut to end
                                         gcode.append(
                                             f"G1 X{clip_end_x:.3f} Y{clip_end_y:.3f} "
-                                            f"S{self.gcode_settings['laser_power']}"
+                                            f"F{self.gcode_settings['feedrate']} S{self.gcode_settings['laser_power']}"
                                         )
                                         current_x, current_y = clip_end_x, clip_end_y
                                         segments_added += 1
@@ -4358,7 +4354,7 @@ DXF Units: {self.dxf_units}"""
                                         )
                                         # Add G1 move to arc start point only if it's within workspace
                                         gcode.append(
-                                            f"G1 X{prev_x:.3f} Y{prev_y:.3f} S{self.gcode_settings['laser_power']}"
+                                            f"G1 X{prev_x:.3f} Y{prev_y:.3f} F{self.gcode_settings['feedrate']} S{self.gcode_settings['laser_power']}"
                                         )
                                         current_x, current_y = prev_x, prev_y
 
@@ -4401,7 +4397,7 @@ DXF Units: {self.dxf_units}"""
 
                                     # Engrave to clipped end point
                                     gcode.append(
-                                        f"G1 X{clipped_end_x:.3f} Y{clipped_end_y:.3f} S{self.gcode_settings['laser_power']}"
+                                        f"G1 X{clipped_end_x:.3f} Y{clipped_end_y:.3f} F{self.gcode_settings['feedrate']} S{self.gcode_settings['laser_power']}"
                                     )
                                     current_x, current_y = clipped_end_x, clipped_end_y
 
