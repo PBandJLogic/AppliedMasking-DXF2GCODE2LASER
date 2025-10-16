@@ -3391,7 +3391,7 @@ Vector Analysis:
                         self.sent_lines += 1
                         self.progress_bar["value"] = self.sent_lines
                         self.status_label.config(
-                            text=f"Sent line {self.sent_lines} / {self.total_lines}: {line}"
+                            text=f"Executing line {self.sent_lines} / {self.total_lines}: {line}"
                         )
                     
                     # Preview next command or finish
