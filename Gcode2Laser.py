@@ -63,19 +63,27 @@ class SerialReaderThread(threading.Thread):
             except (OSError, serial.SerialException) as e:
                 # Check if this is a real disconnect error
                 error_str = str(e).lower()
-                is_disconnect = any([
-                    "access is denied" in error_str,
-                    "invalid handle" in error_str,
-                    "device not configured" in error_str,
-                    "device is not open" in error_str,
-                    "i/o error" in error_str,
-                    not self.serial_connection.is_open if self.serial_connection else True
-                ])
-                
+                is_disconnect = any(
+                    [
+                        "access is denied" in error_str,
+                        "invalid handle" in error_str,
+                        "device not configured" in error_str,
+                        "device is not open" in error_str,
+                        "i/o error" in error_str,
+                        (
+                            not self.serial_connection.is_open
+                            if self.serial_connection
+                            else True
+                        ),
+                    ]
+                )
+
                 if self.running and is_disconnect:
                     self.consecutive_errors += 1
-                    print(f"Serial disconnect error (attempt {self.consecutive_errors}): {e}")
-                    
+                    print(
+                        f"Serial disconnect error (attempt {self.consecutive_errors}): {e}"
+                    )
+
                     # If we get multiple consecutive disconnect errors, USB is disconnected
                     if self.consecutive_errors >= 3:
                         print("Serial connection lost - USB disconnected")
@@ -87,16 +95,19 @@ class SerialReaderThread(threading.Thread):
                 elif self.running:
                     # Non-disconnect error (e.g., timeout) - just log and continue
                     print(f"Serial error (non-fatal): {e}")
-                    self.consecutive_errors = 0  # Reset counter for non-disconnect errors
-                    
+                    self.consecutive_errors = (
+                        0  # Reset counter for non-disconnect errors
+                    )
+
                 time.sleep(0.01)
             except Exception as e:
                 if self.running:  # Only log if not shutting down
                     print(f"Unexpected serial error: {e}")
                     import traceback
+
                     traceback.print_exc()
                 time.sleep(0.01)
-        
+
     def stop(self):
         """Stop the reading thread"""
         self.running = False
@@ -204,10 +215,10 @@ class GCodeAdjuster:
         self.machine_pos = {"x": 0.0, "y": 0.0, "z": 0.0}
         self.work_pos = {"x": 0.0, "y": 0.0, "z": 0.0}
         self.wco = {"x": 0.0, "y": 0.0, "z": 0.0}
-        
+
         # GRBL state tracking
         self.grbl_state = "Disconnected"  # Tracks GRBL state (Idle, Run, Alarm, etc.)
-        
+
         # Plot auto-scale settings
         self.auto_scale_enabled = True  # Toggle for auto-scaling to laser position
 
@@ -309,10 +320,12 @@ class GCodeAdjuster:
                 # Create horizontal layout for logo and title
                 logo_title_frame = ttk.Frame(header_frame)
                 logo_title_frame.pack(fill="x", pady=5)
-                
+
                 # Load and display logo (50% smaller - from 25% to 12.5%)
                 logo_image = tk.PhotoImage(file=logo_path)
-                logo_image = logo_image.subsample(8, 8)  # Makes it 12.5% size (50% of previous 25%)
+                logo_image = logo_image.subsample(
+                    8, 8
+                )  # Makes it 12.5% size (50% of previous 25%)
                 logo_label = ttk.Label(logo_title_frame, image=logo_image)
                 logo_label.image = logo_image  # Keep a reference!
                 logo_label.pack(side="left", padx=(0, 10))
@@ -392,7 +405,7 @@ class GCodeAdjuster:
             control_row,
             text="State: Disconnected",
             font=("TkDefaultFont", 9, "bold"),
-            foreground="gray"
+            foreground="gray",
         )
         self.grbl_state_label.pack(side="left", padx=(10, 0))
 
@@ -408,7 +421,10 @@ class GCodeAdjuster:
         file_buttons_frame.pack(fill="x")
 
         ttk.Button(
-            file_buttons_frame, text="Load G-code File", command=self.load_gcode_file, width=20
+            file_buttons_frame,
+            text="Load G-code File",
+            command=self.load_gcode_file,
+            width=20,
         ).pack(side="left", padx=(0, 5))
 
         ttk.Button(
@@ -509,21 +525,21 @@ class GCodeAdjuster:
         # Jog buttons in a grid (left side)
         jog_buttons_frame = ttk.Frame(jog_main_frame)
         jog_buttons_frame.pack(side="left", padx=(0, 10))
-        
+
         # Step size and laser control (right side)
         right_controls_frame = ttk.Frame(jog_main_frame)
         right_controls_frame.pack(side="left")
-        
+
         # Laser ON/OFF button on top
         self.laser_button = ttk.Button(
             right_controls_frame, text="Laser OFF", command=self.toggle_laser, width=12
         )
         self.laser_button.pack(pady=(0, 5))
-        
+
         # Step size below
         step_frame = ttk.Frame(right_controls_frame)
         step_frame.pack()
-        
+
         ttk.Label(step_frame, text="Step:").pack(side="left", padx=(0, 2))
         self.jog_step_var = tk.StringVar(value="10")
         step_entry = ttk.Entry(
@@ -861,9 +877,7 @@ class GCodeAdjuster:
         show_original_check.pack(side="left", padx=10)
 
         # Add checkbox for auto-scale behavior
-        self.auto_scale_var = tk.BooleanVar(
-            value=True
-        )  # Default to auto-scale enabled
+        self.auto_scale_var = tk.BooleanVar(value=True)  # Default to auto-scale enabled
         auto_scale_check = ttk.Checkbutton(
             control_frame,
             text="Auto-scale to Laser",
@@ -879,9 +893,9 @@ class GCodeAdjuster:
         # Work Position
         wpos_row = ttk.Frame(pos_display_frame)
         wpos_row.pack(side="top", anchor="e")
-        ttk.Label(
-            wpos_row, text="WPos:", font=("TkDefaultFont", 9, "bold")
-        ).pack(side="left", padx=(0, 5))
+        ttk.Label(wpos_row, text="WPos:", font=("TkDefaultFont", 9, "bold")).pack(
+            side="left", padx=(0, 5)
+        )
         self.work_pos_label = ttk.Label(
             wpos_row, text="X: 0.00  Y: 0.00  Z: 0.00", font=("Courier", 9)
         )
@@ -890,9 +904,9 @@ class GCodeAdjuster:
         # Machine Position
         mpos_row = ttk.Frame(pos_display_frame)
         mpos_row.pack(side="top", anchor="e")
-        ttk.Label(
-            mpos_row, text="MPos:", font=("TkDefaultFont", 9, "bold")
-        ).pack(side="left", padx=(0, 5))
+        ttk.Label(mpos_row, text="MPos:", font=("TkDefaultFont", 9, "bold")).pack(
+            side="left", padx=(0, 5)
+        )
         self.machine_pos_label = ttk.Label(
             mpos_row, text="X: 0.00  Y: 0.00  Z: 0.00", font=("Courier", 9)
         )
@@ -977,7 +991,10 @@ class GCodeAdjuster:
                 self.original_gcode
             )
 
-            if expected_points and len(expected_points) >= 2:
+            # Check if we found actual reference points (not just padded zeros)
+            has_real_points = any(point != (0.0, 0.0) for point in expected_points)
+            
+            if expected_points and len(expected_points) >= 2 and has_real_points:
                 # Found reference points in comments - use first 2
                 self.reference_points_expected = expected_points[:2]
                 # Initialize actual points to match expected points
@@ -1783,14 +1800,16 @@ Vector Analysis:
             self.status_label.config(text="Connected", foreground="green")
             self.grbl_state = "Connecting"
             self.update_state_display()
-            
+
             # Initialize laser state to OFF
             self.laser_on = False
             self.laser_button.config(text="Laser OFF")
 
             # Start serial reader thread with disconnect callback
             self.serial_reader_thread = SerialReaderThread(
-                self.serial_connection, self.response_queue, disconnect_callback=self.handle_usb_disconnect
+                self.serial_connection,
+                self.response_queue,
+                disconnect_callback=self.handle_usb_disconnect,
             )
             self.serial_reader_thread.start()
 
@@ -1817,20 +1836,20 @@ Vector Analysis:
         # Prevent multiple simultaneous disconnect handlers
         if not self.is_connected:
             return
-        
+
         print("\n⚠️ USB DISCONNECT DETECTED ⚠️")
-        
+
         # Must use root.after to update GUI from thread safely
         def disconnect_ui():
             # Check again if already disconnected
             if not self.is_connected:
                 return
-                
+
             # Stop any ongoing operations first
             if self.streaming:
                 print("Stopping streaming due to disconnect...")
                 self.stop_streaming()
-            
+
             # Stop position updates
             if self.status_update_id:
                 try:
@@ -1838,7 +1857,7 @@ Vector Analysis:
                 except:
                     pass
                 self.status_update_id = None
-            
+
             # Stop status updates
             if self.status_update_id:
                 try:
@@ -1846,43 +1865,43 @@ Vector Analysis:
                 except:
                     pass
                 self.status_update_id = None
-            
+
             # Stop processing responses
             self.processing_responses = False
-            
+
             # Stop serial reader thread
             if self.serial_reader_thread and self.serial_reader_thread.is_alive():
                 self.serial_reader_thread.stop()
                 self.serial_reader_thread.join(timeout=0.5)
             self.serial_reader_thread = None
-            
+
             # Clear response queue
             while not self.response_queue.empty():
                 try:
                     self.response_queue.get_nowait()
                 except queue.Empty:
                     break
-            
+
             # Update connection state AFTER stopping threads
             self.is_connected = False
-            
+
             # Update UI
             self.connect_button.config(text="Connect")
             self.status_label.config(text="Disconnected - USB Lost", foreground="red")
             self.com_port_combo.config(state="readonly")
             self.grbl_state = "Disconnected"
             self.update_state_display()
-            
+
             # Update laser state
             self.laser_on = False
             self.laser_button.config(text="Laser OFF")
-            
+
             # Disable control buttons
             if hasattr(self, "stop_button"):
                 self.stop_button.config(state="disabled")
             if hasattr(self, "next_step_button"):
                 self.next_step_button.config(state="disabled")
-            
+
             # Close progress window if exists
             if hasattr(self, "progress_window"):
                 try:
@@ -1890,11 +1909,11 @@ Vector Analysis:
                         self.progress_window.destroy()
                 except:
                     pass
-            
+
             # Clear position display
             self.work_pos_label.config(text="X: 0.00  Y: 0.00  Z: 0.00")
             self.machine_pos_label.config(text="X: 0.00  Y: 0.00  Z: 0.00")
-            
+
             # Close serial connection properly
             if self.serial_connection:
                 try:
@@ -1904,7 +1923,7 @@ Vector Analysis:
                 except Exception as e:
                     print(f"Error closing serial: {e}")
             self.serial_connection = None
-            
+
             # Show alert to user
             messagebox.showerror(
                 "USB Disconnected",
@@ -1916,9 +1935,9 @@ Vector Analysis:
                 "- USB communication error\n\n"
                 "⚠️ VERIFY LASER IS OFF\n"
                 "⚠️ Machine position has been lost\n\n"
-                "Reconnect and rehome before continuing."
+                "Reconnect and rehome before continuing.",
             )
-        
+
         # Schedule UI update in main thread
         self.root.after(0, disconnect_ui)
 
@@ -1975,20 +1994,20 @@ Vector Analysis:
                 print(f"Error closing serial connection: {e}")
 
         self.serial_connection = None
-        
+
         # Update UI widgets only if they still exist
         try:
             if self.connect_button.winfo_exists():
                 self.connect_button.config(text="Connect")
         except:
             pass
-            
+
         try:
             if self.status_label.winfo_exists():
                 self.status_label.config(text="Disconnected", foreground="red")
         except:
             pass
-            
+
         # Update GRBL state
         self.grbl_state = "Disconnected"
         try:
@@ -1996,7 +2015,7 @@ Vector Analysis:
                 self.update_state_display()
         except:
             pass
-            
+
         try:
             if self.com_port_combo.winfo_exists():
                 self.com_port_combo.config(state="readonly")
@@ -2009,7 +2028,7 @@ Vector Analysis:
                 self.work_pos_label.config(text="X: 0.00  Y: 0.00  Z: 0.00")
         except:
             pass
-            
+
         try:
             if self.machine_pos_label.winfo_exists():
                 self.machine_pos_label.config(text="X: 0.00  Y: 0.00  Z: 0.00")
@@ -2068,7 +2087,7 @@ Vector Analysis:
             # GRBL status format: <Idle|MPos:0.000,0.000,0.000|FS:0,0|WCO:0.000,0.000,0.000>
             if response.startswith("<") and response.endswith(">"):
                 parts = response[1:-1].split("|")
-                
+
                 # Extract GRBL state (first part)
                 if parts:
                     self.grbl_state = parts[0]
@@ -2182,7 +2201,7 @@ Vector Analysis:
                     new_xlim = (xlim[0], x_pos + margin)
                     self.ax.set_xlim(new_xlim)
                     need_rescale = True
-                
+
                 if y_pos < ylim[0]:
                     new_ylim = (y_pos - margin, ylim[1])
                     self.ax.set_ylim(new_ylim)
@@ -2199,19 +2218,16 @@ Vector Analysis:
         """Update GRBL state label with color coding"""
         state_colors = {
             "Idle": "green",
-            "Run": "blue", 
+            "Run": "blue",
             "Hold": "orange",
             "Alarm": "red",
             "Home": "purple",
             "Check": "cyan",
             "Door": "orange",
-            "Disconnected": "gray"
+            "Disconnected": "gray",
         }
         color = state_colors.get(self.grbl_state, "black")
-        self.grbl_state_label.config(
-            text=f"State: {self.grbl_state}",
-            foreground=color
-        )
+        self.grbl_state_label.config(text=f"State: {self.grbl_state}", foreground=color)
 
     def toggle_auto_scale(self):
         """Toggle auto-scale behavior for laser position tracking"""
@@ -2256,7 +2272,7 @@ Vector Analysis:
         if response:
             # Send G10 command to set current position as origin for G54 coordinate system
             self.send_gcode_async("G10 L20 P1 X0 Y0 Z0")
-            
+
             # Query position multiple times to ensure WCO updates
             def query_updated_position(count=0):
                 if count < 5 and self.is_connected and self.serial_connection:
@@ -2270,11 +2286,14 @@ Vector Analysis:
                     else:
                         # After final query, update the plot
                         self.root.after(100, self.update_laser_marker_and_plot)
-            
+
             # Start querying after a brief delay to let G10 process
             self.root.after(100, lambda: query_updated_position(0))
-            
-            messagebox.showinfo("Success", "Work origin set to current position\n\nPosition display will update shortly.")
+
+            messagebox.showinfo(
+                "Success",
+                "Work origin set to current position\n\nPosition display will update shortly.",
+            )
 
     def jog_move(self, x_dir, y_dir):
         """Jog move in X and Y direction"""
@@ -2375,36 +2394,36 @@ Vector Analysis:
         if not self.is_connected:
             messagebox.showwarning("Warning", "Please connect to GRBL first!")
             return
-        
+
         try:
             # Clear serial buffers
             if self.serial_connection:
                 self.serial_connection.reset_input_buffer()
                 self.serial_connection.reset_output_buffer()
-            
+
             # Clear internal command tracking
             self.command_queue.clear()
             self.buffer_size = 0
             self.gcode_buffer.clear()
-            
+
             # Clear response queue
             while not self.response_queue.empty():
                 try:
                     self.response_queue.get_nowait()
                 except queue.Empty:
                     break
-            
+
             # Send unlock command to clear alarms
             self.send_gcode_async("$X")
-            
+
             # Query status to update display
             time.sleep(0.1)
             if self.serial_connection:
                 self.serial_connection.write(b"?")
-            
+
             messagebox.showinfo(
                 "Clear Errors",
-                "Buffers cleared and unlock command ($X) sent.\nGRBL should now be ready."
+                "Buffers cleared and unlock command ($X) sent.\nGRBL should now be ready.",
             )
         except Exception as e:
             messagebox.showerror("Error", f"Failed to clear errors: {e}")
@@ -2414,27 +2433,26 @@ Vector Analysis:
         if not self.is_connected:
             messagebox.showwarning("Warning", "Please connect to GRBL first!")
             return
-            
+
         try:
             if self.serial_connection:
                 # Send soft-reset (Ctrl-X)
                 self.serial_connection.write(b"\x18")
                 time.sleep(0.5)
-                
+
                 # Clear all buffers and queues
                 self.clear_errors()
-                
+
                 # Reinitialize connection
                 self.serial_connection.reset_input_buffer()
                 self.serial_connection.reset_output_buffer()
-                
+
                 # Query status to update display
                 time.sleep(0.1)
                 self.serial_connection.write(b"?")
-                
+
                 messagebox.showinfo(
-                    "Soft Reset",
-                    "GRBL soft-reset completed.\nSystem should be ready."
+                    "Soft Reset", "GRBL soft-reset completed.\nSystem should be ready."
                 )
         except Exception as e:
             messagebox.showerror("Error", f"Failed to perform soft-reset: {e}")
@@ -2617,7 +2635,7 @@ Vector Analysis:
                 f"MANUALLY VERIFY:\n"
                 f"- Laser is OFF\n"
                 f"- Machine has stopped moving\n"
-                f"- Power off equipment if necessary!"
+                f"- Power off equipment if necessary!",
             )
 
     def start_response_processing(self):
@@ -2654,7 +2672,7 @@ Vector Analysis:
         if response == "__DISCONNECTED__":
             self.handle_usb_disconnect()
             return
-        
+
         # Status responses
         if response.startswith("<"):
             # Debug: show status responses
@@ -2697,7 +2715,7 @@ Vector Analysis:
 
         try:
             self.serial_connection.write((command + "\n").encode())
-            
+
             # Track laser state based on M commands
             command_upper = command.upper().strip()
             if command_upper.startswith("M5") or command_upper == "M5":
@@ -2706,7 +2724,7 @@ Vector Analysis:
             elif command_upper.startswith("M3") or command_upper.startswith("M4"):
                 self.laser_on = True
                 self.laser_button.config(text="Laser ON")
-            
+
             return True
         except Exception as e:
             print(f"Error sending command: {e}")
@@ -2716,7 +2734,7 @@ Vector Analysis:
         """Start periodic status updates (faster during execution for better path tracking)"""
         if not self.is_connected or self.status_update_id is not None:
             return
-        
+
         def update_status():
             if self.is_connected and self.serial_connection:
                 try:
@@ -2737,7 +2755,9 @@ Vector Analysis:
                 self.status_update_id = self.root.after(interval, update_status)
 
         # Start the updates
-        self.status_update_id = self.root.after(50 if self.is_executing else 100, update_status)
+        self.status_update_id = self.root.after(
+            50 if self.is_executing else 100, update_status
+        )
 
     def stop_status_updates(self):
         """Stop periodic status updates"""
@@ -2768,7 +2788,6 @@ Vector Analysis:
 
         self._completion_checks += 1
 
-
         # If buffer is empty and command queue is empty, we're done
         # OR if we've waited too long (100 checks = 10 seconds)
         buffer_empty = self.buffer_size <= 0 and len(self.command_queue) == 0
@@ -2781,7 +2800,7 @@ Vector Analysis:
                 )
 
             self._completion_checks = 0
-            
+
             # Capture final position before stopping
             if self.is_executing:
                 # Query position multiple times to ensure we get the final position
@@ -2793,12 +2812,12 @@ Vector Analysis:
                             pass
                         # Query again after a short delay
                         self.root.after(100, lambda: query_final_position(count + 1))
-                
+
                 # Wait a moment for machine to settle and get final position
                 def finalize_execution():
                     # Start querying final position
                     query_final_position()
-                    
+
                     # Wait for responses and then capture final position
                     def capture_final():
                         if self.is_executing:
@@ -2808,20 +2827,24 @@ Vector Analysis:
                                 or current_pos != self.execution_path[-1]
                             ):
                                 self.execution_path.append(current_pos)
-                                print(f"Captured final position: ({current_pos[0]:.2f}, {current_pos[1]:.2f})")
-                            
+                                print(
+                                    f"Captured final position: ({current_pos[0]:.2f}, {current_pos[1]:.2f})"
+                                )
+
                             # Update laser marker to final position
                             if hasattr(self, "laser_marker"):
-                                self.laser_marker.set_data([self.work_pos["x"]], [self.work_pos["y"]])
-                            
+                                self.laser_marker.set_data(
+                                    [self.work_pos["x"]], [self.work_pos["y"]]
+                                )
+
                             # Update plot with final position
                             self.plot_toolpath()
                             self.canvas.draw()
                             self.canvas.flush_events()
-                        
+
                         # Now stop streaming
                         self.stop_streaming()
-                        
+
                         # Close progress window
                         try:
                             if (
@@ -2829,19 +2852,21 @@ Vector Analysis:
                                 and self.progress_window.winfo_exists()
                             ):
                                 self.progress_window.destroy()
-                                print(f"G-code execution complete - sent {self.sent_lines} lines")
+                                print(
+                                    f"G-code execution complete - sent {self.sent_lines} lines"
+                                )
                         except Exception as e:
                             print(f"Error destroying progress window: {e}")
-                    
+
                     # Wait for position updates (3 queries * 100ms each + processing time)
                     self.root.after(400, capture_final)
-                
+
                 # Start finalization sequence after a brief delay
                 self.root.after(100, finalize_execution)
             else:
                 # Not executing, just stop
                 self.stop_streaming()
-                
+
                 # Close progress window
                 try:
                     if (
@@ -2849,7 +2874,9 @@ Vector Analysis:
                         and self.progress_window.winfo_exists()
                     ):
                         self.progress_window.destroy()
-                        print(f"G-code execution complete - sent {self.sent_lines} lines")
+                        print(
+                            f"G-code execution complete - sent {self.sent_lines} lines"
+                        )
                 except Exception as e:
                     print(f"Error destroying progress window: {e}")
         else:
