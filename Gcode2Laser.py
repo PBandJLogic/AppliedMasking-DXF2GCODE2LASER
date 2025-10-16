@@ -228,15 +228,16 @@ class GCodeAdjuster:
         self.comm_log_max_lines = 1000  # Maximum log entries
         self.comm_log_entries = []  # Store log entries
         self.log_status_queries = False  # Toggle for logging status queries
+        
+        # Modal units (G20/G21) detected from file; default None -> will inject G21 if absent
+        self.modal_units = None
 
         # Smart polling
         self.last_command_time = 0  # Track when last command was sent
 
-        # Buffer management
-        self.command_queue = []  # Queue of commands waiting to be sent
-        self.buffer_size = 0  # Current buffer usage
-        self.max_buffer_size = 15  # GRBL buffer limit (typically 15-18)
-        self.waiting_for_ok = False  # Track if we're waiting for an 'ok' response
+        # Buffer management for manual commands
+        self.manual_command_queue = []  # Queue of manual commands waiting to be sent
+        self.waiting_for_ok = False  # Track if we're waiting for an 'ok' response (manual commands only)
 
         # Laser state
         self.laser_on = False
@@ -249,13 +250,13 @@ class GCodeAdjuster:
         self.execution_path = []  # List of (x, y) tuples for execution trace
         self.is_executing = False
 
-        # GRBL streaming
+        # GRBL streaming - character-counting protocol
         self.gcode_buffer = []  # Queue of G-code lines to send
         self.buffer_size = 0  # Current size of GRBL's internal buffer (bytes)
-        self.max_buffer_size = 127  # GRBL's RX buffer size (typical: 127 bytes)
+        self.max_buffer_size = 120  # GRBL's RX buffer size with safety margin (127-7)
         self.streaming = False
         self.status_update_id = None  # Timer ID for status updates
-        self.command_queue = []  # Track sent commands with their sizes
+        self.command_queue = []  # Track sent commands for byte counting
         self.sent_lines = 0  # Track progress
         self.total_lines = 0
         self._last_plot_update = 0  # Throttle plot updates
@@ -414,7 +415,13 @@ class GCodeAdjuster:
         self.soft_reset_button = ttk.Button(
             control_row, text="Reboot GRBL", command=self.reboot_grbl, width=12
         )
-        self.soft_reset_button.pack(side="left")
+        self.soft_reset_button.pack(side="left", padx=(0, 5))
+
+        # Speed check button
+        self.speed_check_button = ttk.Button(
+            control_row, text="Check Speed", command=self.check_grbl_speed_settings, width=12
+        )
+        self.speed_check_button.pack(side="left")
 
         # GRBL State display
         self.grbl_state_label = ttk.Label(
@@ -1099,6 +1106,19 @@ class GCodeAdjuster:
         try:
             with open(file_path, "r") as f:
                 self.original_gcode = f.read()
+
+            # Detect modal units from original G-code (preserve G20/G21)
+            self.modal_units = None
+            for raw_line in self.original_gcode.split("\n"):
+                line = raw_line.strip().upper()
+                if not line or line.startswith(";") or line.startswith("("):
+                    continue
+                if line.startswith("G20"):
+                    self.modal_units = "G20"
+                    break
+                if line.startswith("G21"):
+                    self.modal_units = "G21"
+                    break
 
             # Parse reference points from comments
             num_points, expected_points = self.parse_reference_points_from_comments(
@@ -2472,8 +2492,10 @@ Vector Analysis:
         if not cmd:
             return True  # Empty command after comment removal is OK
 
-        # Check for invalid parameter combinations
-        if "G3" in cmd or "G2" in cmd:  # Arc commands
+        # Check for invalid parameter combinations in arc commands
+        # Use word boundary checks to avoid matching G20/G21
+        import re
+        if re.search(r'\bG2\b', cmd) or re.search(r'\bG3\b', cmd):  # Arc commands
             # Arc commands should have F (feedrate) parameter - required
             if "F" not in cmd:
                 print(
@@ -2481,9 +2503,9 @@ Vector Analysis:
                 )
                 return False
             # Arc commands should have I and J parameters
-            if "G3" in cmd and ("I" not in cmd or "J" not in cmd):
+            if re.search(r'\bG3\b', cmd) and ("I" not in cmd or "J" not in cmd):
                 print(f"Warning: G3 arc command missing I or J parameters: {command}")
-            if "G2" in cmd and ("I" not in cmd or "J" not in cmd):
+            if re.search(r'\bG2\b', cmd) and ("I" not in cmd or "J" not in cmd):
                 print(f"Warning: G2 arc command missing I or J parameters: {command}")
 
         # Check for invalid feed rates
@@ -2522,33 +2544,26 @@ Vector Analysis:
         return True
 
     def _process_command_queue(self):
-        """Process commands from the queue, respecting buffer limits"""
-        if not self.command_queue or self.waiting_for_ok:
+        """Process manual commands from the queue (serial execution)"""
+        # Only for manual commands - use waiting_for_ok to ensure serial execution
+        if not self.manual_command_queue or self.waiting_for_ok:
             return
 
-        # Check if we have buffer space
-        if self.buffer_size >= self.max_buffer_size:
-            print(
-                f"Buffer full ({self.buffer_size}/{self.max_buffer_size}), queuing command"
-            )
-            return
-
-        # Send next command from queue
-        command = self.command_queue.pop(0)
+        # Send next command from manual queue
+        command = self.manual_command_queue.pop(0)
 
         # Log the sent command
         self.log_sent_command(command)
 
         # Track command time for smart polling
         import time
-
         self.last_command_time = time.time()
 
         # Send the command
         self.serial_connection.write((command + "\n").encode())
 
-        # Update buffer tracking
-        self.buffer_size += 1
+        # Track this command (for manual commands, we don't use byte counting)
+        # Just set a flag to wait for ok
         self.waiting_for_ok = True
 
         # Track laser state based on M commands
@@ -2559,6 +2574,34 @@ Vector Analysis:
         elif command_upper.startswith("M3") or command_upper.startswith("M4"):
             self.laser_on = True
             self.laser_button.config(text="Laser ON")
+
+    def _send_streaming_command(self, command):
+        """Send a streaming command directly (bypasses queue for speed)"""
+        if not self.is_connected or not self.serial_connection:
+            return False
+
+        # Validate command
+        if not self._validate_gcode_command(command):
+            print(f"Invalid G-code command rejected: {command}")
+            return False
+
+        # Log the sent command
+        self.log_sent_command(command)
+
+        # Track command time for smart polling
+        import time
+        self.last_command_time = time.time()
+
+        # Send the command directly (immediate, no delays)
+        self.serial_connection.write((command + "\n").encode())
+
+        # Track actual bytes: command + newline
+        self.buffer_size += len(command) + 1
+        
+        # Track this command for byte counting
+        self.command_queue.append(command)
+
+        return True
 
     def toggle_laser(self):
         """Toggle laser on/off at low power"""
@@ -2613,10 +2656,10 @@ Vector Analysis:
             # Start querying after a brief delay to let G10 process
             self.root.after(100, lambda: query_updated_position(0))
 
-            messagebox.showinfo(
-                "Success",
-                "Work origin set to current position\n\nPosition display will update shortly.",
-            )
+            #messagebox.showinfo(
+            #    "Success",
+            #    "Work origin set to current position\n\nPosition display will update shortly.",
+            #)
 
     def jog_move(self, x_dir, y_dir):
         """Jog move in X and Y direction"""
@@ -2687,6 +2730,26 @@ Vector Analysis:
         except Exception as e:
             print(f"Error querying GRBL settings: {e}")
 
+    def check_grbl_speed_settings(self):
+        """Check and display key GRBL speed settings"""
+        if not self.is_connected:
+            messagebox.showwarning("Warning", "Please connect to GRBL first!")
+            return
+        
+        # Query key speed settings
+        speed_settings = [
+            "$110",  # X Max Rate (mm/min)
+            "$111",  # Y Max Rate (mm/min) 
+            "$112",  # Z Max Rate (mm/min)
+            "$120",  # X Acceleration (mm/sec^2)
+            "$121",  # Y Acceleration (mm/sec^2)
+            "$122",  # Z Acceleration (mm/sec^2)
+        ]
+        
+        print("Checking GRBL speed settings...")
+        for setting in speed_settings:
+            self.send_gcode_async(setting)
+
     def home_machine(self):
         """Send machine to home position (only if homing is enabled)"""
         if not self.is_connected:
@@ -2725,7 +2788,8 @@ Vector Analysis:
                 self.serial_connection.reset_output_buffer()
 
             # Clear internal command tracking
-            self.command_queue.clear()
+            self.manual_command_queue.clear()
+            self.command_queue.clear()  # Streaming command tracking
             self.buffer_size = 0
             self.waiting_for_ok = False
             self.gcode_buffer.clear()
@@ -3058,7 +3122,7 @@ Vector Analysis:
             print(f"GRBL: {response}")
 
     def send_gcode_async(self, command):
-        """Send G-code with proper buffer management"""
+        """Send G-code with proper buffer management (for manual commands)"""
         if not self.is_connected or not self.serial_connection:
             return False
 
@@ -3068,8 +3132,8 @@ Vector Analysis:
                 print(f"Invalid G-code command rejected: {command}")
                 return False
 
-            # Add command to queue
-            self.command_queue.append(command)
+            # Add command to manual command queue
+            self.manual_command_queue.append(command)
 
             # Try to send commands from queue
             self._process_command_queue()
@@ -3135,12 +3199,59 @@ Vector Analysis:
 
     def handle_grbl_ok(self):
         """Handle GRBL 'ok' response - command completed"""
-        # Command completed, reduce buffer count
-        self.buffer_size = max(0, self.buffer_size - 1)
-        self.waiting_for_ok = False
+        # Command completed, reduce buffer count by actual command size
+        if self.command_queue:
+            completed_cmd = self.command_queue.pop(0)
+            cmd_size = len(completed_cmd) + 1
+            self.buffer_size = max(0, self.buffer_size - cmd_size)
+        else:
+            # Safety: shouldn't happen, but prevent negative
+            # Estimate average command size
+            self.buffer_size = max(0, self.buffer_size - 20)
+        
+        # For manual commands only
+        if not self.streaming:
+            self.waiting_for_ok = False
+            # Process next manual command in queue if available
+            self._process_command_queue()
+        else:
+            # Streaming mode: immediately try to send more commands
+            self._stream_next_available()
 
-        # Process next command in queue if available
-        self._process_command_queue()
+    def _stream_next_available(self):
+        """Send as many commands as buffer allows (event-driven)"""
+        if not self.streaming or not self.gcode_buffer:
+            return
+        
+        # Send multiple commands if buffer has space
+        while self.gcode_buffer and self.buffer_size < self.max_buffer_size:
+            # Peek at next command to check size
+            line_data = self.gcode_buffer[0]
+            line = line_data["line"]
+            cmd_size = len(line) + 1
+            
+            # Check if it fits
+            if self.buffer_size + cmd_size > self.max_buffer_size:
+                break  # Would overflow, wait for next 'ok'
+            
+            # Send it
+            line_data = self.gcode_buffer.pop(0)
+            if not self._send_streaming_command(line_data["line"]):
+                self.stop_streaming()
+                return
+            
+            # Update progress
+            if hasattr(self, "progress_bar"):
+                self.sent_lines += 1
+                self.progress_bar["value"] = self.sent_lines
+                if hasattr(self, "status_label"):
+                    self.status_label.config(
+                        text=f"Sent {self.sent_lines}/{self.total_lines}: {line}"
+                    )
+        
+        # Check if done
+        if not self.gcode_buffer:
+            self.check_streaming_complete()
 
     def stream_gcode_line(self):
         """Wrapper to call the streaming function (with or without step support)"""
@@ -3276,7 +3387,7 @@ Vector Analysis:
         self.run_adjusted_gcode()
 
     def continue_step(self):
-        """Continue to next step in single-step mode"""
+        """Continue to next step in single-step mode - send the previewed command"""
         if self.single_step_mode and self.step_paused:
             self.step_paused = False
             # Disable next buttons while processing
@@ -3284,86 +3395,78 @@ Vector Analysis:
                 self.next_step_button.config(state="disabled")
             if hasattr(self, "step_next_button"):
                 self.step_next_button.config(state="disabled")
-            # Continue streaming
-            self.stream_gcode_line_with_step()
+            
+            # Send the previewed command
+            if self.gcode_buffer:
+                # Get and send the command (single-step doesn't need buffer check)
+                line_data = self.gcode_buffer.pop(0)
+                line = line_data["line"]
+                
+                try:
+                    if not self._send_streaming_command(line):
+                        print(f"Failed to send line: {line}")
+                        self.stop_streaming()
+                        return
+                    
+                    # Update progress
+                    if hasattr(self, "progress_bar"):
+                        self.sent_lines += 1
+                        self.progress_bar["value"] = self.sent_lines
+                        self.status_label.config(
+                            text=f"Sent line {self.sent_lines} / {self.total_lines}: {line}"
+                        )
+                    
+                    # Preview next command or finish
+                    if self.gcode_buffer:
+                        # More commands - show next preview immediately
+                        self.stream_gcode_line_with_step()
+                    else:
+                        # No more commands - wait for completion
+                        print("Single-step: Last line sent, waiting for completion")
+                        self.root.after(500, self.check_streaming_complete)
+                        
+                except Exception as e:
+                    print(f"Error streaming line: {e}")
+                    self.stop_streaming()
+            else:
+                # No more commands
+                print("Single-step: No more commands to send")
+                self.check_streaming_complete()
 
     def stream_gcode_line_with_step(self):
         """Stream G-code line with single-step support"""
-        # If in single-step mode and paused, wait
-        if self.single_step_mode and self.step_paused:
-            return
-
         if not self.streaming or not self.gcode_buffer:
             return
 
-        # Check if we have space in GRBL's buffer (use 80% to keep headroom)
-        if self.buffer_size >= (self.max_buffer_size * 0.8):
-            # Wait for buffer to clear, check again in 10ms
-            self.root.after(10, self.stream_gcode_line_with_step)
-            return
-
-        # Get next line
-        line_data = self.gcode_buffer.pop(0)
-        line = line_data["line"]
-
-        # Store current line for display
-        self.current_line_text = line
-
-        # Send the line (async, no waiting)
-        try:
-            if not self.send_gcode_async(line):
-                print(f"Failed to send line: {line}")
-                self.stop_streaming()
-                return
-
-            # Track command size
-            cmd_size = len(line) + 1  # +1 for newline
-            self.buffer_size += cmd_size
-            self.command_queue.append({"size": cmd_size, "line": line})
-
-            # Update progress
-            if hasattr(self, "progress_bar"):
-                self.sent_lines += 1
-                self.progress_bar["value"] = self.sent_lines
-                self.status_label.config(
-                    text=f"Line {self.sent_lines} / {self.total_lines}: {line}"
-                )
-
-        except Exception as e:
-            print(f"Error streaming line: {e}")
-            self.stop_streaming()
-            return
-
-        # Handle single-step mode
+        # Single-step mode: Preview next command BEFORE sending
         if self.single_step_mode:
-            # Check if there are more lines
-            if self.gcode_buffer:
-                # More lines to go - pause for user to click Next
-                self.step_paused = True
-                # Enable next buttons (both in left panel and progress window)
-                if hasattr(self, "next_step_button"):
-                    self.next_step_button.config(state="normal")
-                if hasattr(self, "step_next_button"):
-                    self.step_next_button.config(state="normal")
-                # Don't automatically continue
-                return
-            else:
-                # No more lines - this was the last line
-                # Wait a bit for GRBL to execute and send final status before completing
-                print(
-                    "Single-step: Last line sent, waiting for execution before completion check"
-                )
-                self.root.after(
-                    500, self.check_streaming_complete
-                )  # 500ms delay for final move
+            if self.step_paused:
+                # Waiting for user to click Next
                 return
 
-        # Continue streaming if there are more lines (run mode)
-        if self.gcode_buffer:
-            self.root.after(1, self.stream_gcode_line_with_step)
-        else:
-            # All lines sent, wait for completion
-            self.check_streaming_complete()
+            # Get next line to preview
+            line_data = self.gcode_buffer[0]  # Peek, don't pop yet
+            line = line_data["line"]
+
+            # Show preview of next command
+            if hasattr(self, "status_label"):
+                self.status_label.config(
+                    text=f"Ready to send line {self.sent_lines + 1} / {self.total_lines}: {line}"
+                )
+
+            # Pause and wait for Next button
+            self.step_paused = True
+            self.current_line_text = line
+
+            # Enable next buttons
+            if hasattr(self, "next_step_button"):
+                self.next_step_button.config(state="normal")
+            if hasattr(self, "step_next_button"):
+                self.step_next_button.config(state="normal")
+            return
+
+        # Run mode: use event-driven sending (no timers!)
+        self._stream_next_available()
 
     def run_adjusted_gcode(self):
         """Stream adjusted G-code to GRBL using streaming protocol"""
@@ -3382,7 +3485,8 @@ Vector Analysis:
             "Make sure:\n"
             "- The machine is properly set up\n"
             "- The work origin is correct\n"
-            "- The work area is clear\n\n"
+            "- The work area is clear\n"
+            "- Eye protection is on\n\n"
             "Continue?",
         )
 
@@ -3393,15 +3497,18 @@ Vector Analysis:
             # Prepare G-code lines
             lines = self.adjusted_gcode.split("\n")
 
-            # Filter out empty lines and comments
+            # Prepend modal units only if they exist in the original file
+            if self.modal_units in ("G20", "G21"):
+                filtered_preview = [l.strip() for l in lines if l.strip() and not l.strip().startswith(";") and not l.strip().startswith("(")]
+                if not filtered_preview or not filtered_preview[0].upper().startswith(self.modal_units):
+                    lines = [self.modal_units] + lines
+
+            # Filter out empty lines and comments (preserving modal units if injected)
             filtered_lines = []
             for i, line in enumerate(lines):
                 line = line.strip()
                 if line and not line.startswith(";") and not line.startswith("("):
                     filtered_lines.append({"line": line, "num": i + 1})
-                    # Debug: Check for G0 commands
-                    if line.upper().startswith("G0"):
-                        print(f"Found G0 at line {i+1}: {line}")
 
             self.total_lines = len(filtered_lines)
             self.sent_lines = 0
@@ -3417,7 +3524,8 @@ Vector Analysis:
             )
             self.progress_window.title(mode_text)
             self.progress_window.geometry("550x220")
-            self.progress_window.transient(self.root)
+            # Don't use transient() to allow interaction with main window
+            # self.progress_window.transient(self.root)
 
             # Progress label
             header_text = (
@@ -3438,17 +3546,7 @@ Vector Analysis:
             self.progress_bar.pack(pady=10)
             self.progress_bar["maximum"] = self.total_lines
 
-            # Status label - shows current G-code line
-            self.status_label = ttk.Label(
-                self.progress_window,
-                text=f"Line 0 / {self.total_lines}",
-                font=("Courier", 9),
-                wraplength=480,
-                justify="left",
-            )
-            self.status_label.pack(pady=5, padx=10)
-
-            # Control buttons in progress window
+            # Control buttons in progress window (place above status to avoid shifting)
             button_frame = ttk.Frame(self.progress_window)
             button_frame.pack(pady=5)
 
@@ -3471,6 +3569,16 @@ Vector Analysis:
                 side="left", padx=5
             )
 
+            # Status label - shows current G-code line (placed below buttons)
+            self.status_label = ttk.Label(
+                self.progress_window,
+                text=f"Line 0 / {self.total_lines}",
+                font=("Courier", 9),
+                wraplength=480,
+                justify="left",
+            )
+            self.status_label.pack(pady=5, padx=10)
+
             # Initialize execution tracking
             self.is_executing = True
             self.execution_path = [(self.work_pos["x"], self.work_pos["y"])]
@@ -3479,14 +3587,17 @@ Vector Analysis:
             if hasattr(self, "stop_button"):
                 self.stop_button.config(state="normal")
 
-            # Start streaming
+            # Start streaming with event-driven protocol
             self.gcode_buffer = filtered_lines
+            self.streaming = True
             self.buffer_size = 0
             self.command_queue = []
-            self.streaming = True
 
-            # Start the streaming process
-            self.stream_gcode_line()
+            # Kick off event-driven streaming (fills buffer immediately)
+            if self.single_step_mode:
+                self.stream_gcode_line()  # Single-step uses preview logic
+            else:
+                self._stream_next_available()  # Run mode uses fast event-driven
 
             # Start status updates (250ms) if not already running
             if self.status_update_id is None:
