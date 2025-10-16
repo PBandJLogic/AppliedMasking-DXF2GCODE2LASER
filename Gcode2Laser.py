@@ -3156,7 +3156,11 @@ Vector Analysis:
             if self.is_connected:
                 import time
 
-                if self.is_executing or self.grbl_state == "Run":
+                # In single-step mode, use slower polling to avoid clogging serial
+                if self.single_step_mode:
+                    # Slow polling during single-step (500ms = 2 Hz)
+                    interval = 500
+                elif self.is_executing or self.grbl_state == "Run":
                     # Fast polling during G-code execution (50ms = 20 Hz)
                     interval = 50
                 elif self.grbl_state in ["Jog", "Hold"]:
