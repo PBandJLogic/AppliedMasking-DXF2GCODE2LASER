@@ -3190,7 +3190,8 @@ Vector Analysis:
         
         # ALWAYS try streaming first (it checks self.streaming internally)
         # This ensures 'ok' responses during streaming always trigger more sends
-        if self.streaming and self.gcode_buffer:
+        # BUT: Don't auto-send in single-step mode - wait for user to click Next
+        if self.streaming and self.gcode_buffer and not self.single_step_mode:
             self._stream_next_available()
         elif not self.streaming:
             # Manual command mode
