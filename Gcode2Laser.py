@@ -250,13 +250,13 @@ class GCodeAdjuster:
         self.execution_path = []  # List of (x, y) tuples for execution trace
         self.is_executing = False
 
-        # GRBL streaming - character-counting protocol
+        # GRBL streaming - simplified command counting
         self.gcode_buffer = []  # Queue of G-code lines to send
-        self.buffer_size = 0  # Current size of GRBL's internal buffer (bytes)
-        self.max_buffer_size = 120  # GRBL's RX buffer size with safety margin (127-7)
+        self.buffer_size = 0  # Current commands in GRBL's buffer (command count, not bytes)
+        self.max_buffer_size = 15  # GRBL buffer limit in commands (conservative)
         self.streaming = False
         self.status_update_id = None  # Timer ID for status updates
-        self.command_queue = []  # Track sent commands for byte counting
+        self.command_queue = []  # Track sent commands for proper ok matching
         self.sent_lines = 0  # Track progress
         self.total_lines = 0
         self._last_plot_update = 0  # Throttle plot updates
@@ -2590,10 +2590,10 @@ Vector Analysis:
             # Send the command directly (immediate, no delays)
             self.serial_connection.write((command + "\n").encode())
 
-            # Track actual bytes: command + newline
-            self.buffer_size += len(command) + 1
+            # Track command count (simple and reliable)
+            self.buffer_size += 1
             
-            # Track this command for byte counting
+            # Track this command for ok matching
             self.command_queue.append(command)
 
             return True
@@ -3177,15 +3177,16 @@ Vector Analysis:
 
     def handle_grbl_ok(self):
         """Handle GRBL 'ok' response - command completed"""
-        # Command completed, reduce buffer count by actual command size
+        # Command completed, reduce buffer count
         if self.command_queue:
-            completed_cmd = self.command_queue.pop(0)
-            cmd_size = len(completed_cmd) + 1
-            self.buffer_size = max(0, self.buffer_size - cmd_size)
+            self.command_queue.pop(0)  # Remove completed command
+            self.buffer_size = max(0, self.buffer_size - 1)
         else:
-            # Safety: shouldn't happen, but prevent negative
-            # Estimate average command size
-            self.buffer_size = max(0, self.buffer_size - 20)
+            # Safety: command_queue empty but got 'ok'
+            # This can happen if manual commands were sent before streaming started
+            # Just reduce buffer count
+            if self.buffer_size > 0:
+                self.buffer_size = max(0, self.buffer_size - 1)
         
         # ALWAYS try streaming first (it checks self.streaming internally)
         # This ensures 'ok' responses during streaming always trigger more sends
@@ -3201,20 +3202,14 @@ Vector Analysis:
         if not self.streaming or not self.gcode_buffer:
             return
         
-        # Send multiple commands if buffer has space
+        # Send multiple commands if buffer has space (simple command counting)
         while self.gcode_buffer and self.buffer_size < self.max_buffer_size:
-            # Peek at next command to check size
-            line_data = self.gcode_buffer[0]
+            # Get next command
+            line_data = self.gcode_buffer.pop(0)
             line = line_data["line"]
-            cmd_size = len(line) + 1
-            
-            # Check if it fits
-            if self.buffer_size + cmd_size > self.max_buffer_size:
-                break  # Would overflow, wait for next 'ok'
             
             # Send it
-            line_data = self.gcode_buffer.pop(0)
-            if not self._send_streaming_command(line_data["line"]):
+            if not self._send_streaming_command(line):
                 self.stop_streaming()
                 return
             
@@ -3224,7 +3219,7 @@ Vector Analysis:
                 self.progress_bar["value"] = self.sent_lines
                 if hasattr(self, "status_label"):
                     self.status_label.config(
-                        text=f"Sent {self.sent_lines}/{self.total_lines} (buf:{self.buffer_size}b)"
+                        text=f"Sent {self.sent_lines}/{self.total_lines} (buf:{self.buffer_size})"
                     )
         
         # Check if done
