@@ -1928,6 +1928,12 @@ Vector Analysis:
             self.status_label.config(text="Connected", foreground="green")
             self.grbl_state = "Connecting"
             self.update_state_display()
+            
+            # Immediately query status to update GRBL state
+            try:
+                self.serial_connection.write(b"?")
+            except:
+                pass
 
             # Initialize laser state to OFF
             self.laser_on = False
