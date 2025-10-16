@@ -306,19 +306,22 @@ class GCodeAdjuster:
         try:
             logo_path = os.path.join(os.path.dirname(__file__), "logo.png")
             if os.path.exists(logo_path):
-                # Load and display logo
+                # Create horizontal layout for logo and title
+                logo_title_frame = ttk.Frame(header_frame)
+                logo_title_frame.pack(fill="x", pady=5)
+                
+                # Load and display logo (50% smaller - from 25% to 12.5%)
                 logo_image = tk.PhotoImage(file=logo_path)
-                # Scale down to fit left panel width (480px)
-                logo_image = logo_image.subsample(4, 4)  # Makes it 25% size
-                logo_label = ttk.Label(header_frame, image=logo_image)
+                logo_image = logo_image.subsample(8, 8)  # Makes it 12.5% size (50% of previous 25%)
+                logo_label = ttk.Label(logo_title_frame, image=logo_image)
                 logo_label.image = logo_image  # Keep a reference!
-                logo_label.pack(pady=5)
+                logo_label.pack(side="left", padx=(0, 10))
 
-                # Add title below logo
+                # Add title to the right of logo
                 title_label = ttk.Label(
-                    header_frame, text="Gcode2Laser", font=("Arial", 14, "bold")
+                    logo_title_frame, text="Gcode2Laser", font=("Arial", 14, "bold")
                 )
-                title_label.pack(pady=(0, 5))
+                title_label.pack(side="left")
         except Exception as e:
             # If logo fails, just show title
             title_label = ttk.Label(
