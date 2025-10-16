@@ -415,13 +415,7 @@ class GCodeAdjuster:
         self.soft_reset_button = ttk.Button(
             control_row, text="Reboot GRBL", command=self.reboot_grbl, width=12
         )
-        self.soft_reset_button.pack(side="left", padx=(0, 5))
-
-        # Speed check button
-        self.speed_check_button = ttk.Button(
-            control_row, text="Check Speed", command=self.check_grbl_speed_settings, width=12
-        )
-        self.speed_check_button.pack(side="left")
+        self.soft_reset_button.pack(side="left")
 
         # GRBL State display
         self.grbl_state_label = ttk.Label(
@@ -1808,11 +1802,11 @@ Vector Analysis:
         adjusted_line = line
         if x_match:
             adjusted_line = re.sub(
-                r"X[+-]?\d+\.?\d*", f"X{adjusted_x:.6f}", adjusted_line
+                r"X[+-]?\d+\.?\d*", f"X{adjusted_x:.2f}", adjusted_line
             )
         if y_match:
             adjusted_line = re.sub(
-                r"Y[+-]?\d+\.?\d*", f"Y{adjusted_y:.6f}", adjusted_line
+                r"Y[+-]?\d+\.?\d*", f"Y{adjusted_y:.2f}", adjusted_line
             )
 
         return adjusted_line
@@ -1859,19 +1853,19 @@ Vector Analysis:
         adjusted_line = line
         if x_match:
             adjusted_line = re.sub(
-                r"X[+-]?\d+\.?\d*", f"X{adjusted_end_x:.6f}", adjusted_line
+                r"X[+-]?\d+\.?\d*", f"X{adjusted_end_x:.2f}", adjusted_line
             )
         if y_match:
             adjusted_line = re.sub(
-                r"Y[+-]?\d+\.?\d*", f"Y{adjusted_end_y:.6f}", adjusted_line
+                r"Y[+-]?\d+\.?\d*", f"Y{adjusted_end_y:.2f}", adjusted_line
             )
         if i_match:
             adjusted_line = re.sub(
-                r"I[+-]?\d+\.?\d*", f"I{new_i_offset:.6f}", adjusted_line
+                r"I[+-]?\d+\.?\d*", f"I{new_i_offset:.2f}", adjusted_line
             )
         if j_match:
             adjusted_line = re.sub(
-                r"J[+-]?\d+\.?\d*", f"J{new_j_offset:.6f}", adjusted_line
+                r"J[+-]?\d+\.?\d*", f"J{new_j_offset:.2f}", adjusted_line
             )
 
         return adjusted_line
@@ -2580,28 +2574,32 @@ Vector Analysis:
         if not self.is_connected or not self.serial_connection:
             return False
 
-        # Validate command
-        if not self._validate_gcode_command(command):
-            print(f"Invalid G-code command rejected: {command}")
+        try:
+            # Validate command
+            if not self._validate_gcode_command(command):
+                print(f"Invalid G-code command rejected: {command}")
+                return False
+
+            # Log the sent command
+            self.log_sent_command(command)
+
+            # Track command time for smart polling
+            import time
+            self.last_command_time = time.time()
+
+            # Send the command directly (immediate, no delays)
+            self.serial_connection.write((command + "\n").encode())
+
+            # Track actual bytes: command + newline
+            self.buffer_size += len(command) + 1
+            
+            # Track this command for byte counting
+            self.command_queue.append(command)
+
+            return True
+        except Exception as e:
+            print(f"Exception in _send_streaming_command: {e}")
             return False
-
-        # Log the sent command
-        self.log_sent_command(command)
-
-        # Track command time for smart polling
-        import time
-        self.last_command_time = time.time()
-
-        # Send the command directly (immediate, no delays)
-        self.serial_connection.write((command + "\n").encode())
-
-        # Track actual bytes: command + newline
-        self.buffer_size += len(command) + 1
-        
-        # Track this command for byte counting
-        self.command_queue.append(command)
-
-        return True
 
     def toggle_laser(self):
         """Toggle laser on/off at low power"""
@@ -2729,26 +2727,6 @@ Vector Analysis:
 
         except Exception as e:
             print(f"Error querying GRBL settings: {e}")
-
-    def check_grbl_speed_settings(self):
-        """Check and display key GRBL speed settings"""
-        if not self.is_connected:
-            messagebox.showwarning("Warning", "Please connect to GRBL first!")
-            return
-        
-        # Query key speed settings
-        speed_settings = [
-            "$110",  # X Max Rate (mm/min)
-            "$111",  # Y Max Rate (mm/min) 
-            "$112",  # Z Max Rate (mm/min)
-            "$120",  # X Acceleration (mm/sec^2)
-            "$121",  # Y Acceleration (mm/sec^2)
-            "$122",  # Z Acceleration (mm/sec^2)
-        ]
-        
-        print("Checking GRBL speed settings...")
-        for setting in speed_settings:
-            self.send_gcode_async(setting)
 
     def home_machine(self):
         """Send machine to home position (only if homing is enabled)"""
@@ -3209,14 +3187,14 @@ Vector Analysis:
             # Estimate average command size
             self.buffer_size = max(0, self.buffer_size - 20)
         
-        # For manual commands only
-        if not self.streaming:
-            self.waiting_for_ok = False
-            # Process next manual command in queue if available
-            self._process_command_queue()
-        else:
-            # Streaming mode: immediately try to send more commands
+        # ALWAYS try streaming first (it checks self.streaming internally)
+        # This ensures 'ok' responses during streaming always trigger more sends
+        if self.streaming and self.gcode_buffer:
             self._stream_next_available()
+        elif not self.streaming:
+            # Manual command mode
+            self.waiting_for_ok = False
+            self._process_command_queue()
 
     def _stream_next_available(self):
         """Send as many commands as buffer allows (event-driven)"""
@@ -3246,7 +3224,7 @@ Vector Analysis:
                 self.progress_bar["value"] = self.sent_lines
                 if hasattr(self, "status_label"):
                     self.status_label.config(
-                        text=f"Sent {self.sent_lines}/{self.total_lines}: {line}"
+                        text=f"Sent {self.sent_lines}/{self.total_lines} (buf:{self.buffer_size}b)"
                     )
         
         # Check if done
