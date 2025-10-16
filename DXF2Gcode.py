@@ -1942,14 +1942,14 @@ Colors:
         g_command = "G3" if ccw else "G2"
 
         # Debug output
-        print(f"    generate_arc_gcode: {g_command}")
-        print(f"      Start: ({start_x:.3f}, {start_y:.3f})")
-        print(f"      End: ({end_x:.3f}, {end_y:.3f})")
-        print(f"      Center: ({center_x:.3f}, {center_y:.3f})")
-        print(f"      Radius: {radius:.3f}")
-        print(
-            f"      Recalculated angles - Start: {math.degrees(start_angle):.1f}°, End: {math.degrees(end_angle):.1f}°"
-        )
+        # print(f"    generate_arc_gcode: {g_command}")
+        # print(f"      Start: ({start_x:.3f}, {start_y:.3f})")
+        # print(f"      End: ({end_x:.3f}, {end_y:.3f})")
+        # print(f"      Center: ({center_x:.3f}, {center_y:.3f})")
+        # print(f"      Radius: {radius:.3f}")
+        # print(
+        #    f"      Recalculated angles - Start: {math.degrees(start_angle):.1f}°, End: {math.degrees(end_angle):.1f}°"
+        # )
 
         # Check if both start and end points are within workspace
         start_inside = self.is_within_workspace(start_x, start_y)
@@ -1959,7 +1959,7 @@ Colors:
             # Both points inside - generate full arc
             i_offset = center_x - start_x
             j_offset = center_y - start_y
-            print(f"      I,J: ({i_offset:.3f}, {j_offset:.3f})")
+            # print(f"      I,J: ({i_offset:.3f}, {j_offset:.3f})")
 
             gcode_lines.append(
                 f"{g_command} X{end_x:.3f} Y{end_y:.3f} I{i_offset:.3f} J{j_offset:.3f} S{self.gcode_settings['laser_power']}"
@@ -2299,7 +2299,7 @@ Colors:
                 # )
                 if geom_type == "CIRCLE" and detailed_points:
                     # CIRCLE format: (x, y, radius, 'CIRCLE')
-                    print(f"    CIRCLE detailed_points: {detailed_points}")
+                    # print(f"    CIRCLE detailed_points: {detailed_points}")
                     if len(detailed_points) == 4:
                         cx, cy, radius, marker = detailed_points
                         fx = _to_float(cx)
@@ -2337,7 +2337,7 @@ Colors:
                         new_detailed_points = detailed_points
                 elif geom_type == "LINE" and detailed_points:
                     # LINE format: ((x1, y1), (x2, y2), 'LINE')
-                    print(f"    LINE detailed_points: {detailed_points}")
+                    # print(f"    LINE detailed_points: {detailed_points}")
                     new_detailed_points = []
                     for item in detailed_points:
                         if isinstance(item, (tuple, list)) and len(item) == 2:
@@ -2360,23 +2360,23 @@ Colors:
                     if not detailed_points:
                         new_detailed_points = detailed_points
                     else:
-                        print(
-                            f"  Processing {len(detailed_points)} detailed_points for element {element_id}"
-                        )
+                        # print(
+                        #    f"  Processing {len(detailed_points)} detailed_points for element {element_id}"
+                        # )
                         arc_count = 0
                         try:
                             for point in detailed_points:
                                 # Skip non-tuple/list points (e.g., raw floats)
                                 if not isinstance(point, (tuple, list)):
-                                    print(f"    Skipping non-tuple point: {point}")
+                                    # print(f"    Skipping non-tuple point: {point}")
                                     continue
 
                                 if len(point) > 3 and point[2] == "ARC_END":
                                     # This is an arc point - offset x, y, and center
                                     arc_count += 1
-                                    print(
-                                        f"    Found ARC_END point {arc_count}: {point[:3]}"
-                                    )
+                                    # print(
+                                    #    f"    Found ARC_END point {arc_count}: {point[:3]}"
+                                    # )
                                     (
                                         x,
                                         y,
@@ -2781,9 +2781,9 @@ Colors:
                 rect_bottom = min(start_y, end_y)
                 rect_top = max(start_y, end_y)
 
-                print(
-                    f"\nSelection rectangle: left={rect_left:.1f}, right={rect_right:.1f}, bottom={rect_bottom:.1f}, top={rect_top:.1f}"
-                )
+                # print(
+                #    f"\nSelection rectangle: left={rect_left:.1f}, right={rect_right:.1f}, bottom={rect_bottom:.1f}, top={rect_top:.1f}"
+                # )
 
                 # Get unique elements for selection
                 unique_elements = {}
@@ -2870,10 +2870,10 @@ Colors:
                                         in_rect = True
                                         break
 
-                                if in_rect:
-                                    print(
-                                        f"  Arc {element_id} selected: center=({center_x:.1f},{center_y:.1f}), radius={radius:.3f}, angles={start_angle:.1f}°-{end_angle:.1f}°"
-                                    )
+                                # if in_rect:
+                                #    print(
+                                #        f"  Arc {element_id} selected: center=({center_x:.1f},{center_y:.1f}), radius={radius:.3f}, angles={start_angle:.1f}°-{end_angle:.1f}°"
+                                #    )
                             else:
                                 # Fallback to bounding circle if arc data is incomplete
                                 in_rect = (
@@ -3549,9 +3549,9 @@ Colors:
                             detailed_points = element_data[
                                 4
                             ]  # Original points with arc data
-                            print(
-                                f"  detailed_points: {detailed_points is not None}, count: {len(detailed_points) if detailed_points else 0}"
-                            )
+                            # print(
+                            #    f"  detailed_points: {detailed_points is not None}, count: {len(detailed_points) if detailed_points else 0}"
+                            # )
                             if detailed_points and len(detailed_points) > 0:
                                 # Check if this has arc segments
                                 has_arcs = any(
@@ -4683,7 +4683,7 @@ DXF Units: {self.dxf_units}"""
 
             # Generate suggested filename with timestamp
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            default_filename = f"dxf_gcode_{timestamp}.nc"
+            default_filename = f"dxf_gcode_{timestamp}"
 
             # Ask user for save location and filename
             save_file_path = filedialog.asksaveasfilename(
