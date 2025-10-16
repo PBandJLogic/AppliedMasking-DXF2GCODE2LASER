@@ -46,8 +46,8 @@ class DXFGUI:
 
         # G-code settings
         self.gcode_settings = {
-            "preamble": "G21 ; Set units to millimeters\nG90 ; Absolute positioning\nG54 ; Use work coordinate system\nG0 X0, Y0, Z-3 ; Go to zero position\nM4 S0 ; laser on at zero power\n",
-            "postscript": "G0 Z-3 ; Raise Z\nM5 ; Turn off laser\nG0 X0 Y375 ; Send to unload position\n",
+            "preamble": "G21 ; Set units to millimeters\nG90 ; Absolute positioning\nG54 ; Use work coordinate system\nG0 X0 Y0 Z0 ; Go to zero position\nM4 S0 ; laser on at zero power\n",
+            "postscript": "M5 ; Turn off laser\nG0 X0 Y375 ; Send to unload position\n",
             "laser_power": 1000,
             "cutting_z": -30,
             "feedrate": 1500,
@@ -1962,7 +1962,7 @@ Colors:
             # print(f"      I,J: ({i_offset:.3f}, {j_offset:.3f})")
 
             gcode_lines.append(
-                f"{g_command} X{end_x:.3f} Y{end_y:.3f} I{i_offset:.3f} J{j_offset:.3f} S{self.gcode_settings['laser_power']}"
+                f"{g_command} X{end_x:.3f} Y{end_y:.3f} I{i_offset:.3f} J{j_offset:.3f} F{self.gcode_settings['feedrate']} S{self.gcode_settings['laser_power']}"
             )
             return gcode_lines, end_x, end_y
 
