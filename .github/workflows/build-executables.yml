@@ -78,7 +78,6 @@ jobs:
         cp dist/DXF2Gcode release/
         cp dist/GCode2Laser release/
         cp logo.png release/
-        cp dist/README_EXECUTABLES.md release/
     
     - name: Upload macOS artifacts
       uses: actions/upload-artifact@v4
@@ -113,16 +112,15 @@ jobs:
     - name: Build DXF2Gcode
       run: pyinstaller DXF2Gcode.spec
     
-    - name: Build GCode2Laser
-      run: pyinstaller GCode2Laser.spec
+    - name: Build Gcode2Laser
+      run: pyinstaller Gcode2Laser.spec
     
     - name: Create distribution package
       run: |
         mkdir release
         cp dist/DXF2Gcode release/
-        cp dist/GCode2Laser release/
+        cp dist/Gcode2Laser release/
         cp logo.png release/
-        cp dist/README_EXECUTABLES.md release/
     
     - name: Upload Linux artifacts
       uses: actions/upload-artifact@v4
