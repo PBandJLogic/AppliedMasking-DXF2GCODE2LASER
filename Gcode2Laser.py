@@ -29,6 +29,7 @@ import serial.tools.list_ports
 import time
 import threading
 import queue
+from datetime import datetime
 
 
 class SerialReaderThread(threading.Thread):
@@ -221,6 +222,21 @@ class GCodeAdjuster:
 
         # Plot auto-scale settings
         self.auto_scale_enabled = True  # Toggle for auto-scaling to laser position
+        
+        # Communication log
+        self.comm_log_enabled = True  # Toggle for logging
+        self.comm_log_max_lines = 1000  # Maximum log entries
+        self.comm_log_entries = []  # Store log entries
+        self.log_status_queries = False  # Toggle for logging status queries
+        
+        # Smart polling
+        self.last_command_time = 0  # Track when last command was sent
+        
+        # Buffer management
+        self.command_queue = []  # Queue of commands waiting to be sent
+        self.buffer_size = 0  # Current buffer usage
+        self.max_buffer_size = 15  # GRBL buffer limit (typically 15-18)
+        self.waiting_for_ok = False  # Track if we're waiting for an 'ok' response
 
         # Laser state
         self.laser_on = False
@@ -396,7 +412,7 @@ class GCodeAdjuster:
         self.clear_errors_button.pack(side="left", padx=(0, 5))
 
         self.soft_reset_button = ttk.Button(
-            control_row, text="Soft Reset", command=self.soft_reset_grbl, width=12
+            control_row, text="Reboot GRBL", command=self.reboot_grbl, width=12
         )
         self.soft_reset_button.pack(side="left")
 
@@ -912,6 +928,14 @@ class GCodeAdjuster:
         )
         self.machine_pos_label.pack(side="left")
 
+        # Create paned window for plot and log
+        self.right_paned = ttk.PanedWindow(parent, orient=tk.VERTICAL)
+        self.right_paned.pack(fill="both", expand=True)
+
+        # Plot frame (top pane)
+        plot_frame = ttk.Frame(self.right_paned)
+        self.right_paned.add(plot_frame, weight=3)  # 3/4 of space
+
         # Create matplotlib figure
         self.fig = Figure(figsize=(10, 8), dpi=100)
         self.ax = self.fig.add_subplot(111)
@@ -924,16 +948,111 @@ class GCodeAdjuster:
         self.ax.set_aspect("equal")
 
         # Embed plot in tkinter
-        self.canvas = FigureCanvasTkAgg(self.fig, parent)
+        self.canvas = FigureCanvasTkAgg(self.fig, plot_frame)
         self.canvas.draw()
 
         # Add navigation toolbar
-        self.toolbar = NavigationToolbar2Tk(self.canvas, parent)
+        self.toolbar = NavigationToolbar2Tk(self.canvas, plot_frame)
         self.toolbar.update()
         self.toolbar.pack(side="bottom", fill="x")
 
         # Pack canvas after toolbar
         self.canvas.get_tk_widget().pack(side="top", fill="both", expand=True)
+
+        # Communication log frame (bottom pane)
+        log_frame = ttk.LabelFrame(self.right_paned, text="Communication Log", padding=5)
+        self.right_paned.add(log_frame, weight=1)  # 1/4 of space
+
+        # Log controls
+        log_controls = ttk.Frame(log_frame)
+        log_controls.pack(side="top", fill="x", pady=(0, 5))
+
+        # Enable/disable logging checkbox
+        self.log_enabled_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(
+            log_controls,
+            text="Enable Logging",
+            variable=self.log_enabled_var,
+            command=self.toggle_logging
+        ).pack(side="left", padx=5)
+
+        # Timestamp checkbox
+        self.log_timestamp_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(
+            log_controls,
+            text="Show Timestamps",
+            variable=self.log_timestamp_var,
+            command=self.refresh_log_display
+        ).pack(side="left", padx=5)
+
+        # Clear log button
+        ttk.Button(
+            log_controls,
+            text="Clear Log",
+            command=self.clear_comm_log,
+            width=10
+        ).pack(side="left", padx=5)
+
+        # Auto-scroll checkbox
+        self.log_autoscroll_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(
+            log_controls,
+            text="Auto-scroll",
+            variable=self.log_autoscroll_var
+        ).pack(side="left", padx=5)
+
+        # Show status queries checkbox
+        self.log_status_queries_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            log_controls,
+            text="Show Status Queries",
+            variable=self.log_status_queries_var,
+            command=self.toggle_status_query_logging
+        ).pack(side="left", padx=5)
+
+        # Text widget with scrollbar for log
+        log_text_frame = ttk.Frame(log_frame)
+        log_text_frame.pack(fill="both", expand=True)
+
+        self.comm_log_text = tk.Text(
+            log_text_frame,
+            height=10,
+            wrap=tk.WORD,
+            state=tk.DISABLED,
+            font=("Courier", 9)
+        )
+        log_scrollbar = ttk.Scrollbar(
+            log_text_frame,
+            orient="vertical",
+            command=self.comm_log_text.yview
+        )
+        self.comm_log_text.configure(yscrollcommand=log_scrollbar.set)
+
+        log_scrollbar.pack(side="right", fill="y")
+        self.comm_log_text.pack(side="left", fill="both", expand=True)
+
+        # Configure text tags for color coding
+        self.comm_log_text.tag_config("sent", foreground="blue")
+        self.comm_log_text.tag_config("received", foreground="green")
+        self.comm_log_text.tag_config("error", foreground="red")
+        self.comm_log_text.tag_config("timestamp", foreground="gray")
+        
+        # Bind scroll events to prevent propagation to parent widgets
+        def on_mousewheel(event):
+            # Handle mouse wheel scrolling within the text widget
+            self.comm_log_text.yview_scroll(int(-1 * (event.delta / 120)), "units")
+            return "break"  # Prevent event propagation
+        
+        def on_scroll(event):
+            # Handle other scroll events
+            if event.delta:
+                self.comm_log_text.yview_scroll(int(-1 * (event.delta / 120)), "units")
+            return "break"  # Prevent event propagation
+        
+        # Bind mouse wheel and scroll events
+        self.comm_log_text.bind("<MouseWheel>", on_mousewheel)
+        self.comm_log_text.bind("<Button-4>", on_scroll)  # Linux scroll up
+        self.comm_log_text.bind("<Button-5>", on_scroll)  # Linux scroll down
 
         # Initialize plot with laser position marker
         self.initialize_plot()
@@ -2224,6 +2343,7 @@ Vector Analysis:
             "Home": "purple",
             "Check": "cyan",
             "Door": "orange",
+            "Error": "red",
             "Disconnected": "gray",
         }
         color = state_colors.get(self.grbl_state, "black")
@@ -2236,6 +2356,201 @@ Vector Analysis:
             print("Auto-scale to laser position: ENABLED")
         else:
             print("Auto-scale to laser position: DISABLED")
+
+    def log_sent_command(self, command):
+        """Log a command sent to GRBL"""
+        if not self.log_enabled_var.get():
+            return
+        
+        # Filter out status queries unless explicitly enabled
+        if command == "?" and not self.log_status_queries:
+            return
+        
+        timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+        entry = {
+            "time": timestamp,
+            "direction": "sent",
+            "message": command
+        }
+        self.comm_log_entries.append(entry)
+        
+        # Trim log if too large
+        if len(self.comm_log_entries) > self.comm_log_max_lines:
+            self.comm_log_entries.pop(0)
+        
+        # Update display
+        self.append_to_log(entry)
+
+    def log_received_response(self, response):
+        """Log a response received from GRBL"""
+        if not self.log_enabled_var.get():
+            return
+        
+        # Filter out status responses unless explicitly enabled
+        if response.startswith("<") and response.endswith(">") and not self.log_status_queries:
+            return
+        
+        timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+        
+        # Determine if this is an error
+        is_error = "error" in response.lower() or "alarm" in response.lower()
+        
+        entry = {
+            "time": timestamp,
+            "direction": "received",
+            "message": response,
+            "is_error": is_error
+        }
+        self.comm_log_entries.append(entry)
+        
+        # Trim log if too large
+        if len(self.comm_log_entries) > self.comm_log_max_lines:
+            self.comm_log_entries.pop(0)
+        
+        # Update display
+        self.append_to_log(entry)
+
+    def append_to_log(self, entry):
+        """Append an entry to the log display"""
+        self.comm_log_text.config(state=tk.NORMAL)
+        
+        # Add timestamp if enabled
+        if self.log_timestamp_var.get():
+            self.comm_log_text.insert(tk.END, f"[{entry['time']}] ", "timestamp")
+        
+        # Add direction indicator and message
+        if entry["direction"] == "sent":
+            self.comm_log_text.insert(tk.END, "→ ", "sent")
+            self.comm_log_text.insert(tk.END, f"{entry['message']}\n", "sent")
+        else:
+            if entry.get("is_error", False):
+                self.comm_log_text.insert(tk.END, "← ", "error")
+                self.comm_log_text.insert(tk.END, f"{entry['message']}\n", "error")
+            else:
+                self.comm_log_text.insert(tk.END, "← ", "received")
+                self.comm_log_text.insert(tk.END, f"{entry['message']}\n", "received")
+        
+        self.comm_log_text.config(state=tk.DISABLED)
+        
+        # Auto-scroll to bottom if enabled
+        if self.log_autoscroll_var.get():
+            self.comm_log_text.see(tk.END)
+
+    def clear_comm_log(self):
+        """Clear the communication log"""
+        self.comm_log_entries.clear()
+        self.comm_log_text.config(state=tk.NORMAL)
+        self.comm_log_text.delete(1.0, tk.END)
+        self.comm_log_text.config(state=tk.DISABLED)
+
+    def toggle_logging(self):
+        """Toggle logging on/off"""
+        self.comm_log_enabled = self.log_enabled_var.get()
+
+    def toggle_status_query_logging(self):
+        """Toggle status query logging on/off"""
+        self.log_status_queries = self.log_status_queries_var.get()
+
+    def refresh_log_display(self):
+        """Refresh the entire log display (for timestamp toggle)"""
+        self.comm_log_text.config(state=tk.NORMAL)
+        self.comm_log_text.delete(1.0, tk.END)
+        
+        for entry in self.comm_log_entries:
+            self.append_to_log(entry)
+        
+        self.comm_log_text.config(state=tk.DISABLED)
+
+    def _is_moving(self):
+        """Check if GRBL is actually moving based on state"""
+        # GRBL states that indicate motion
+        moving_states = ["Run", "Jog", "Hold"]
+        return self.grbl_state in moving_states
+
+    def _validate_gcode_command(self, command):
+        """Validate G-code command syntax before sending to GRBL"""
+        if not command or not command.strip():
+            return False
+        
+        # Remove comments and whitespace
+        cmd = command.split(';')[0].strip().upper()
+        if not cmd:
+            return True  # Empty command after comment removal is OK
+        
+        # Check for invalid parameter combinations
+        if 'G3' in cmd or 'G2' in cmd:  # Arc commands
+            # Arc commands should not have S (spindle speed) parameter
+            if 'S' in cmd:
+                print(f"Error: Arc commands (G2/G3) cannot have S parameter: {command}")
+                return False
+            # Arc commands should have I and J parameters
+            if 'G3' in cmd and ('I' not in cmd or 'J' not in cmd):
+                print(f"Warning: G3 arc command missing I or J parameters: {command}")
+        
+        # Check for invalid feed rates
+        if 'F' in cmd:
+            try:
+                # Extract F value and validate it's reasonable
+                import re
+                f_match = re.search(r'F(\d+(?:\.\d+)?)', cmd)
+                if f_match:
+                    f_value = float(f_match.group(1))
+                    if f_value < 0 or f_value > 10000:  # Reasonable feed rate range
+                        print(f"Warning: Feed rate F{f_value} seems unreasonable: {command}")
+            except:
+                pass  # If we can't parse F, let GRBL handle it
+        
+        # Check for invalid coordinates
+        for axis in ['X', 'Y', 'Z']:
+            if axis in cmd:
+                try:
+                    import re
+                    coord_match = re.search(f'{axis}(-?\d+(?:\.\d+)?)', cmd)
+                    if coord_match:
+                        coord_value = float(coord_match.group(1))
+                        # Check for reasonable coordinate ranges (adjust as needed)
+                        if abs(coord_value) > 1000:  # 1000mm max travel
+                            print(f"Warning: {axis} coordinate {coord_value} seems large: {command}")
+                except:
+                    pass  # If we can't parse coordinate, let GRBL handle it
+        
+        return True
+
+    def _process_command_queue(self):
+        """Process commands from the queue, respecting buffer limits"""
+        if not self.command_queue or self.waiting_for_ok:
+            return
+        
+        # Check if we have buffer space
+        if self.buffer_size >= self.max_buffer_size:
+            print(f"Buffer full ({self.buffer_size}/{self.max_buffer_size}), queuing command")
+            return
+        
+        # Send next command from queue
+        command = self.command_queue.pop(0)
+        
+        # Log the sent command
+        self.log_sent_command(command)
+        
+        # Track command time for smart polling
+        import time
+        self.last_command_time = time.time()
+        
+        # Send the command
+        self.serial_connection.write((command + "\n").encode())
+        
+        # Update buffer tracking
+        self.buffer_size += 1
+        self.waiting_for_ok = True
+        
+        # Track laser state based on M commands
+        command_upper = command.upper().strip()
+        if command_upper.startswith("M5") or command_upper == "M5":
+            self.laser_on = False
+            self.laser_button.config(text="Laser OFF")
+        elif command_upper.startswith("M3") or command_upper.startswith("M4"):
+            self.laser_on = True
+            self.laser_button.config(text="Laser ON")
 
     def toggle_laser(self):
         """Toggle laser on/off at low power"""
@@ -2404,6 +2719,7 @@ Vector Analysis:
             # Clear internal command tracking
             self.command_queue.clear()
             self.buffer_size = 0
+            self.waiting_for_ok = False
             self.gcode_buffer.clear()
 
             # Clear response queue
@@ -2428,15 +2744,15 @@ Vector Analysis:
         except Exception as e:
             messagebox.showerror("Error", f"Failed to clear errors: {e}")
 
-    def soft_reset_grbl(self):
-        """Perform GRBL soft-reset and reinitialize"""
+    def reboot_grbl(self):
+        """Reboot GRBL firmware and reinitialize"""
         if not self.is_connected:
             messagebox.showwarning("Warning", "Please connect to GRBL first!")
             return
 
         try:
             if self.serial_connection:
-                # Send soft-reset (Ctrl-X)
+                # Send reboot command (Ctrl-X)
                 self.serial_connection.write(b"\x18")
                 time.sleep(0.5)
 
@@ -2452,10 +2768,11 @@ Vector Analysis:
                 self.serial_connection.write(b"?")
 
                 messagebox.showinfo(
-                    "Soft Reset", "GRBL soft-reset completed.\nSystem should be ready."
+                    "Reboot GRBL",
+                    "GRBL firmware rebooted successfully.\nSystem should be ready."
                 )
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to perform soft-reset: {e}")
+            messagebox.showerror("Error", f"Failed to reboot GRBL: {e}")
 
     def go_home(self):
         """Go to work coordinate origin (0,0,0)"""
@@ -2668,6 +2985,9 @@ Vector Analysis:
 
     def handle_response(self, response):
         """Handle a single response from GRBL"""
+        # Log the received response
+        self.log_received_response(response)
+        
         # Check for disconnect signal from serial thread
         if response == "__DISCONNECTED__":
             self.handle_usb_disconnect()
@@ -2687,6 +3007,27 @@ Vector Analysis:
         # Error responses
         elif "error" in response.lower():
             print(f"GRBL Error: {response}")
+            # Update GRBL state to show error
+            self.grbl_state = "Error"
+            self.update_state_display()
+            
+            # Show error in a user-friendly way
+            error_code = response.replace("error:", "").strip()
+            error_messages = {
+                "1": "Expected G-code word (malformed line)",
+                "2": "Bad number format", 
+                "3": "Invalid statement",
+                "5": "Homing not enabled",
+                "20": "Unsupported command",
+                "22": "Parameter error"
+            }
+            error_desc = error_messages.get(error_code, "Unknown error")
+            
+            # Show error dialog for user awareness
+            messagebox.showwarning(
+                "GRBL Error", 
+                f"Error {error_code}: {error_desc}\n\nResponse: {response}\n\nCheck your G-code file for issues."
+            )
 
         # Settings responses ($N=value)
         elif response.startswith("$"):
@@ -2709,36 +3050,36 @@ Vector Analysis:
             print(f"GRBL: {response}")
 
     def send_gcode_async(self, command):
-        """Send G-code without waiting for response (async)"""
+        """Send G-code with proper buffer management"""
         if not self.is_connected or not self.serial_connection:
             return False
 
         try:
-            self.serial_connection.write((command + "\n").encode())
-
-            # Track laser state based on M commands
-            command_upper = command.upper().strip()
-            if command_upper.startswith("M5") or command_upper == "M5":
-                self.laser_on = False
-                self.laser_button.config(text="Laser OFF")
-            elif command_upper.startswith("M3") or command_upper.startswith("M4"):
-                self.laser_on = True
-                self.laser_button.config(text="Laser ON")
-
+            # Validate G-code command before sending
+            if not self._validate_gcode_command(command):
+                print(f"Invalid G-code command rejected: {command}")
+                return False
+            
+            # Add command to queue
+            self.command_queue.append(command)
+            
+            # Try to send commands from queue
+            self._process_command_queue()
+            
             return True
         except Exception as e:
             print(f"Error sending command: {e}")
             return False
 
     def start_status_updates(self):
-        """Start periodic status updates (faster during execution for better path tracking)"""
+        """Start smart status updates based on GRBL state"""
         if not self.is_connected or self.status_update_id is not None:
             return
 
         def update_status():
             if self.is_connected and self.serial_connection:
                 try:
-                    # Send status query (response handled by thread)
+                    # Always send status query (we need it to know the state)
                     self.serial_connection.write(b"?")
                 except Exception as e:
                     print(f"Error sending status query: {e}")
@@ -2747,17 +3088,32 @@ Vector Analysis:
                         self.handle_usb_disconnect()
                         return
 
-            # Schedule next update - faster during execution for better path capture
+            # Schedule next update based on GRBL state
             if self.is_connected:
-                # Use 50ms interval during execution for smoother path tracking
-                # Use 100ms interval when idle to reduce overhead
-                interval = 50 if self.is_executing else 100
+                import time
+                if self.is_executing or self.grbl_state == "Run":
+                    # Fast polling during G-code execution (50ms = 20 Hz)
+                    interval = 50
+                elif self.grbl_state in ["Jog", "Hold"]:
+                    # Fast polling during jogging or hold (50ms = 20 Hz)
+                    interval = 50
+                elif self.grbl_state == "Idle" and (time.time() - self.last_command_time) < 2.0:
+                    # Medium polling for 2 seconds after commands finish (200ms = 5 Hz)
+                    interval = 200
+                elif self.grbl_state == "Idle":
+                    # Slow polling when truly idle (2000ms = 0.5 Hz)
+                    interval = 2000
+                elif self.grbl_state == "Alarm":
+                    # Very slow polling in alarm state (5000ms = 0.2 Hz)
+                    interval = 5000
+                else:
+                    # Default for other states (500ms = 2 Hz)
+                    interval = 500
+                
                 self.status_update_id = self.root.after(interval, update_status)
 
-        # Start the updates
-        self.status_update_id = self.root.after(
-            50 if self.is_executing else 100, update_status
-        )
+        # Start with medium interval
+        self.status_update_id = self.root.after(200, update_status)
 
     def stop_status_updates(self):
         """Stop periodic status updates"""
@@ -2767,10 +3123,12 @@ Vector Analysis:
 
     def handle_grbl_ok(self):
         """Handle GRBL 'ok' response - command completed"""
-        if self.command_queue:
-            # Remove oldest command and reduce buffer
-            cmd = self.command_queue.pop(0)
-            self.buffer_size = max(0, self.buffer_size - cmd["size"])
+        # Command completed, reduce buffer count
+        self.buffer_size = max(0, self.buffer_size - 1)
+        self.waiting_for_ok = False
+        
+        # Process next command in queue if available
+        self._process_command_queue()
 
     def stream_gcode_line(self):
         """Wrapper to call the streaming function (with or without step support)"""
