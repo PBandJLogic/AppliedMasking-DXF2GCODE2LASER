@@ -28,20 +28,20 @@ jobs:
         pip install -r requirements.txt
         pip install pyinstaller
     
-    - name: Build DXF2Laser
-      run: pyinstaller DXF2Laser.spec
+    - name: Build DXF2Gcode
+      run: pyinstaller DXF2Gcode.spec
     
-    - name: Build GCodeAdjuster
-      run: pyinstaller GCodeAdjuster.spec
+    - name: Build GCode2Laser
+      run: pyinstaller GCode2Laser.spec
     
     - name: Create distribution package
       run: |
         mkdir release
-        copy dist\DXF2Laser.exe release\
-        copy dist\GCodeAdjuster.exe release\
+        copy dist\DXF2Gcode.exe release\
+        copy dist\GCode2Laser.exe release\
         copy logo.png release\
-        copy dist\Run_DXF2Laser.bat release\
-        copy dist\Run_GCodeAdjuster.bat release\
+        copy dist\Run_DXF2Gcode.bat release\
+        copy dist\Run_GCode2Laser.bat release\
         copy dist\README_EXECUTABLES.md release\
     
     - name: Upload Windows artifacts
@@ -69,17 +69,17 @@ jobs:
         pip install -r requirements.txt
         pip install pyinstaller
     
-    - name: Build DXF2Laser
-      run: pyinstaller DXF2Laser.spec
+    - name: Build DXF2Gcode
+      run: pyinstaller DXF2Gcode.spec
     
-    - name: Build GCodeAdjuster
-      run: pyinstaller GCodeAdjuster.spec
+    - name: Build GCode2Laser
+      run: pyinstaller GCode2Laser.spec
     
     - name: Create distribution package
       run: |
         mkdir release
-        cp dist/DXF2Laser release/
-        cp dist/GCodeAdjuster release/
+        cp dist/DXF2Gcode release/
+        cp dist/GCode2Laser release/
         cp logo.png release/
         cp dist/README_EXECUTABLES.md release/
     
@@ -113,17 +113,17 @@ jobs:
         pip install -r requirements.txt
         pip install pyinstaller
     
-    - name: Build DXF2Laser
-      run: pyinstaller DXF2Laser.spec
+    - name: Build DXF2Gcode
+      run: pyinstaller DXF2Gcode.spec
     
-    - name: Build GCodeAdjuster
-      run: pyinstaller GCodeAdjuster.spec
+    - name: Build GCode2Laser
+      run: pyinstaller GCode2Laser.spec
     
     - name: Create distribution package
       run: |
         mkdir release
-        cp dist/DXF2Laser release/
-        cp dist/GCodeAdjuster release/
+        cp dist/DXF2Gcode release/
+        cp dist/GCode2Laser release/
         cp logo.png release/
         cp dist/README_EXECUTABLES.md release/
     
@@ -175,8 +175,8 @@ jobs:
           ## What's Included
           
           Each package contains:
-          - DXF2Laser executable
-          - GCodeAdjuster executable
+          - DXF2Gcode executable
+          - GCode2Laser executable
           - README with usage instructions
           - Supporting files (logo, batch scripts for Windows)
           
@@ -202,8 +202,8 @@ jobs:
           
           Make the executables runnable:
           ```bash
-          chmod +x DXF2Laser
-          chmod +x GCodeAdjuster
+          chmod +x DXF2Gcode
+          chmod +x GCode2Laser
           ```
           
           ## Troubleshooting
