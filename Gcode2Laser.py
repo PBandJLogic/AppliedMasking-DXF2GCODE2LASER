@@ -2430,6 +2430,13 @@ Vector Analysis:
         # Batch text operations for better performance
         self.comm_log_text.config(state=tk.NORMAL)
 
+        # Trim old lines if widget gets too large (keep performance high)
+        line_count = int(self.comm_log_text.index('end-1c').split('.')[0])
+        if line_count > self.comm_log_max_lines:
+            # Delete oldest 20% of lines to avoid frequent trimming
+            lines_to_delete = int(self.comm_log_max_lines * 0.2)
+            self.comm_log_text.delete('1.0', f'{lines_to_delete}.0')
+
         # Build the line to insert
         line_parts = []
         
