@@ -2421,27 +2421,35 @@ Vector Analysis:
 
     def append_to_log(self, entry):
         """Append an entry to the log display"""
+        # Batch text operations for better performance
         self.comm_log_text.config(state=tk.NORMAL)
 
+        # Build the line to insert
+        line_parts = []
+        
         # Add timestamp if enabled
         if self.log_timestamp_var.get():
-            self.comm_log_text.insert(tk.END, f"[{entry['time']}] ", "timestamp")
+            line_parts.append((f"[{entry['time']}] ", "timestamp"))
 
         # Add direction indicator and message
         if entry["direction"] == "sent":
-            self.comm_log_text.insert(tk.END, "→ ", "sent")
-            self.comm_log_text.insert(tk.END, f"{entry['message']}\n", "sent")
+            line_parts.append(("→ ", "sent"))
+            line_parts.append((f"{entry['message']}\n", "sent"))
         else:
             if entry.get("is_error", False):
-                self.comm_log_text.insert(tk.END, "← ", "error")
-                self.comm_log_text.insert(tk.END, f"{entry['message']}\n", "error")
+                line_parts.append(("← ", "error"))
+                line_parts.append((f"{entry['message']}\n", "error"))
             else:
-                self.comm_log_text.insert(tk.END, "← ", "received")
-                self.comm_log_text.insert(tk.END, f"{entry['message']}\n", "received")
+                line_parts.append(("← ", "received"))
+                line_parts.append((f"{entry['message']}\n", "received"))
+
+        # Insert all parts at once
+        for text, tag in line_parts:
+            self.comm_log_text.insert(tk.END, text, tag)
 
         self.comm_log_text.config(state=tk.DISABLED)
 
-        # Auto-scroll to bottom if enabled
+        # Auto-scroll to bottom if enabled (defer this slightly for performance)
         if self.log_autoscroll_var.get():
             self.comm_log_text.see(tk.END)
 
@@ -3393,6 +3401,8 @@ Vector Analysis:
                     # Preview next command or finish
                     if self.gcode_buffer:
                         # More commands - show next preview immediately
+                        # Force GUI update for responsiveness
+                        self.root.update_idletasks()
                         self.stream_gcode_line_with_step()
                     else:
                         # No more commands - wait for completion
