@@ -2315,6 +2315,7 @@ Vector Analysis:
             self.laser_marker.set_data([self.work_pos["x"]], [self.work_pos["y"]])
 
             # Auto-scale plot if laser moves outside current view (only when not executing and auto-scale enabled)
+            need_redraw = False
             if not self.is_executing and self.auto_scale_enabled:
                 xlim = self.ax.get_xlim()
                 ylim = self.ax.get_ylim()
@@ -2323,30 +2324,36 @@ Vector Analysis:
 
                 # Check if position is outside current view
                 margin = 10  # mm margin around position
-                need_rescale = False
 
                 # If position is outside view, EXPAND the view to include it
                 # Don't shrink the view to just the position
                 if x_pos < xlim[0]:
                     new_xlim = (x_pos - margin, xlim[1])
                     self.ax.set_xlim(new_xlim)
-                    need_rescale = True
+                    need_redraw = True
                 elif x_pos > xlim[1]:
                     new_xlim = (xlim[0], x_pos + margin)
                     self.ax.set_xlim(new_xlim)
-                    need_rescale = True
+                    need_redraw = True
 
                 if y_pos < ylim[0]:
                     new_ylim = (y_pos - margin, ylim[1])
                     self.ax.set_ylim(new_ylim)
-                    need_rescale = True
+                    need_redraw = True
                 elif y_pos > ylim[1]:
                     new_ylim = (ylim[0], y_pos + margin)
                     self.ax.set_ylim(new_ylim)
-                    need_rescale = True
+                    need_redraw = True
 
-            # Always redraw to show laser marker position updates
-            self.canvas.draw_idle()
+            # Only redraw if needed (throttle to avoid excessive redraws)
+            # Throttle: redraw at most every 500ms during execution, every 200ms when idle
+            import time
+            current_time = time.time()
+            min_redraw_interval = 0.5 if self.is_executing else 0.2
+            
+            if need_redraw or (current_time - self._last_plot_update) > min_redraw_interval:
+                self._last_plot_update = current_time
+                self.canvas.draw_idle()
 
     def update_state_display(self):
         """Update GRBL state label with color coding"""
