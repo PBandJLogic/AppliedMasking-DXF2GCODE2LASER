@@ -222,16 +222,16 @@ class GCodeAdjuster:
 
         # Plot auto-scale settings
         self.auto_scale_enabled = True  # Toggle for auto-scaling to laser position
-        
+
         # Communication log
         self.comm_log_enabled = True  # Toggle for logging
         self.comm_log_max_lines = 1000  # Maximum log entries
         self.comm_log_entries = []  # Store log entries
         self.log_status_queries = False  # Toggle for logging status queries
-        
+
         # Smart polling
         self.last_command_time = 0  # Track when last command was sent
-        
+
         # Buffer management
         self.command_queue = []  # Queue of commands waiting to be sent
         self.buffer_size = 0  # Current buffer usage
@@ -960,7 +960,9 @@ class GCodeAdjuster:
         self.canvas.get_tk_widget().pack(side="top", fill="both", expand=True)
 
         # Communication log frame (bottom pane)
-        log_frame = ttk.LabelFrame(self.right_paned, text="Communication Log", padding=5)
+        log_frame = ttk.LabelFrame(
+            self.right_paned, text="Communication Log", padding=5
+        )
         self.right_paned.add(log_frame, weight=1)  # 1/4 of space
 
         # Log controls
@@ -973,7 +975,7 @@ class GCodeAdjuster:
             log_controls,
             text="Enable Logging",
             variable=self.log_enabled_var,
-            command=self.toggle_logging
+            command=self.toggle_logging,
         ).pack(side="left", padx=5)
 
         # Timestamp checkbox
@@ -982,23 +984,18 @@ class GCodeAdjuster:
             log_controls,
             text="Show Timestamps",
             variable=self.log_timestamp_var,
-            command=self.refresh_log_display
+            command=self.refresh_log_display,
         ).pack(side="left", padx=5)
 
         # Clear log button
         ttk.Button(
-            log_controls,
-            text="Clear Log",
-            command=self.clear_comm_log,
-            width=10
+            log_controls, text="Clear Log", command=self.clear_comm_log, width=10
         ).pack(side="left", padx=5)
 
         # Auto-scroll checkbox
         self.log_autoscroll_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(
-            log_controls,
-            text="Auto-scroll",
-            variable=self.log_autoscroll_var
+            log_controls, text="Auto-scroll", variable=self.log_autoscroll_var
         ).pack(side="left", padx=5)
 
         # Show status queries checkbox
@@ -1007,7 +1004,7 @@ class GCodeAdjuster:
             log_controls,
             text="Show Status Queries",
             variable=self.log_status_queries_var,
-            command=self.toggle_status_query_logging
+            command=self.toggle_status_query_logging,
         ).pack(side="left", padx=5)
 
         # Text widget with scrollbar for log
@@ -1019,12 +1016,10 @@ class GCodeAdjuster:
             height=10,
             wrap=tk.WORD,
             state=tk.DISABLED,
-            font=("Courier", 9)
+            font=("Courier", 9),
         )
         log_scrollbar = ttk.Scrollbar(
-            log_text_frame,
-            orient="vertical",
-            command=self.comm_log_text.yview
+            log_text_frame, orient="vertical", command=self.comm_log_text.yview
         )
         self.comm_log_text.configure(yscrollcommand=log_scrollbar.set)
 
@@ -1036,19 +1031,19 @@ class GCodeAdjuster:
         self.comm_log_text.tag_config("received", foreground="green")
         self.comm_log_text.tag_config("error", foreground="red")
         self.comm_log_text.tag_config("timestamp", foreground="gray")
-        
+
         # Bind scroll events to prevent propagation to parent widgets
         def on_mousewheel(event):
             # Handle mouse wheel scrolling within the text widget
             self.comm_log_text.yview_scroll(int(-1 * (event.delta / 120)), "units")
             return "break"  # Prevent event propagation
-        
+
         def on_scroll(event):
             # Handle other scroll events
             if event.delta:
                 self.comm_log_text.yview_scroll(int(-1 * (event.delta / 120)), "units")
             return "break"  # Prevent event propagation
-        
+
         # Bind mouse wheel and scroll events
         self.comm_log_text.bind("<MouseWheel>", on_mousewheel)
         self.comm_log_text.bind("<Button-4>", on_scroll)  # Linux scroll up
@@ -1112,7 +1107,7 @@ class GCodeAdjuster:
 
             # Check if we found actual reference points (not just padded zeros)
             has_real_points = any(point != (0.0, 0.0) for point in expected_points)
-            
+
             if expected_points and len(expected_points) >= 2 and has_real_points:
                 # Found reference points in comments - use first 2
                 self.reference_points_expected = expected_points[:2]
@@ -2361,23 +2356,19 @@ Vector Analysis:
         """Log a command sent to GRBL"""
         if not self.log_enabled_var.get():
             return
-        
+
         # Filter out status queries unless explicitly enabled
         if command == "?" and not self.log_status_queries:
             return
-        
+
         timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-        entry = {
-            "time": timestamp,
-            "direction": "sent",
-            "message": command
-        }
+        entry = {"time": timestamp, "direction": "sent", "message": command}
         self.comm_log_entries.append(entry)
-        
+
         # Trim log if too large
         if len(self.comm_log_entries) > self.comm_log_max_lines:
             self.comm_log_entries.pop(0)
-        
+
         # Update display
         self.append_to_log(entry)
 
@@ -2385,39 +2376,43 @@ Vector Analysis:
         """Log a response received from GRBL"""
         if not self.log_enabled_var.get():
             return
-        
+
         # Filter out status responses unless explicitly enabled
-        if response.startswith("<") and response.endswith(">") and not self.log_status_queries:
+        if (
+            response.startswith("<")
+            and response.endswith(">")
+            and not self.log_status_queries
+        ):
             return
-        
+
         timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-        
+
         # Determine if this is an error
         is_error = "error" in response.lower() or "alarm" in response.lower()
-        
+
         entry = {
             "time": timestamp,
             "direction": "received",
             "message": response,
-            "is_error": is_error
+            "is_error": is_error,
         }
         self.comm_log_entries.append(entry)
-        
+
         # Trim log if too large
         if len(self.comm_log_entries) > self.comm_log_max_lines:
             self.comm_log_entries.pop(0)
-        
+
         # Update display
         self.append_to_log(entry)
 
     def append_to_log(self, entry):
         """Append an entry to the log display"""
         self.comm_log_text.config(state=tk.NORMAL)
-        
+
         # Add timestamp if enabled
         if self.log_timestamp_var.get():
             self.comm_log_text.insert(tk.END, f"[{entry['time']}] ", "timestamp")
-        
+
         # Add direction indicator and message
         if entry["direction"] == "sent":
             self.comm_log_text.insert(tk.END, "→ ", "sent")
@@ -2429,9 +2424,9 @@ Vector Analysis:
             else:
                 self.comm_log_text.insert(tk.END, "← ", "received")
                 self.comm_log_text.insert(tk.END, f"{entry['message']}\n", "received")
-        
+
         self.comm_log_text.config(state=tk.DISABLED)
-        
+
         # Auto-scroll to bottom if enabled
         if self.log_autoscroll_var.get():
             self.comm_log_text.see(tk.END)
@@ -2455,10 +2450,10 @@ Vector Analysis:
         """Refresh the entire log display (for timestamp toggle)"""
         self.comm_log_text.config(state=tk.NORMAL)
         self.comm_log_text.delete(1.0, tk.END)
-        
+
         for entry in self.comm_log_entries:
             self.append_to_log(entry)
-        
+
         self.comm_log_text.config(state=tk.DISABLED)
 
     def _is_moving(self):
@@ -2471,80 +2466,91 @@ Vector Analysis:
         """Validate G-code command syntax before sending to GRBL"""
         if not command or not command.strip():
             return False
-        
+
         # Remove comments and whitespace
-        cmd = command.split(';')[0].strip().upper()
+        cmd = command.split(";")[0].strip().upper()
         if not cmd:
             return True  # Empty command after comment removal is OK
-        
+
         # Check for invalid parameter combinations
-        if 'G3' in cmd or 'G2' in cmd:  # Arc commands
+        if "G3" in cmd or "G2" in cmd:  # Arc commands
             # Arc commands should have F (feedrate) parameter - required
-            if 'F' not in cmd:
-                print(f"Error: Arc commands (G2/G3) must have F (feedrate) parameter: {command}")
+            if "F" not in cmd:
+                print(
+                    f"Error: Arc commands (G2/G3) must have F (feedrate) parameter: {command}"
+                )
                 return False
             # Arc commands should have I and J parameters
-            if 'G3' in cmd and ('I' not in cmd or 'J' not in cmd):
+            if "G3" in cmd and ("I" not in cmd or "J" not in cmd):
                 print(f"Warning: G3 arc command missing I or J parameters: {command}")
-            if 'G2' in cmd and ('I' not in cmd or 'J' not in cmd):
+            if "G2" in cmd and ("I" not in cmd or "J" not in cmd):
                 print(f"Warning: G2 arc command missing I or J parameters: {command}")
-        
+
         # Check for invalid feed rates
-        if 'F' in cmd:
+        if "F" in cmd:
             try:
                 # Extract F value and validate it's reasonable
                 import re
-                f_match = re.search(r'F(\d+(?:\.\d+)?)', cmd)
+
+                f_match = re.search(r"F(\d+(?:\.\d+)?)", cmd)
                 if f_match:
                     f_value = float(f_match.group(1))
                     if f_value < 0 or f_value > 10000:  # Reasonable feed rate range
-                        print(f"Warning: Feed rate F{f_value} seems unreasonable: {command}")
+                        print(
+                            f"Warning: Feed rate F{f_value} seems unreasonable: {command}"
+                        )
             except:
                 pass  # If we can't parse F, let GRBL handle it
-        
+
         # Check for invalid coordinates
-        for axis in ['X', 'Y', 'Z']:
+        for axis in ["X", "Y", "Z"]:
             if axis in cmd:
                 try:
                     import re
-                    coord_match = re.search(f'{axis}(-?\\d+(?:\\.\\d+)?)', cmd)
+
+                    coord_match = re.search(f"{axis}(-?\\d+(?:\\.\\d+)?)", cmd)
                     if coord_match:
                         coord_value = float(coord_match.group(1))
                         # Check for reasonable coordinate ranges (adjust as needed)
                         if abs(coord_value) > 1000:  # 1000mm max travel
-                            print(f"Warning: {axis} coordinate {coord_value} seems large: {command}")
+                            print(
+                                f"Warning: {axis} coordinate {coord_value} seems large: {command}"
+                            )
                 except:
                     pass  # If we can't parse coordinate, let GRBL handle it
-        
+
         return True
 
     def _process_command_queue(self):
         """Process commands from the queue, respecting buffer limits"""
         if not self.command_queue or self.waiting_for_ok:
             return
-        
+
         # Check if we have buffer space
         if self.buffer_size >= self.max_buffer_size:
-            print(f"Buffer full ({self.buffer_size}/{self.max_buffer_size}), queuing command")
+            print(
+                f"Buffer full ({self.buffer_size}/{self.max_buffer_size}), queuing command"
+            )
             return
-        
+
         # Send next command from queue
         command = self.command_queue.pop(0)
-        
+
         # Log the sent command
         self.log_sent_command(command)
-        
+
         # Track command time for smart polling
         import time
+
         self.last_command_time = time.time()
-        
+
         # Send the command
         self.serial_connection.write((command + "\n").encode())
-        
+
         # Update buffer tracking
         self.buffer_size += 1
         self.waiting_for_ok = True
-        
+
         # Track laser state based on M commands
         command_upper = command.upper().strip()
         if command_upper.startswith("M5") or command_upper == "M5":
@@ -2771,7 +2777,7 @@ Vector Analysis:
 
                 messagebox.showinfo(
                     "Reboot GRBL",
-                    "GRBL firmware rebooted successfully.\nSystem should be ready."
+                    "GRBL firmware rebooted successfully.\nSystem should be ready.",
                 )
         except Exception as e:
             messagebox.showerror("Error", f"Failed to reboot GRBL: {e}")
@@ -2989,7 +2995,7 @@ Vector Analysis:
         """Handle a single response from GRBL"""
         # Log the received response
         self.log_received_response(response)
-        
+
         # Check for disconnect signal from serial thread
         if response == "__DISCONNECTED__":
             self.handle_usb_disconnect()
@@ -3012,23 +3018,23 @@ Vector Analysis:
             # Update GRBL state to show error
             self.grbl_state = "Error"
             self.update_state_display()
-            
+
             # Show error in a user-friendly way
             error_code = response.replace("error:", "").strip()
             error_messages = {
                 "1": "Expected G-code word (malformed line)",
-                "2": "Bad number format", 
+                "2": "Bad number format",
                 "3": "Invalid statement",
                 "5": "Homing not enabled",
                 "20": "Unsupported command",
-                "22": "Parameter error"
+                "22": "Parameter error",
             }
             error_desc = error_messages.get(error_code, "Unknown error")
-            
+
             # Show error dialog for user awareness
             messagebox.showwarning(
-                "GRBL Error", 
-                f"Error {error_code}: {error_desc}\n\nResponse: {response}\n\nCheck your G-code file for issues."
+                "GRBL Error",
+                f"Error {error_code}: {error_desc}\n\nResponse: {response}\n\nCheck your G-code file for issues.",
             )
 
         # Settings responses ($N=value)
@@ -3061,13 +3067,13 @@ Vector Analysis:
             if not self._validate_gcode_command(command):
                 print(f"Invalid G-code command rejected: {command}")
                 return False
-            
+
             # Add command to queue
             self.command_queue.append(command)
-            
+
             # Try to send commands from queue
             self._process_command_queue()
-            
+
             return True
         except Exception as e:
             print(f"Error sending command: {e}")
@@ -3093,13 +3099,17 @@ Vector Analysis:
             # Schedule next update based on GRBL state
             if self.is_connected:
                 import time
+
                 if self.is_executing or self.grbl_state == "Run":
                     # Fast polling during G-code execution (50ms = 20 Hz)
                     interval = 50
                 elif self.grbl_state in ["Jog", "Hold"]:
                     # Fast polling during jogging or hold (50ms = 20 Hz)
                     interval = 50
-                elif self.grbl_state == "Idle" and (time.time() - self.last_command_time) < 2.0:
+                elif (
+                    self.grbl_state == "Idle"
+                    and (time.time() - self.last_command_time) < 2.0
+                ):
                     # Medium polling for 2 seconds after commands finish (200ms = 5 Hz)
                     interval = 200
                 elif self.grbl_state == "Idle":
@@ -3111,7 +3121,7 @@ Vector Analysis:
                 else:
                     # Default for other states (500ms = 2 Hz)
                     interval = 500
-                
+
                 self.status_update_id = self.root.after(interval, update_status)
 
         # Start with medium interval
@@ -3128,7 +3138,7 @@ Vector Analysis:
         # Command completed, reduce buffer count
         self.buffer_size = max(0, self.buffer_size - 1)
         self.waiting_for_ok = False
-        
+
         # Process next command in queue if available
         self._process_command_queue()
 
