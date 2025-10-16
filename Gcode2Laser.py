@@ -2479,13 +2479,15 @@ Vector Analysis:
         
         # Check for invalid parameter combinations
         if 'G3' in cmd or 'G2' in cmd:  # Arc commands
-            # Arc commands should not have S (spindle speed) parameter
-            if 'S' in cmd:
-                print(f"Error: Arc commands (G2/G3) cannot have S parameter: {command}")
+            # Arc commands should have F (feedrate) parameter - required
+            if 'F' not in cmd:
+                print(f"Error: Arc commands (G2/G3) must have F (feedrate) parameter: {command}")
                 return False
             # Arc commands should have I and J parameters
             if 'G3' in cmd and ('I' not in cmd or 'J' not in cmd):
                 print(f"Warning: G3 arc command missing I or J parameters: {command}")
+            if 'G2' in cmd and ('I' not in cmd or 'J' not in cmd):
+                print(f"Warning: G2 arc command missing I or J parameters: {command}")
         
         # Check for invalid feed rates
         if 'F' in cmd:
@@ -2505,7 +2507,7 @@ Vector Analysis:
             if axis in cmd:
                 try:
                     import re
-                    coord_match = re.search(f'{axis}(-?\d+(?:\.\d+)?)', cmd)
+                    coord_match = re.search(f'{axis}(-?\\d+(?:\\.\\d+)?)', cmd)
                     if coord_match:
                         coord_value = float(coord_match.group(1))
                         # Check for reasonable coordinate ranges (adjust as needed)
