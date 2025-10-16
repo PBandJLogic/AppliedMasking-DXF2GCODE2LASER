@@ -1861,11 +1861,11 @@ Vector Analysis:
             )
         if i_match:
             adjusted_line = re.sub(
-                r"I[+-]?\d+\.?\d*", f"I{new_i_offset:.2f}", adjusted_line
+                r"I[+-]?\d+\.?\d*", f"I{new_i_offset:.4f}", adjusted_line
             )
         if j_match:
             adjusted_line = re.sub(
-                r"J[+-]?\d+\.?\d*", f"J{new_j_offset:.2f}", adjusted_line
+                r"J[+-]?\d+\.?\d*", f"J{new_j_offset:.4f}", adjusted_line
             )
 
         return adjusted_line
