@@ -1855,6 +1855,37 @@ Vector Analysis:
         new_i_offset = adjusted_center_x - adjusted_start_x
         new_j_offset = adjusted_center_y - adjusted_start_y
 
+        # Validate and correct arc radius to prevent GRBL error:24
+        # GRBL checks that distance(start, center) == distance(end, center)
+        radius_start = np.sqrt(new_i_offset**2 + new_j_offset**2)
+        
+        # Calculate I,J from end point
+        i_from_end = adjusted_center_x - adjusted_end_x
+        j_from_end = adjusted_center_y - adjusted_end_y
+        radius_end = np.sqrt(i_from_end**2 + j_from_end**2)
+        
+        # Check if radii match within tolerance
+        radius_error = abs(radius_start - radius_end)
+        if radius_error > 0.01:  # More than 0.01mm error
+            # Adjust end point to match the radius from start point
+            # This keeps the arc valid while minimizing position error
+            if radius_start > 0:
+                # Calculate unit vector from center to end point
+                dx = adjusted_end_x - adjusted_center_x
+                dy = adjusted_end_y - adjusted_center_y
+                distance = np.sqrt(dx**2 + dy**2)
+                
+                if distance > 0:
+                    # Normalize and scale to correct radius
+                    adjusted_end_x = adjusted_center_x + (dx / distance) * radius_start
+                    adjusted_end_y = adjusted_center_y + (dy / distance) * radius_start
+                    
+                    # Log if adjustment is significant
+                    adjustment = np.sqrt((adjusted_end_x - (adjusted_center_x + i_from_end))**2 + 
+                                       (adjusted_end_y - (adjusted_center_y + j_from_end))**2)
+                    if adjustment > 0.05:
+                        print(f"Warning: Arc radius corrected by {adjustment:.3f}mm (exceeds 0.05mm threshold)")
+
         # Replace coordinates in the line
         adjusted_line = line
         if x_match:
