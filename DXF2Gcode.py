@@ -1915,8 +1915,10 @@ Colors:
                             dist_arc_start_to_g0_end = (
                                 (g0_x - g0_x) ** 2 + (g0_y - g0_y) ** 2
                             ) ** 0.5  # Arc starts at G0 end (always 0)
-                            
-                            if dist_arc_end_to_move_end < 0.001:  # Arc returns to where move ended (circular!)
+
+                            if (
+                                dist_arc_end_to_move_end < 0.001
+                            ):  # Arc returns to where move ended (circular!)
                                 # This is a circular arc pattern - optimize it!
                                 # Calculate arc center from G0 position (arc start)
                                 arc_center_x = g0_x + i_offset
@@ -4038,11 +4040,17 @@ DXF Units: {self.dxf_units}"""
                 element_id in self.engraved_elements
                 and element_id not in self.removed_elements
             ):
-                # Skip if this element has detailed geometry data
-                # (arcs, circles, polylines - they're processed separately)
+                # Skip if this element has complex geometry data that's processed separately
+                # (arcs, circles, polylines - they're processed from element_data)
                 if element_id in self.element_data:
-                    continue
-                    
+                    # Check if it's a complex geometry type that should be skipped
+                    element_data = self.element_data[element_id]
+                    if len(element_data) >= 5:
+                        _, _, _, geom_type_from_data, _ = element_data
+                        # Skip complex geometries - they're processed from element_data
+                        if geom_type_from_data in ['ARC', 'CIRCLE', 'LWPOLYLINE', 'POLYLINE', 'ELLIPSE', 'SPLINE']:
+                            continue
+
                 if element_id not in elements_by_id:
                     elements_by_id[element_id] = {
                         "geom_type": geom_type,
