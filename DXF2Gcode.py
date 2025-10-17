@@ -716,9 +716,13 @@ Colors:
         print(
             f"Optimizing toolpath for {len(chains)} chains (from {len(elements_list)} elements)..."
         )
+        
+        print("=" * 80)
+        print("ENTERING BOTTOM-LEFT SELECTION CODE")
+        print("=" * 80)
 
         # Debug: Print chain details
-        for i, chain in enumerate(chains):
+        for i, chain in enumerate(chains[:5]):  # Just print first 5 chains
             print(f"  Chain {i+1}: {len(chain)} elements")
             if len(chain) > 5:  # Only print details for chains with many elements
                 print(f"    First element: {chain[0][0]}")
@@ -727,8 +731,10 @@ Colors:
         # Now optimize the order of chains (not individual elements)
         optimized = []
         remaining_chains = chains.copy()
-        
-        print(f"DEBUG: chains has {len(chains)} elements, remaining_chains has {len(remaining_chains)} elements")
+
+        print(
+            f"DEBUG: chains has {len(chains)} elements, remaining_chains has {len(remaining_chains)} elements"
+        )
         print(f"DEBUG: Starting position is ({start_x}, {start_y})")
 
         # Find the element closest to bottom-left of workspace
