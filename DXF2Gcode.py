@@ -733,16 +733,23 @@ Colors:
             min_x = float("inf")
             min_y = float("inf")
             bottom_left_chain_index = 0
+            
+            print(f"Finding bottom-left element from {len(chains)} chains...")
 
             for i, chain in enumerate(chains):
                 # Get start point of first element in chain
                 chain_start = self.get_element_start_point(chain[0][0], chain[0][1])
                 x, y = chain_start
+                
+                # Debug output for first few chains
+                if i < 5:
+                    print(f"  Chain {i}: starts at ({x:.2f}, {y:.2f})")
 
                 # Check if this is more bottom-left (lower Y, then leftmost X)
                 if y < min_y or (y == min_y and x < min_x):
                     min_x, min_y = x, y
                     bottom_left_chain_index = i
+                    print(f"    New bottom-left candidate: chain {i} at ({x:.2f}, {y:.2f})")
 
             # Start with the bottom-left chain
             bottom_left_chain = remaining_chains.pop(bottom_left_chain_index)
@@ -750,7 +757,8 @@ Colors:
             current_pos = self.get_element_end_point(
                 bottom_left_chain[-1][0], bottom_left_chain[-1][1]
             )
-            print(f"Starting from bottom-left element at ({min_x:.2f}, {min_y:.2f})")
+            print(f"SELECTED: Starting from bottom-left chain {bottom_left_chain_index} at ({min_x:.2f}, {min_y:.2f})")
+            print(f"  First element ID: {bottom_left_chain[0][0]}")
         else:
             current_pos = (start_x, start_y)
 
@@ -4143,12 +4151,25 @@ DXF Units: {self.dxf_units}"""
 
         # Generate G-code for each element in optimized order
         print(f"Generating G-code for {len(optimized_elements)} optimized elements...")
+        
+        # Debug: Show first few elements to verify order
+        if optimized_elements:
+            print("First 5 elements in optimized order:")
+            for i, (elem_id, elem_info) in enumerate(optimized_elements[:5]):
+                if elem_info['geom_type'] == 'LINE' and 'points' in elem_info:
+                    start_pt = elem_info['points'][0] if elem_info['points'] else (0, 0)
+                    print(f"  {i+1}. ID:{elem_id} Type:{elem_info['geom_type']} Start:({start_pt[0]:.2f}, {start_pt[1]:.2f})")
+                else:
+                    print(f"  {i+1}. ID:{elem_id} Type:{elem_info['geom_type']}")
+        
         element_count = 0
         for element_id, element_info in optimized_elements:
             element_count += 1
-            print(
-                f"  Processing element {element_count}/{len(optimized_elements)}: {element_id} ({element_info['geom_type']})"
-            )
+            # Only print for first few elements to reduce noise
+            if element_count <= 3:
+                print(
+                    f"  Processing element {element_count}/{len(optimized_elements)}: {element_id} ({element_info['geom_type']})"
+                )
             geom_type = element_info["geom_type"]
             radius = element_info["radius"]
 
