@@ -1935,8 +1935,10 @@ Colors:
                                     "3" if arc_type == "2" else "2"
                                 )  # Flip G2<->G3
 
-                                # Replace the entire sequence with just the reversed arc
-                                # DON'T add the original move - it's being replaced
+                                # Add the original move first (it's still needed!)
+                                optimized_lines.append(gcode_lines[i])
+                                
+                                # Then add the reversed arc to replace the G0 + G3 sequence
                                 optimized_arc = f"G{new_arc_type} X{new_end_x:.3f} Y{new_end_y:.3f} I{new_i_offset:.3f} J{new_j_offset:.3f} F{self.gcode_settings['feedrate']} S{self.gcode_settings['laser_power']}"
 
                                 optimized_lines.append(
@@ -1944,7 +1946,7 @@ Colors:
                                 )
                                 optimized_lines.append(optimized_arc)
                                 current_x, current_y = new_end_x, new_end_y
-                                i = k + 1  # Skip original move, G0, and arc
+                                i = k + 1  # Skip G0 and original arc (but we already added the move)
                                 optimization_applied = True
                                 break  # Break inner loop
                             # If arc doesn't match optimization criteria, stop looking
@@ -2038,7 +2040,7 @@ Colors:
                         settling_cmd = f"G1 X{x} Y{y}"
                         if z:
                             settling_cmd += f" Z{z}"
-                        settling_cmd += f" F{self.gcode_settings['feedrate']}  ; Settling move for arc"
+                        settling_cmd += f" F{self.gcode_settings['feedrate']} S{self.gcode_settings['laser_power']}  ; Settling move for arc"
 
                         final_lines.append(settling_cmd)
                         settling_count += 1
@@ -4192,8 +4194,7 @@ DXF Units: {self.dxf_units}"""
                             )  # -radius (going from right to center)
                             j_offset1 = cy - start_y  # 0
                             gcode.append(
-                                f"G3 X{halfway_x:.3f} Y{halfway_y:.3f} I{i_offset1:.3f} J{j_offset1:.3f} "
-                                f"F{self.gcode_settings['feedrate']} S{self.gcode_settings['laser_power']}  ; Circle 1st half"
+                                f"G3 X{halfway_x:.3f} Y{halfway_y:.3f} I{i_offset1:.3f} J{j_offset1:.3f} F{self.gcode_settings['feedrate']} S{self.gcode_settings['laser_power']}  ; Circle 1st half"
                             )
 
                             # Second semicircle: halfway -> end (180° to 360°)
@@ -4202,8 +4203,7 @@ DXF Units: {self.dxf_units}"""
                             )  # radius (going from left to center)
                             j_offset2 = cy - halfway_y  # 0
                             gcode.append(
-                                f"G3 X{end_x:.3f} Y{end_y:.3f} I{i_offset2:.3f} J{j_offset2:.3f} "
-                                f"F{self.gcode_settings['feedrate']} S{self.gcode_settings['laser_power']}  ; Circle 2nd half"
+                                f"G3 X{end_x:.3f} Y{end_y:.3f} I{i_offset2:.3f} J{j_offset2:.3f} F{self.gcode_settings['feedrate']} S{self.gcode_settings['laser_power']}  ; Circle 2nd half"
                             )
                         else:
                             # Circle partially outside workspace - use line segment approximation with clipping
@@ -4257,8 +4257,7 @@ DXF Units: {self.dxf_units}"""
 
                                         # Cut to end
                                         gcode.append(
-                                            f"G1 X{clip_end_x:.3f} Y{clip_end_y:.3f} "
-                                            f"F{self.gcode_settings['feedrate']} S{self.gcode_settings['laser_power']}"
+                                            f"G1 X{clip_end_x:.3f} Y{clip_end_y:.3f} F{self.gcode_settings['feedrate']} S{self.gcode_settings['laser_power']}"
                                         )
                                         current_x, current_y = clip_end_x, clip_end_y
                                         segments_added += 1
