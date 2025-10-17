@@ -1835,6 +1835,8 @@ Colors:
                         (target_x - current_x) ** 2 + (target_y - current_y) ** 2
                     ) ** 0.5
                     if dist < 0.001:  # Zero-length move
+                        # Skip this unnecessary G0 move
+                        print(f"  Eliminated unnecessary G0 to ({target_x:.3f}, {target_y:.3f}) - already at position")
                         i += 1
                         continue
 
@@ -1937,7 +1939,9 @@ Colors:
 
                                 # Add the original move first (it's still needed!)
                                 optimized_lines.append(gcode_lines[i])
-                                
+                                # Update position after the original move
+                                current_x, current_y = end_x, end_y
+
                                 # Then add the reversed arc to replace the G0 + G3 sequence
                                 optimized_arc = f"G{new_arc_type} X{new_end_x:.3f} Y{new_end_y:.3f} I{new_i_offset:.3f} J{new_j_offset:.3f} F{self.gcode_settings['feedrate']} S{self.gcode_settings['laser_power']}"
 
@@ -1945,8 +1949,11 @@ Colors:
                                     f"; Optimized: eliminated G0 travel by reversing circular arc"
                                 )
                                 optimized_lines.append(optimized_arc)
+                                # Update position after the reversed arc
                                 current_x, current_y = new_end_x, new_end_y
-                                i = k + 1  # Skip G0 and original arc (but we already added the move)
+                                i = (
+                                    k + 1
+                                )  # Skip G0 and original arc (but we already added the move)
                                 optimization_applied = True
                                 break  # Break inner loop
                             # If arc doesn't match optimization criteria, stop looking
