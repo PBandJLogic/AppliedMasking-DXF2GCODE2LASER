@@ -65,6 +65,10 @@ class DXFGUI:
             "wpos_home_z": -74.9,
             "raise_laser_between_paths": False,
             "optimize_toolpath": True,  # Enable toolpath optimization by default
+            # Toolpath optimization parameters
+            "proximity_threshold": 2.0,  # mm - chains within this distance are "nearby"
+            "connection_multiplier": 0.001,  # Heavily favor connected chains
+            "proximity_multiplier": 0.3,  # Moderately favor nearby chains
         }
 
         # Unit conversion settings
@@ -611,7 +615,15 @@ Colors:
 
             # Try to extend the chain in both directions
             changed = True
+            loop_count = 0
+            max_loops = 1000  # Safety limit to prevent infinite loops
             while changed:
+                loop_count += 1
+                if loop_count > max_loops:
+                    print(
+                        f"WARNING: find_connected_chains loop exceeded {max_loops} iterations for element {element_id}"
+                    )
+                    break
                 changed = False
                 chain_start_point = self.get_element_start_point(
                     chain[0][0], chain[0][1]
@@ -704,17 +716,64 @@ Colors:
             f"Optimizing toolpath for {len(chains)} chains (from {len(elements_list)} elements)..."
         )
 
+        # Debug: Print chain details
+        for i, chain in enumerate(chains):
+            print(f"  Chain {i+1}: {len(chain)} elements")
+            if len(chain) > 5:  # Only print details for chains with many elements
+                print(f"    First element: {chain[0][0]}")
+                print(f"    Last element: {chain[-1][0]}")
+
         # Now optimize the order of chains (not individual elements)
         optimized = []
         remaining_chains = chains.copy()
-        current_pos = (start_x, start_y)
+
+        # Find the element closest to bottom-left of workspace
+        if chains:
+            min_x = float("inf")
+            min_y = float("inf")
+            bottom_left_chain_index = 0
+
+            for i, chain in enumerate(chains):
+                # Get start point of first element in chain
+                chain_start = self.get_element_start_point(chain[0][0], chain[0][1])
+                x, y = chain_start
+
+                # Check if this is more bottom-left (lower Y, then leftmost X)
+                if y < min_y or (y == min_y and x < min_x):
+                    min_x, min_y = x, y
+                    bottom_left_chain_index = i
+
+            # Start with the bottom-left chain
+            bottom_left_chain = remaining_chains.pop(bottom_left_chain_index)
+            optimized.append(bottom_left_chain)
+            current_pos = self.get_element_end_point(
+                bottom_left_chain[-1][0], bottom_left_chain[-1][1]
+            )
+            print(f"Starting from bottom-left element at ({min_x:.2f}, {min_y:.2f})")
+        else:
+            current_pos = (start_x, start_y)
 
         # Use nearest neighbor algorithm on chains
+        chain_iteration = 0
         while remaining_chains:
+            chain_iteration += 1
+            if chain_iteration > len(chains) + 10:  # Safety check
+                print(f"WARNING: optimize_toolpath loop exceeded expected iterations")
+                break
+            print(
+                f"  Processing chain {chain_iteration}/{len(chains)} (remaining: {len(remaining_chains)})"
+            )
             # Find the chain with the closest entry point to current position
             min_distance = float("inf")
             closest_index = 0
             should_reverse_chain = False
+
+            # Get optimization parameters from settings
+            proximity_threshold = self.gcode_settings.get("proximity_threshold", 2.0)
+            connection_multiplier = self.gcode_settings.get(
+                "connection_multiplier", 0.001
+            )
+            proximity_multiplier = self.gcode_settings.get("proximity_multiplier", 0.3)
 
             for i, chain in enumerate(remaining_chains):
                 # Get start and end points of the entire chain
@@ -732,6 +791,39 @@ Colors:
                 else:
                     distance = distance_to_start
                     reverse_chain = False
+
+                # Apply connection and proximity multipliers
+                if optimized:
+                    # Check if this chain connects to the last processed chain
+                    last_chain = (
+                        optimized[-1]
+                        if isinstance(optimized[-1], list)
+                        else [optimized[-1]]
+                    )
+                    last_chain_end = self.get_element_end_point(
+                        last_chain[-1][0], last_chain[-1][1]
+                    )
+
+                    # Check connection (within 0.1mm tolerance)
+                    connects_to_start = (
+                        self.calculate_distance(last_chain_end, chain_start) < 0.1
+                    )
+                    connects_to_end = (
+                        self.calculate_distance(last_chain_end, chain_end) < 0.1
+                    )
+
+                    if connects_to_start or connects_to_end:
+                        # Connected chains - highest priority
+                        distance *= connection_multiplier
+                        print(
+                            f"    Chain {i} is CONNECTED (distance multiplier: {connection_multiplier})"
+                        )
+                    elif distance < proximity_threshold:
+                        # Nearby chains - medium priority
+                        distance *= proximity_multiplier
+                        print(
+                            f"    Chain {i} is NEARBY ({distance:.2f}mm, multiplier: {proximity_multiplier})"
+                        )
 
                 if distance < min_distance:
                     min_distance = distance
@@ -1891,7 +1983,61 @@ Colors:
             optimized_lines.append(gcode_lines[i])
             i += 1
 
-        return optimized_lines
+        # Second pass: Add settling G1 commands after G0 when followed by G2/G3
+        print("Adding settling G1 commands for arc stability...")
+        final_lines = []
+        i = 0
+        settling_count = 0
+
+        while i < len(optimized_lines):
+            current_line = optimized_lines[i].strip()
+            final_lines.append(optimized_lines[i])
+
+            # Check if this is a G0 command
+            if current_line.startswith("G0"):
+                g0_match = re.match(
+                    r"G0\s+X([\d.-]+)\s+Y([\d.-]+)(?:\s+Z([\d.-]+))?", current_line
+                )
+                if g0_match:
+                    # Look ahead for the next G-code command (skip blank lines and comments)
+                    j = i + 1
+                    next_gcode_line = None
+                    next_gcode_index = None
+
+                    while j < len(optimized_lines):
+                        line = optimized_lines[j].strip()
+                        # Skip blank lines and comment-only lines
+                        if line and not line.startswith(";"):
+                            next_gcode_line = line
+                            next_gcode_index = j
+                            break
+                        else:
+                            # Add blank/comment lines to output
+                            final_lines.append(optimized_lines[j])
+                        j += 1
+
+                    # Check if next G-code command is G2 or G3
+                    if next_gcode_line and (
+                        next_gcode_line.startswith("G2")
+                        or next_gcode_line.startswith("G3")
+                    ):
+                        x, y = g0_match.group(1), g0_match.group(2)
+                        z = g0_match.group(3) if g0_match.group(3) else None
+
+                        # Insert settling G1 command
+                        settling_cmd = f"G1 X{x} Y{y}"
+                        if z:
+                            settling_cmd += f" Z{z}"
+                        settling_cmd += f" F{self.gcode_settings['feedrate']}  ; Settling move for arc"
+
+                        final_lines.append(settling_cmd)
+                        settling_count += 1
+                        i = next_gcode_index - 1  # Position before the arc command
+
+            i += 1
+
+        print(f"Added {settling_count} settling G1 commands")
+        return final_lines
 
     def generate_arc_gcode(
         self,
@@ -3867,6 +4013,8 @@ DXF Units: {self.dxf_units}"""
 
     def generate_gcode(self, points):
         """Generate G-code from points"""
+        print("=== Starting G-code generation ===")
+        print(f"Input points: {len(points)}")
         gcode = []
 
         # Add preamble
@@ -3904,7 +4052,13 @@ DXF Units: {self.dxf_units}"""
             print("Toolpath optimization disabled - using original element order")
 
         # Generate G-code for each element in optimized order
+        print(f"Generating G-code for {len(optimized_elements)} optimized elements...")
+        element_count = 0
         for element_id, element_info in optimized_elements:
+            element_count += 1
+            print(
+                f"  Processing element {element_count}/{len(optimized_elements)}: {element_id} ({element_info['geom_type']})"
+            )
             geom_type = element_info["geom_type"]
             radius = element_info["radius"]
 
@@ -4117,6 +4271,7 @@ DXF Units: {self.dxf_units}"""
             elif geom_type == "ARC":
                 # Use the offset coordinates from current_points (already includes X/Y offsets)
                 arc_points = element_info["points"]
+                print(f"    Processing ARC element with {len(arc_points)} points")
                 if len(arc_points) >= 1:
                     cx, cy = arc_points[0]
                     radius = element_info["radius"]
@@ -5151,11 +5306,23 @@ DXF Units: {self.dxf_units}"""
         main_frame = ttk.Frame(scrollable_frame)
         main_frame.pack(fill="both", expand=True, padx=20, pady=20)
 
-        # Enable mousewheel scrolling
+        # Enable mousewheel scrolling (works on both Windows/Linux and Mac)
         def _on_mousewheel(event):
-            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+            # Handle different platforms
+            if event.delta:
+                # Windows and Linux
+                canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+            else:
+                # Mac trackpad scrolling
+                canvas.yview_scroll(int(-1 * event.num), "units")
 
-        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        # Bind mousewheel events for different platforms
+        canvas.bind("<MouseWheel>", _on_mousewheel)  # Windows/Linux
+        canvas.bind("<Button-4>", lambda e: canvas.yview_scroll(-1, "units"))  # Linux scroll up
+        canvas.bind("<Button-5>", lambda e: canvas.yview_scroll(1, "units"))   # Linux scroll down
+        
+        # Make sure the canvas can receive focus for scrolling
+        canvas.bind("<1>", lambda e: canvas.focus_set())
 
         # Variables for the form
         preamble_var = tk.StringVar(value=self.gcode_settings["preamble"])
@@ -5314,6 +5481,49 @@ DXF Units: {self.dxf_units}"""
             settings_frame, text="Raise laser between paths", variable=raise_laser_var
         ).pack(anchor="w", pady=(5, 0))
 
+        # Toolpath optimization settings frame
+        toolpath_frame = ttk.LabelFrame(
+            settings_frame, text="Toolpath Optimization", padding=5
+        )
+        toolpath_frame.pack(fill="x", pady=(10, 0))
+
+        # Proximity threshold
+        proximity_frame = ttk.Frame(toolpath_frame)
+        proximity_frame.pack(fill="x", pady=2)
+        ttk.Label(proximity_frame, text="Proximity Threshold (mm):").pack(side="left")
+        proximity_var = tk.DoubleVar(
+            value=self.gcode_settings.get("proximity_threshold", 2.0)
+        )
+        ttk.Entry(proximity_frame, textvariable=proximity_var, width=10).pack(
+            side="right"
+        )
+
+        # Connection multiplier
+        connection_frame = ttk.Frame(toolpath_frame)
+        connection_frame.pack(fill="x", pady=2)
+        ttk.Label(connection_frame, text="Connection Priority (0.001-0.1):").pack(
+            side="left"
+        )
+        connection_var = tk.DoubleVar(
+            value=self.gcode_settings.get("connection_multiplier", 0.001)
+        )
+        ttk.Entry(connection_frame, textvariable=connection_var, width=10).pack(
+            side="right"
+        )
+
+        # Proximity multiplier
+        proximity_mult_frame = ttk.Frame(toolpath_frame)
+        proximity_mult_frame.pack(fill="x", pady=2)
+        ttk.Label(proximity_mult_frame, text="Proximity Priority (0.1-1.0):").pack(
+            side="left"
+        )
+        proximity_mult_var = tk.DoubleVar(
+            value=self.gcode_settings.get("proximity_multiplier", 0.3)
+        )
+        ttk.Entry(proximity_mult_frame, textvariable=proximity_mult_var, width=10).pack(
+            side="right"
+        )
+
         # Optimize toolpath checkbox
         optimize_toolpath_var = tk.BooleanVar(
             value=self.gcode_settings.get("optimize_toolpath", True)
@@ -5357,6 +5567,10 @@ DXF Units: {self.dxf_units}"""
             self.gcode_settings["wpos_home_z"] = wpos_home_z_var.get()
             self.gcode_settings["raise_laser_between_paths"] = raise_laser_var.get()
             self.gcode_settings["optimize_toolpath"] = optimize_toolpath_var.get()
+            # Toolpath optimization settings
+            self.gcode_settings["proximity_threshold"] = proximity_var.get()
+            self.gcode_settings["connection_multiplier"] = connection_var.get()
+            self.gcode_settings["proximity_multiplier"] = proximity_mult_var.get()
             # Now save to file
             self.save_settings_to_file()
 
@@ -5387,6 +5601,10 @@ DXF Units: {self.dxf_units}"""
                 self.gcode_settings.get("optimize_toolpath", True)
             )
             force_ccw_arcs_var.set(self.gcode_settings.get("force_ccw_arcs", True))
+            # Toolpath optimization settings
+            proximity_var.set(self.gcode_settings.get("proximity_threshold", 2.0))
+            connection_var.set(self.gcode_settings.get("connection_multiplier", 0.001))
+            proximity_mult_var.set(self.gcode_settings.get("proximity_multiplier", 0.3))
 
         ttk.Button(
             file_frame, text="Load Settings from File", command=load_from_file
@@ -5418,14 +5636,26 @@ DXF Units: {self.dxf_units}"""
             self.gcode_settings["wpos_home_z"] = wpos_home_z_var.get()
             self.gcode_settings["raise_laser_between_paths"] = raise_laser_var.get()
             self.gcode_settings["optimize_toolpath"] = optimize_toolpath_var.get()
+            # Toolpath optimization settings
+            self.gcode_settings["proximity_threshold"] = proximity_var.get()
+            self.gcode_settings["connection_multiplier"] = connection_var.get()
+            self.gcode_settings["proximity_multiplier"] = proximity_mult_var.get()
             # Update plot to reflect new workspace bounds
             self.update_plot()
+            cleanup_and_close()
+
+        def cleanup_and_close():
+            # Clean up mousewheel bindings to prevent memory leaks
+            canvas.unbind("<MouseWheel>")
+            canvas.unbind("<Button-4>")
+            canvas.unbind("<Button-5>")
+            canvas.unbind("<1>")
             settings_window.destroy()
 
         ttk.Button(button_frame, text="Apply", command=save_settings).pack(
             side="right", padx=(5, 0)
         )
-        ttk.Button(button_frame, text="Cancel", command=settings_window.destroy).pack(
+        ttk.Button(button_frame, text="Cancel", command=cleanup_and_close).pack(
             side="right"
         )
 
