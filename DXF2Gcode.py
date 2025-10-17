@@ -727,20 +727,23 @@ Colors:
         # Now optimize the order of chains (not individual elements)
         optimized = []
         remaining_chains = chains.copy()
+        
+        print(f"DEBUG: chains has {len(chains)} elements, remaining_chains has {len(remaining_chains)} elements")
+        print(f"DEBUG: Starting position is ({start_x}, {start_y})")
 
         # Find the element closest to bottom-left of workspace
         if chains:
             min_x = float("inf")
             min_y = float("inf")
             bottom_left_chain_index = 0
-            
+
             print(f"Finding bottom-left element from {len(chains)} chains...")
 
             for i, chain in enumerate(chains):
                 # Get start point of first element in chain
                 chain_start = self.get_element_start_point(chain[0][0], chain[0][1])
                 x, y = chain_start
-                
+
                 # Debug output for first few chains
                 if i < 5:
                     print(f"  Chain {i}: starts at ({x:.2f}, {y:.2f})")
@@ -749,7 +752,9 @@ Colors:
                 if y < min_y or (y == min_y and x < min_x):
                     min_x, min_y = x, y
                     bottom_left_chain_index = i
-                    print(f"    New bottom-left candidate: chain {i} at ({x:.2f}, {y:.2f})")
+                    print(
+                        f"    New bottom-left candidate: chain {i} at ({x:.2f}, {y:.2f})"
+                    )
 
             # Start with the bottom-left chain
             bottom_left_chain = remaining_chains.pop(bottom_left_chain_index)
@@ -757,7 +762,9 @@ Colors:
             current_pos = self.get_element_end_point(
                 bottom_left_chain[-1][0], bottom_left_chain[-1][1]
             )
-            print(f"SELECTED: Starting from bottom-left chain {bottom_left_chain_index} at ({min_x:.2f}, {min_y:.2f})")
+            print(
+                f"SELECTED: Starting from bottom-left chain {bottom_left_chain_index} at ({min_x:.2f}, {min_y:.2f})"
+            )
             print(f"  First element ID: {bottom_left_chain[0][0]}")
         else:
             current_pos = (start_x, start_y)
@@ -4139,20 +4146,22 @@ DXF Units: {self.dxf_units}"""
         # Track current position for G0 moves between elements
         current_x, current_y = 0.0, 0.0
         last_engraved_x, last_engraved_y = 0.0, 0.0
-        
+
         # Debug: Show what elements we have
         print(f"\n=== Elements collected for optimization ===")
         print(f"Total elements in elements_by_id: {len(elements_by_id)}")
         geom_types_count = {}
         for eid, einfo in elements_by_id.items():
-            gt = einfo['geom_type']
+            gt = einfo["geom_type"]
             geom_types_count[gt] = geom_types_count.get(gt, 0) + 1
         print(f"Geometry types: {geom_types_count}")
-        
+
         # Show a few examples
         for i, (eid, einfo) in enumerate(list(elements_by_id.items())[:3]):
-            if einfo['points']:
-                print(f"  Example {i+1}: ID={eid}, Type={einfo['geom_type']}, First point={einfo['points'][0]}")
+            if einfo["points"]:
+                print(
+                    f"  Example {i+1}: ID={eid}, Type={einfo['geom_type']}, First point={einfo['points'][0]}"
+                )
 
         # Optimize toolpath by sorting elements to minimize travel distance (if enabled)
         if self.gcode_settings.get("optimize_toolpath", True):
@@ -4160,24 +4169,28 @@ DXF Units: {self.dxf_units}"""
             optimized_elements = self.optimize_toolpath(
                 elements_by_id, current_x, current_y
             )
-            print(f"Optimization complete. Returned {len(optimized_elements)} elements.")
+            print(
+                f"Optimization complete. Returned {len(optimized_elements)} elements."
+            )
         else:
             optimized_elements = list(elements_by_id.items())
             print("Toolpath optimization disabled - using original element order")
 
         # Generate G-code for each element in optimized order
         print(f"Generating G-code for {len(optimized_elements)} optimized elements...")
-        
+
         # Debug: Show first few elements to verify order
         if optimized_elements:
             print("First 5 elements in optimized order:")
             for i, (elem_id, elem_info) in enumerate(optimized_elements[:5]):
-                if elem_info['geom_type'] == 'LINE' and 'points' in elem_info:
-                    start_pt = elem_info['points'][0] if elem_info['points'] else (0, 0)
-                    print(f"  {i+1}. ID:{elem_id} Type:{elem_info['geom_type']} Start:({start_pt[0]:.2f}, {start_pt[1]:.2f})")
+                if elem_info["geom_type"] == "LINE" and "points" in elem_info:
+                    start_pt = elem_info["points"][0] if elem_info["points"] else (0, 0)
+                    print(
+                        f"  {i+1}. ID:{elem_id} Type:{elem_info['geom_type']} Start:({start_pt[0]:.2f}, {start_pt[1]:.2f})"
+                    )
                 else:
                     print(f"  {i+1}. ID:{elem_id} Type:{elem_info['geom_type']}")
-        
+
         element_count = 0
         for element_id, element_info in optimized_elements:
             element_count += 1
