@@ -868,7 +868,7 @@ Colors:
         flattened_optimized = []
         for chain in optimized:
             flattened_optimized.extend(chain)
-        
+
         # Calculate total optimized travel distance
         optimized_distance = 0.0
         current_pos = (start_x, start_y)
@@ -5321,15 +5321,23 @@ DXF Units: {self.dxf_units}"""
                 # Mac trackpad scrolling
                 canvas.yview_scroll(int(-1 * event.num), "units")
 
-        # Bind mousewheel events for different platforms
-        canvas.bind("<MouseWheel>", _on_mousewheel)  # Windows/Linux
-        canvas.bind(
-            "<Button-4>", lambda e: canvas.yview_scroll(-1, "units")
-        )  # Linux scroll up
-        canvas.bind(
-            "<Button-5>", lambda e: canvas.yview_scroll(1, "units")
-        )  # Linux scroll down
-
+        # Bind mousewheel events for different platforms to the entire window
+        def bind_scroll_events(widget):
+            """Recursively bind scroll events to widget and all its children"""
+            widget.bind("<MouseWheel>", _on_mousewheel)  # Windows/Linux
+            widget.bind("<Button-4>", lambda e: canvas.yview_scroll(-1, "units"))  # Linux scroll up
+            widget.bind("<Button-5>", lambda e: canvas.yview_scroll(1, "units"))   # Linux scroll down
+            
+            # Bind to all child widgets recursively
+            for child in widget.winfo_children():
+                bind_scroll_events(child)
+        
+        # Bind scroll events to the entire settings window
+        bind_scroll_events(settings_window)
+        
+        # Also bind to the main frame to ensure coverage
+        bind_scroll_events(main_frame)
+        
         # Make sure the canvas can receive focus for scrolling
         canvas.bind("<1>", lambda e: canvas.focus_set())
 
@@ -5655,9 +5663,21 @@ DXF Units: {self.dxf_units}"""
 
         def cleanup_and_close():
             # Clean up mousewheel bindings to prevent memory leaks
-            canvas.unbind("<MouseWheel>")
-            canvas.unbind("<Button-4>")
-            canvas.unbind("<Button-5>")
+            def unbind_scroll_events(widget):
+                """Recursively unbind scroll events from widget and all its children"""
+                try:
+                    widget.unbind("<MouseWheel>")
+                    widget.unbind("<Button-4>")
+                    widget.unbind("<Button-5>")
+                except:
+                    pass  # Some widgets might not have these bindings
+                
+                # Unbind from all child widgets recursively
+                for child in widget.winfo_children():
+                    unbind_scroll_events(child)
+            
+            # Clean up all scroll bindings
+            unbind_scroll_events(settings_window)
             canvas.unbind("<1>")
             settings_window.destroy()
 
