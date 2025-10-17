@@ -2059,46 +2059,68 @@ Colors:
             i += 1
 
         print(f"Added {settling_count} settling G1 commands")
-        
+
         # Third pass: Final cleanup - remove any remaining unnecessary G0 moves
         print("Final cleanup pass - removing remaining unnecessary G0 moves...")
         cleaned_lines = []
         current_x, current_y = None, None
         removed_count = 0
-        
+        last_was_g0 = False
+        last_g0_line = None
+
         for i, line in enumerate(final_lines):
             line_stripped = line.strip()
-            
+
             # Track position from G0/G1/G2/G3 moves
-            if line_stripped.startswith(('G0', 'G1', 'G2', 'G3')):
+            if line_stripped.startswith(("G0", "G1", "G2", "G3")):
                 # Extract X and Y coordinates
-                x_match = re.search(r'X([-\d.]+)', line_stripped)
-                y_match = re.search(r'Y([-\d.]+)', line_stripped)
-                
-                if line_stripped.startswith('G0') and x_match and y_match:
+                x_match = re.search(r"X([-\d.]+)", line_stripped)
+                y_match = re.search(r"Y([-\d.]+)", line_stripped)
+
+                if line_stripped.startswith("G0") and x_match and y_match:
                     target_x = float(x_match.group(1))
                     target_y = float(y_match.group(1))
-                    
+
+                    # Check for duplicate consecutive G0 moves
+                    if last_was_g0 and last_g0_line:
+                        # Remove the previous G0 since we have another one
+                        if cleaned_lines and cleaned_lines[-1] == last_g0_line:
+                            cleaned_lines.pop()
+                            removed_count += 1
+                            print(f"  Removed duplicate G0 move")
+
                     # Check if this G0 is necessary
                     if current_x is not None and current_y is not None:
-                        dist = math.sqrt((target_x - current_x) ** 2 + (target_y - current_y) ** 2)
-                        if dist < 0.001:
+                        dist = math.sqrt(
+                            (target_x - current_x) ** 2 + (target_y - current_y) ** 2
+                        )
+                        if dist < 0.01:  # Increased tolerance to 0.01mm
                             # Skip this unnecessary G0
                             removed_count += 1
-                            print(f"  Removed G0 to ({target_x:.3f}, {target_y:.3f}) - already at position")
+                            print(
+                                f"  Removed G0 to ({target_x:.3f}, {target_y:.3f}) - already at position (dist={dist:.6f}mm)"
+                            )
+                            last_was_g0 = False
                             continue
-                    
+
                     current_x, current_y = target_x, target_y
+                    last_was_g0 = True
+                    last_g0_line = line
                 elif x_match and y_match:
                     # G1/G2/G3 - update position
                     current_x = float(x_match.group(1))
                     current_y = float(y_match.group(1))
-            
+                    last_was_g0 = False
+            else:
+                # Not a movement command
+                if not line_stripped.startswith(";"):
+                    last_was_g0 = False
+
             cleaned_lines.append(line)
-        
+
         if removed_count > 0:
             print(f"Removed {removed_count} unnecessary G0 moves in final cleanup")
-        
+
         return cleaned_lines
 
     def generate_arc_gcode(
@@ -4054,14 +4076,14 @@ DXF Units: {self.dxf_units}"""
             messagebox.showwarning("Warning", "No DXF file loaded")
             return
 
-        # Filter points for engraving only
+        # Filter points for engraving only - KEEP element_id for optimization!
         engraving_points = []
         for x, y, radius, geom_type, element_id in self.current_points:
             if (
                 element_id in self.engraved_elements
                 and element_id not in self.removed_elements
             ):
-                engraving_points.append((x, y, radius, geom_type))
+                engraving_points.append((x, y, radius, geom_type, element_id))
 
         if not engraving_points:
             messagebox.showwarning("Warning", "No elements marked for engraving")
@@ -4156,13 +4178,14 @@ DXF Units: {self.dxf_units}"""
                             need_move = True
                         else:
                             dist_to_start = math.sqrt(
-                                (clipped_start_x - current_x) ** 2 + (clipped_start_y - current_y) ** 2
+                                (clipped_start_x - current_x) ** 2
+                                + (clipped_start_y - current_y) ** 2
                             )
                             need_move = dist_to_start > 0.001
-                        
+
                         # Only add header if we're actually going to engrave
                         gcode.append("; === LINE GEOMETRY ===")
-                        
+
                         # G0 move to start point if not already there
                         if need_move:
                             gcode.append(
