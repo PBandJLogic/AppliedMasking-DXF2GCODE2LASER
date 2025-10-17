@@ -1912,10 +1912,12 @@ Colors:
                             dist_arc_end_to_move_end = (
                                 (arc_end_x - end_x) ** 2 + (arc_end_y - end_y) ** 2
                             ) ** 0.5
-                            dist_arc_start_to_g0_end = (
-                                (g0_x - g0_x) ** 2 + (g0_y - g0_y) ** 2
-                            ) ** 0.5  # Arc starts at G0 end (always 0)
+                            # Arc should start at the G0 end position
+                            # No need to calculate distance - arc always starts at G0 end
 
+                            # Check if this forms a circular pattern:
+                            # Current move ends at point A, G0 moves to point B,
+                            # Arc goes from B back to A (circular pattern)
                             if (
                                 dist_arc_end_to_move_end < 0.001
                             ):  # Arc returns to where move ended (circular!)
@@ -4040,16 +4042,9 @@ DXF Units: {self.dxf_units}"""
                 element_id in self.engraved_elements
                 and element_id not in self.removed_elements
             ):
-                # Skip if this element has complex geometry data that's processed separately
-                # (arcs, circles, polylines - they're processed from element_data)
-                if element_id in self.element_data:
-                    # Check if it's a complex geometry type that should be skipped
-                    element_data = self.element_data[element_id]
-                    if len(element_data) >= 5:
-                        _, _, _, geom_type_from_data, _ = element_data
-                        # Skip complex geometries - they're processed from element_data
-                        if geom_type_from_data in ['ARC', 'CIRCLE', 'LWPOLYLINE', 'POLYLINE', 'ELLIPSE', 'SPLINE']:
-                            continue
+                # Don't skip any elements - we need them all for processing
+                # The element_data provides additional details but elements_by_id
+                # is used for the main processing flow
 
                 if element_id not in elements_by_id:
                     elements_by_id[element_id] = {
