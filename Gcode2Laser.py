@@ -228,6 +228,12 @@ class GCodeAdjuster:
         self.comm_log_max_lines = 1000  # Maximum log entries
         self.comm_log_entries = []  # Store log entries
         self.log_status_queries = False  # Toggle for logging status queries
+        self.log_update_buffer = []  # Buffer for batched log updates
+        self.log_update_timer = None  # Timer for batched updates
+        
+        # Position display batching
+        self.position_update_pending = False  # Flag for pending position update
+        self.last_position_update = 0  # Timestamp of last position label update
         
         # Modal units (G20/G21) detected from file; default None -> will inject G21 if absent
         self.modal_units = None
@@ -2222,11 +2228,13 @@ Vector Analysis:
             if response.startswith("<") and response.endswith(">"):
                 parts = response[1:-1].split("|")
 
-                # Extract GRBL state (first part)
+                # Extract GRBL state (first part) - update immediately (lightweight)
                 if parts:
                     self.grbl_state = parts[0]
                     self.update_state_display()
 
+                # Parse position data
+                position_changed = False
                 for part in parts:
                     if part.startswith("MPos:"):
                         coords = part[5:].split(",")
@@ -2234,6 +2242,7 @@ Vector Analysis:
                             self.machine_pos["x"] = float(coords[0])
                             self.machine_pos["y"] = float(coords[1])
                             self.machine_pos["z"] = float(coords[2])
+                            position_changed = True
 
                     elif part.startswith("WPos:"):
                         coords = part[5:].split(",")
@@ -2241,6 +2250,7 @@ Vector Analysis:
                             self.work_pos["x"] = float(coords[0])
                             self.work_pos["y"] = float(coords[1])
                             self.work_pos["z"] = float(coords[2])
+                            position_changed = True
 
                     elif part.startswith("WCO:"):
                         coords = part[4:].split(",")
@@ -2248,6 +2258,7 @@ Vector Analysis:
                             self.wco["x"] = float(coords[0])
                             self.wco["y"] = float(coords[1])
                             self.wco["z"] = float(coords[2])
+                            position_changed = True
 
                 # Calculate missing positions
                 if "MPos:" in response and "WPos:" not in response:
@@ -2255,16 +2266,21 @@ Vector Analysis:
                     self.work_pos["x"] = self.machine_pos["x"] - self.wco["x"]
                     self.work_pos["y"] = self.machine_pos["y"] - self.wco["y"]
                     self.work_pos["z"] = self.machine_pos["z"] - self.wco["z"]
+                    position_changed = True
                 elif "WPos:" in response and "MPos:" not in response:
                     # Calculate MPos from WPos + WCO
                     self.machine_pos["x"] = self.work_pos["x"] + self.wco["x"]
                     self.machine_pos["y"] = self.work_pos["y"] + self.wco["y"]
                     self.machine_pos["z"] = self.work_pos["z"] + self.wco["z"]
+                    position_changed = True
 
-                # Update display
-                self.update_position_display()
+                # Batch position display updates for better performance
+                if position_changed and not self.position_update_pending:
+                    self.position_update_pending = True
+                    # Schedule batched update (100ms for labels)
+                    self.root.after(100, self._flush_position_update)
 
-                # Update execution path and plot if executing
+                # Update execution path if executing (don't update plot - too slow!)
                 if self.is_executing:
                     current_pos = (self.work_pos["x"], self.work_pos["y"])
                     # Always add position if changed
@@ -2273,23 +2289,6 @@ Vector Analysis:
                         or current_pos != self.execution_path[-1]
                     ):
                         self.execution_path.append(current_pos)
-
-                    # Force plot update in single-step mode, throttle in run mode
-                    if self.single_step_mode:
-                        # Always update plot immediately in single-step mode
-                        self.plot_toolpath()
-                        self.canvas.draw()
-                        self.canvas.flush_events()
-                    else:
-                        # Run mode - throttled updates for performance
-                        current_time = time.time()
-                        if (
-                            current_time - self._last_plot_update > 0.1
-                        ):  # 100ms throttle
-                            self.plot_toolpath()
-                            self.canvas.draw()
-                            self.canvas.flush_events()
-                            self._last_plot_update = current_time
 
         except Exception as e:
             print(f"Error parsing status: {e}")
@@ -2301,8 +2300,26 @@ Vector Analysis:
             self.canvas.draw()
             self.canvas.flush_events()
 
+    def _flush_position_update(self):
+        """Flush pending position display update (batched for performance)"""
+        self.position_update_pending = False
+        self.update_position_display()
+    
     def update_position_display(self):
         """Update position labels and laser marker on plot"""
+        # Don't update plot during execution/streaming - huge performance win
+        # Only update position labels (fast)
+        if self.is_executing or self.streaming:
+            # Fast path: only update labels, skip expensive plot updates
+            self.work_pos_label.config(
+                text=f"X: {self.work_pos['x']:6.2f}  Y: {self.work_pos['y']:6.2f}  Z: {self.work_pos['z']:6.2f}"
+            )
+            self.machine_pos_label.config(
+                text=f"X: {self.machine_pos['x']:6.2f}  Y: {self.machine_pos['y']:6.2f}  Z: {self.machine_pos['z']:6.2f}"
+            )
+            return
+        
+        # Slow path: update labels and plot (only when idle)
         self.work_pos_label.config(
             text=f"X: {self.work_pos['x']:6.2f}  Y: {self.work_pos['y']:6.2f}  Z: {self.work_pos['z']:6.2f}"
         )
@@ -2316,7 +2333,7 @@ Vector Analysis:
 
             # Auto-scale plot if laser moves outside current view (only when not executing and auto-scale enabled)
             need_redraw = False
-            if not self.is_executing and self.auto_scale_enabled:
+            if self.auto_scale_enabled:
                 xlim = self.ax.get_xlim()
                 ylim = self.ax.get_ylim()
                 x_pos = self.work_pos["x"]
@@ -2433,43 +2450,62 @@ Vector Analysis:
         self.append_to_log(entry)
 
     def append_to_log(self, entry):
-        """Append an entry to the log display"""
-        # Batch text operations for better performance
+        """Buffer log entry for batched update (much faster than immediate update)"""
+        # Add to buffer instead of immediate GUI update
+        self.log_update_buffer.append(entry)
+        
+        # Schedule batched update if not already scheduled
+        if self.log_update_timer is None:
+            self.log_update_timer = self.root.after(50, self.flush_log_buffer)
+    
+    def flush_log_buffer(self):
+        """Flush all buffered log entries to GUI in one batch"""
+        self.log_update_timer = None
+        
+        if not self.log_update_buffer:
+            return
+        
+        # Batch ALL updates in single state transition (MUCH faster)
         self.comm_log_text.config(state=tk.NORMAL)
-
-        # Trim old lines if widget gets too large (keep performance high)
+        
+        # Trim old lines if widget gets too large (check once per batch)
         line_count = int(self.comm_log_text.index('end-1c').split('.')[0])
         if line_count > self.comm_log_max_lines:
             # Delete oldest 20% of lines to avoid frequent trimming
             lines_to_delete = int(self.comm_log_max_lines * 0.2)
             self.comm_log_text.delete('1.0', f'{lines_to_delete}.0')
-
-        # Build the line to insert
-        line_parts = []
         
-        # Add timestamp if enabled
-        if self.log_timestamp_var.get():
-            line_parts.append((f"[{entry['time']}] ", "timestamp"))
+        # Insert all buffered entries at once
+        for entry in self.log_update_buffer:
+            # Build the line to insert
+            line_parts = []
+            
+            # Add timestamp if enabled
+            if self.log_timestamp_var.get():
+                line_parts.append((f"[{entry['time']}] ", "timestamp"))
 
-        # Add direction indicator and message
-        if entry["direction"] == "sent":
-            line_parts.append(("→ ", "sent"))
-            line_parts.append((f"{entry['message']}\n", "sent"))
-        else:
-            if entry.get("is_error", False):
-                line_parts.append(("← ", "error"))
-                line_parts.append((f"{entry['message']}\n", "error"))
+            # Add direction indicator and message
+            if entry["direction"] == "sent":
+                line_parts.append(("→ ", "sent"))
+                line_parts.append((f"{entry['message']}\n", "sent"))
             else:
-                line_parts.append(("← ", "received"))
-                line_parts.append((f"{entry['message']}\n", "received"))
+                if entry.get("is_error", False):
+                    line_parts.append(("← ", "error"))
+                    line_parts.append((f"{entry['message']}\n", "error"))
+                else:
+                    line_parts.append(("← ", "received"))
+                    line_parts.append((f"{entry['message']}\n", "received"))
 
-        # Insert all parts at once
-        for text, tag in line_parts:
-            self.comm_log_text.insert(tk.END, text, tag)
-
+            # Insert all parts for this entry
+            for text, tag in line_parts:
+                self.comm_log_text.insert(tk.END, text, tag)
+        
+        # Clear buffer
+        self.log_update_buffer.clear()
+        
         self.comm_log_text.config(state=tk.DISABLED)
 
-        # Auto-scroll to bottom if enabled (defer this slightly for performance)
+        # Auto-scroll to bottom if enabled (once per batch)
         if self.log_autoscroll_var.get():
             self.comm_log_text.see(tk.END)
 
@@ -3047,8 +3083,8 @@ Vector Analysis:
             return
 
         try:
-            # Process all queued responses (up to 10 per call to avoid blocking GUI)
-            for _ in range(10):
+            # Process more responses per call but less frequently (better throughput, less GUI interruption)
+            for _ in range(50):
                 try:
                     response = self.response_queue.get_nowait()
                     self.handle_response(response)
@@ -3057,9 +3093,9 @@ Vector Analysis:
         except Exception as e:
             print(f"Error processing responses: {e}")
 
-        # Schedule next processing
+        # Schedule next processing - reduced frequency for better GUI responsiveness
         if self.processing_responses:
-            self.root.after(10, self.process_responses)  # Check every 10ms
+            self.root.after(20, self.process_responses)  # Check every 20ms (was 10ms)
 
     def handle_response(self, response):
         """Handle a single response from GRBL"""
