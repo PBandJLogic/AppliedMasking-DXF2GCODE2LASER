@@ -4139,12 +4139,28 @@ DXF Units: {self.dxf_units}"""
         # Track current position for G0 moves between elements
         current_x, current_y = 0.0, 0.0
         last_engraved_x, last_engraved_y = 0.0, 0.0
+        
+        # Debug: Show what elements we have
+        print(f"\n=== Elements collected for optimization ===")
+        print(f"Total elements in elements_by_id: {len(elements_by_id)}")
+        geom_types_count = {}
+        for eid, einfo in elements_by_id.items():
+            gt = einfo['geom_type']
+            geom_types_count[gt] = geom_types_count.get(gt, 0) + 1
+        print(f"Geometry types: {geom_types_count}")
+        
+        # Show a few examples
+        for i, (eid, einfo) in enumerate(list(elements_by_id.items())[:3]):
+            if einfo['points']:
+                print(f"  Example {i+1}: ID={eid}, Type={einfo['geom_type']}, First point={einfo['points'][0]}")
 
         # Optimize toolpath by sorting elements to minimize travel distance (if enabled)
         if self.gcode_settings.get("optimize_toolpath", True):
+            print(f"\nCalling optimize_toolpath with {len(elements_by_id)} elements...")
             optimized_elements = self.optimize_toolpath(
                 elements_by_id, current_x, current_y
             )
+            print(f"Optimization complete. Returned {len(optimized_elements)} elements.")
         else:
             optimized_elements = list(elements_by_id.items())
             print("Toolpath optimization disabled - using original element order")
