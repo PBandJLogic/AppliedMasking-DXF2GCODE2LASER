@@ -1906,37 +1906,41 @@ Colors:
                                 float(arc_match.group(5)),
                             )
 
-                            # Check if current move ends where the arc ends
-                            dist_to_arc_end = (
-                                (end_x - arc_end_x) ** 2 + (end_y - arc_end_y) ** 2
+                            # Check if arc is circular (returns to where current move ended)
+                            # Pattern: Move ends at A, G0 A→B, Arc B→A (circular)
+                            # Optimization: Replace with Arc A→B (reversed)
+                            dist_arc_end_to_move_end = (
+                                (arc_end_x - end_x) ** 2 + (arc_end_y - end_y) ** 2
                             ) ** 0.5
-                            if (
-                                dist_to_arc_end < 0.001
-                            ):  # Current move ends where arc ends
-                                # Calculate arc center from G0 position
+                            dist_arc_start_to_g0_end = (
+                                (g0_x - g0_x) ** 2 + (g0_y - g0_y) ** 2
+                            ) ** 0.5  # Arc starts at G0 end (always 0)
+                            
+                            if dist_arc_end_to_move_end < 0.001:  # Arc returns to where move ended (circular!)
+                                # This is a circular arc pattern - optimize it!
+                                # Calculate arc center from G0 position (arc start)
                                 arc_center_x = g0_x + i_offset
                                 arc_center_y = g0_y + j_offset
 
-                                # Reverse the arc: swap start/end and flip direction
-                                new_start_x, new_start_y = arc_end_x, arc_end_y
-                                new_end_x, new_end_y = g0_x, g0_y
+                                # Create reversed arc from move end (A) to G0 end (B)
+                                new_start_x, new_start_y = end_x, end_y  # Start at A
+                                new_end_x, new_end_y = g0_x, g0_y  # End at B
                                 new_i_offset = arc_center_x - new_start_x
                                 new_j_offset = arc_center_y - new_start_y
                                 new_arc_type = (
                                     "3" if arc_type == "2" else "2"
                                 )  # Flip G2<->G3
 
-                                # Add the current move and optimized arc
-                                optimized_lines.append(gcode_lines[i])
-
-                                # Replace G0 + G2/G3 with optimized arc
+                                # Replace the entire sequence with just the reversed arc
+                                # DON'T add the original move - it's being replaced
                                 optimized_arc = f"G{new_arc_type} X{new_end_x:.3f} Y{new_end_y:.3f} I{new_i_offset:.3f} J{new_j_offset:.3f} F{self.gcode_settings['feedrate']} S{self.gcode_settings['laser_power']}"
 
                                 optimized_lines.append(
-                                    f"; Optimized arc (reversed direction)\n{optimized_arc}"
+                                    f"; Optimized: eliminated G0 travel by reversing circular arc"
                                 )
+                                optimized_lines.append(optimized_arc)
                                 current_x, current_y = new_end_x, new_end_y
-                                i = k + 1  # Skip original G0 and arc
+                                i = k + 1  # Skip original move, G0, and arc
                                 optimization_applied = True
                                 break  # Break inner loop
                             # If arc doesn't match optimization criteria, stop looking
@@ -4026,12 +4030,19 @@ DXF Units: {self.dxf_units}"""
         gcode.append("; end preamble")
 
         # Group points by element_id to get complete geometry
+        # Skip elements that have detailed data in element_data (arcs, polylines, etc.)
+        # to avoid duplicate geometry processing
         elements_by_id = {}
         for x, y, radius, geom_type, element_id in self.current_points:
             if (
                 element_id in self.engraved_elements
                 and element_id not in self.removed_elements
             ):
+                # Skip if this element has detailed geometry data
+                # (arcs, circles, polylines - they're processed separately)
+                if element_id in self.element_data:
+                    continue
+                    
                 if element_id not in elements_by_id:
                     elements_by_id[element_id] = {
                         "geom_type": geom_type,
