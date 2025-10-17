@@ -2989,13 +2989,15 @@ Vector Analysis:
         return new_pos
 
     def emergency_stop(self):
-        """Emergency stop - halt execution, clear buffer, turn off laser"""
+        """Emergency stop - halt execution, clear buffer, turn off laser, send reset"""
         print("\n=== EMERGENCY STOP ACTIVATED ===")
         try:
-            # Clear local command buffers first
+            # Clear ALL local command buffers first
             self.gcode_buffer = []
             self.command_queue = []
+            self.manual_command_queue = []
             self.buffer_size = 0
+            self.waiting_for_ok = False
             print("Emergency stop: Local buffers cleared")
 
             if self.is_connected and self.serial_connection:
