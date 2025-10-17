@@ -259,7 +259,7 @@ class GCodeAdjuster:
         # GRBL streaming - simplified command counting
         self.gcode_buffer = []  # Queue of G-code lines to send
         self.buffer_size = 0  # Current commands in GRBL's buffer (command count, not bytes)
-        self.max_buffer_size = 15  # GRBL buffer limit in commands (conservative)
+        self.max_buffer_size = 4  # Conservative buffer (was 15, reduced to prevent arc errors)
         self.streaming = False
         self.status_update_id = None  # Timer ID for status updates
         self.command_queue = []  # Track sent commands for proper ok matching
@@ -1533,13 +1533,39 @@ class GCodeAdjuster:
         v_expected = P2 - P1
         v_actual = Q2 - Q1
 
+        # Validate that reference points are not identical
+        expected_dist = np.linalg.norm(v_expected)
+        actual_dist = np.linalg.norm(v_actual)
+        
+        if expected_dist < 0.1:  # Points are too close (< 0.1mm apart)
+            messagebox.showerror(
+                "Error",
+                f"Expected reference points are too close together!\n"
+                f"Distance: {expected_dist:.3f}mm\n\n"
+                f"Point 1: ({P1[0]:.3f}, {P1[1]:.3f})\n"
+                f"Point 2: ({P2[0]:.3f}, {P2[1]:.3f})\n\n"
+                f"Please use reference points at least 10mm apart."
+            )
+            return
+        
+        if actual_dist < 0.1:  # Points are too close (< 0.1mm apart)
+            messagebox.showerror(
+                "Error",
+                f"Actual reference points are too close together!\n"
+                f"Distance: {actual_dist:.3f}mm\n\n"
+                f"Point 1: ({Q1[0]:.3f}, {Q1[1]:.3f})\n"
+                f"Point 2: ({Q2[0]:.3f}, {Q2[1]:.3f})\n\n"
+                f"Please use reference points at least 10mm apart."
+            )
+            return
+
         # Compute rotation angle (from expected vector to actual vector)
         angle_expected = np.arctan2(v_expected[1], v_expected[0])
         angle_actual = np.arctan2(v_actual[1], v_actual[0])
         rotation_angle = angle_actual - angle_expected
 
         # Compute scale factor (optional, for verification)
-        scale = np.linalg.norm(v_actual) / np.linalg.norm(v_expected)
+        scale = actual_dist / expected_dist
 
         # Rotation matrix
         cos_r = np.cos(rotation_angle)
@@ -1808,11 +1834,11 @@ Vector Analysis:
         adjusted_line = line
         if x_match:
             adjusted_line = re.sub(
-                r"X[+-]?\d+\.?\d*", f"X{adjusted_x:.2f}", adjusted_line
+                r"X[+-]?\d+\.?\d*", f"X{adjusted_x:.3f}", adjusted_line
             )
         if y_match:
             adjusted_line = re.sub(
-                r"Y[+-]?\d+\.?\d*", f"Y{adjusted_y:.2f}", adjusted_line
+                r"Y[+-]?\d+\.?\d*", f"Y{adjusted_y:.3f}", adjusted_line
             )
 
         return adjusted_line
@@ -1855,62 +1881,72 @@ Vector Analysis:
         new_i_offset = adjusted_center_x - adjusted_start_x
         new_j_offset = adjusted_center_y - adjusted_start_y
 
-        # Validate and correct arc radius to prevent GRBL error:24
+        # Round X/Y to 3 decimals FIRST, then validate arc with rounded values
+        # This ensures the validation matches what GRBL will receive
+        adjusted_end_x_rounded = round(adjusted_end_x, 3)
+        adjusted_end_y_rounded = round(adjusted_end_y, 3)
+
+        # Validate and correct arc radius AFTER rounding to prevent GRBL error:24
         # GRBL checks that distance(start, center) == distance(end, center)
         radius_start = np.sqrt(new_i_offset**2 + new_j_offset**2)
         
-        # Calculate I,J from end point
-        i_from_end = adjusted_center_x - adjusted_end_x
-        j_from_end = adjusted_center_y - adjusted_end_y
+        # Calculate radius from rounded end point
+        i_from_end = adjusted_center_x - adjusted_end_x_rounded
+        j_from_end = adjusted_center_y - adjusted_end_y_rounded
         radius_end = np.sqrt(i_from_end**2 + j_from_end**2)
         
         # Check if radii match within tolerance
         radius_error = abs(radius_start - radius_end)
-        if radius_error > 0.005:  # More than 0.005mm error (tighter tolerance)
+        if radius_error > 0.001:  # More than 0.001mm error (very tight tolerance)
             # Adjust end point to match the radius from start point
             # This keeps the arc valid while minimizing position error
             if radius_start > 0:
-                # Calculate unit vector from center to end point
-                dx = adjusted_end_x - adjusted_center_x
-                dy = adjusted_end_y - adjusted_center_y
+                # Calculate unit vector from center to rounded end point
+                dx = adjusted_end_x_rounded - adjusted_center_x
+                dy = adjusted_end_y_rounded - adjusted_center_y
                 distance = np.sqrt(dx**2 + dy**2)
                 
                 if distance > 0:
-                    # Store original end point for comparison
-                    orig_end_x = adjusted_end_x
-                    orig_end_y = adjusted_end_y
-                    
-                    # Normalize and scale to correct radius
-                    adjusted_end_x = adjusted_center_x + (dx / distance) * radius_start
-                    adjusted_end_y = adjusted_center_y + (dy / distance) * radius_start
+                    # Normalize and scale to exact radius
+                    adjusted_end_x_rounded = adjusted_center_x + (dx / distance) * radius_start
+                    adjusted_end_y_rounded = adjusted_center_y + (dy / distance) * radius_start
                     
                     # Calculate actual adjustment
-                    adjustment = np.sqrt((adjusted_end_x - orig_end_x)**2 + 
-                                       (adjusted_end_y - orig_end_y)**2)
+                    adjustment = np.sqrt((adjusted_end_x_rounded - adjusted_end_x)**2 + 
+                                       (adjusted_end_y_rounded - adjusted_end_y)**2)
                     
                     # Log correction details
-                    print(f"Arc corrected: radius_error={radius_error:.4f}mm, endpoint adjusted by {adjustment:.4f}mm")
+                    print(f"Arc corrected: radius_error={radius_error:.6f}mm, endpoint adjusted by {adjustment:.6f}mm")
                     
                     if adjustment > 0.05:
                         print(f"WARNING: Arc correction {adjustment:.3f}mm exceeds 0.05mm threshold!")
 
-        # Replace coordinates in the line
+        # Use corrected rounded values for output
+        adjusted_end_x = adjusted_end_x_rounded
+        adjusted_end_y = adjusted_end_y_rounded
+
+        # Replace coordinates in the line with 3 decimal precision
+        # Strip trailing zeros from I/J to avoid parser issues
         adjusted_line = line
         if x_match:
             adjusted_line = re.sub(
-                r"X[+-]?\d+\.?\d*", f"X{adjusted_end_x:.2f}", adjusted_line
+                r"X[+-]?\d+\.?\d*", f"X{adjusted_end_x:.3f}", adjusted_line
             )
         if y_match:
             adjusted_line = re.sub(
-                r"Y[+-]?\d+\.?\d*", f"Y{adjusted_end_y:.2f}", adjusted_line
+                r"Y[+-]?\d+\.?\d*", f"Y{adjusted_end_y:.3f}", adjusted_line
             )
         if i_match:
+            # Format with 4 decimals and strip trailing zeros
+            i_formatted = f"{new_i_offset:.4f}".rstrip('0').rstrip('.')
             adjusted_line = re.sub(
-                r"I[+-]?\d+\.?\d*", f"I{new_i_offset:.5f}", adjusted_line
+                r"I[+-]?\d+\.?\d*", f"I{i_formatted}", adjusted_line
             )
         if j_match:
+            # Format with 4 decimals and strip trailing zeros
+            j_formatted = f"{new_j_offset:.4f}".rstrip('0').rstrip('.')
             adjusted_line = re.sub(
-                r"J[+-]?\d+\.?\d*", f"J{new_j_offset:.5f}", adjusted_line
+                r"J[+-]?\d+\.?\d*", f"J{j_formatted}", adjusted_line
             )
 
         return adjusted_line
@@ -1930,7 +1966,10 @@ Vector Analysis:
 
     def toggle_connection(self):
         """Connect or disconnect from the GRBL controller"""
-        if self.is_connected:
+        # Check button text for more reliable state (in case internal state is inconsistent)
+        button_text = self.connect_button.cget("text")
+        
+        if button_text == "Disconnect" or self.is_connected:
             self.disconnect_grbl()
         else:
             self.connect_grbl()
@@ -2122,8 +2161,17 @@ Vector Analysis:
 
     def disconnect_grbl(self):
         """Disconnect from GRBL controller"""
-        # Prevent multiple disconnect attempts
+        # If already disconnected, just update UI to be consistent
         if not self.is_connected and not self.serial_connection:
+            # Force UI update in case of inconsistent state
+            try:
+                self.connect_button.config(text="Connect")
+                self.status_label.config(text="Disconnected", foreground="gray")
+                self.grbl_state = "Disconnected"
+                self.update_state_display()
+                self.com_port_combo.config(state="readonly")
+            except:
+                pass
             return
 
         # Stop position updates first
