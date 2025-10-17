@@ -795,11 +795,9 @@ Colors:
                 # Apply connection and proximity multipliers
                 if optimized:
                     # Check if this chain connects to the last processed chain
-                    last_chain = (
-                        optimized[-1]
-                        if isinstance(optimized[-1], list)
-                        else [optimized[-1]]
-                    )
+                    last_chain = optimized[
+                        -1
+                    ]  # optimized now always contains chains (lists)
                     last_chain_end = self.get_element_end_point(
                         last_chain[-1][0], last_chain[-1][1]
                     )
@@ -856,9 +854,8 @@ Colors:
                     reversed_chain.append((element_id, elem_info_copy))
                 closest_chain = reversed_chain
 
-            # Add all elements from this chain to optimized
-            for element_id, element_info in closest_chain:
-                optimized.append((element_id, element_info))
+            # Add the entire chain to optimized (as a list)
+            optimized.append(closest_chain)
 
             # Update current position to the end of this chain
             last_element_id, last_element_info = closest_chain[-1]
@@ -5325,19 +5322,23 @@ DXF Units: {self.dxf_units}"""
         def bind_scroll_events(widget):
             """Recursively bind scroll events to widget and all its children"""
             widget.bind("<MouseWheel>", _on_mousewheel)  # Windows/Linux
-            widget.bind("<Button-4>", lambda e: canvas.yview_scroll(-1, "units"))  # Linux scroll up
-            widget.bind("<Button-5>", lambda e: canvas.yview_scroll(1, "units"))   # Linux scroll down
-            
+            widget.bind(
+                "<Button-4>", lambda e: canvas.yview_scroll(-1, "units")
+            )  # Linux scroll up
+            widget.bind(
+                "<Button-5>", lambda e: canvas.yview_scroll(1, "units")
+            )  # Linux scroll down
+
             # Bind to all child widgets recursively
             for child in widget.winfo_children():
                 bind_scroll_events(child)
-        
+
         # Bind scroll events to the entire settings window
         bind_scroll_events(settings_window)
-        
+
         # Also bind to the main frame to ensure coverage
         bind_scroll_events(main_frame)
-        
+
         # Make sure the canvas can receive focus for scrolling
         canvas.bind("<1>", lambda e: canvas.focus_set())
 
@@ -5671,11 +5672,11 @@ DXF Units: {self.dxf_units}"""
                     widget.unbind("<Button-5>")
                 except:
                     pass  # Some widgets might not have these bindings
-                
+
                 # Unbind from all child widgets recursively
                 for child in widget.winfo_children():
                     unbind_scroll_events(child)
-            
+
             # Clean up all scroll bindings
             unbind_scroll_events(settings_window)
             canvas.unbind("<1>")
