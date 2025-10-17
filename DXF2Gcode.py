@@ -592,8 +592,9 @@ Colors:
         """Calculate Euclidean distance between two points"""
         return math.sqrt((point1[0] - point2[0]) ** 2 + (point1[1] - point2[1]) ** 2)
 
-    def are_points_connected(self, point1, point2, tolerance=0.01):
+    def are_points_connected(self, point1, point2, tolerance=0.1):
         """Check if two points are connected (within tolerance)"""
+        # Increased tolerance to 0.1mm to catch more connected elements
         return self.calculate_distance(point1, point2) < tolerance
 
     def find_connected_chains(self, elements_by_id):
@@ -802,7 +803,7 @@ Colors:
                         last_chain[-1][0], last_chain[-1][1]
                     )
 
-                    # Check connection (within 0.1mm tolerance)
+                    # Check connection (within tolerance)
                     connects_to_start = (
                         self.calculate_distance(last_chain_end, chain_start) < 0.1
                     )
@@ -1836,7 +1837,9 @@ Colors:
                     ) ** 0.5
                     if dist < 0.001:  # Zero-length move
                         # Skip this unnecessary G0 move
-                        print(f"  Eliminated unnecessary G0 to ({target_x:.3f}, {target_y:.3f}) - already at position")
+                        print(
+                            f"  Eliminated unnecessary G0 to ({target_x:.3f}, {target_y:.3f}) - already at position"
+                        )
                         i += 1
                         continue
 
@@ -2056,7 +2059,47 @@ Colors:
             i += 1
 
         print(f"Added {settling_count} settling G1 commands")
-        return final_lines
+        
+        # Third pass: Final cleanup - remove any remaining unnecessary G0 moves
+        print("Final cleanup pass - removing remaining unnecessary G0 moves...")
+        cleaned_lines = []
+        current_x, current_y = None, None
+        removed_count = 0
+        
+        for i, line in enumerate(final_lines):
+            line_stripped = line.strip()
+            
+            # Track position from G0/G1/G2/G3 moves
+            if line_stripped.startswith(('G0', 'G1', 'G2', 'G3')):
+                # Extract X and Y coordinates
+                x_match = re.search(r'X([-\d.]+)', line_stripped)
+                y_match = re.search(r'Y([-\d.]+)', line_stripped)
+                
+                if line_stripped.startswith('G0') and x_match and y_match:
+                    target_x = float(x_match.group(1))
+                    target_y = float(y_match.group(1))
+                    
+                    # Check if this G0 is necessary
+                    if current_x is not None and current_y is not None:
+                        dist = math.sqrt((target_x - current_x) ** 2 + (target_y - current_y) ** 2)
+                        if dist < 0.001:
+                            # Skip this unnecessary G0
+                            removed_count += 1
+                            print(f"  Removed G0 to ({target_x:.3f}, {target_y:.3f}) - already at position")
+                            continue
+                    
+                    current_x, current_y = target_x, target_y
+                elif x_match and y_match:
+                    # G1/G2/G3 - update position
+                    current_x = float(x_match.group(1))
+                    current_y = float(y_match.group(1))
+            
+            cleaned_lines.append(line)
+        
+        if removed_count > 0:
+            print(f"Removed {removed_count} unnecessary G0 moves in final cleanup")
+        
+        return cleaned_lines
 
     def generate_arc_gcode(
         self,
@@ -4100,8 +4143,6 @@ DXF Units: {self.dxf_units}"""
                     )
 
                     if clipped_line:
-                        # Only add header if we're actually going to engrave
-                        gcode.append("; === LINE GEOMETRY ===")
                         (
                             clipped_start_x,
                             clipped_start_y,
@@ -4109,8 +4150,21 @@ DXF Units: {self.dxf_units}"""
                             clipped_end_y,
                         ) = clipped_line
 
+                        # Check if we need to move to start point
+                        need_move = False
+                        if current_x is None or current_y is None:
+                            need_move = True
+                        else:
+                            dist_to_start = math.sqrt(
+                                (clipped_start_x - current_x) ** 2 + (clipped_start_y - current_y) ** 2
+                            )
+                            need_move = dist_to_start > 0.001
+                        
+                        # Only add header if we're actually going to engrave
+                        gcode.append("; === LINE GEOMETRY ===")
+                        
                         # G0 move to start point if not already there
-                        if (current_x, current_y) != (clipped_start_x, clipped_start_y):
+                        if need_move:
                             gcode.append(
                                 f"G0 X{clipped_start_x:.3f} Y{clipped_start_y:.3f} Z{self.gcode_settings['cutting_z']:.3f}"
                             )
