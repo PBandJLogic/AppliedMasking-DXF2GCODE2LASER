@@ -2593,17 +2593,16 @@ Vector Analysis:
         # Use word boundary checks to avoid matching G20/G21
         import re
         if re.search(r'\bG2\b', cmd) or re.search(r'\bG3\b', cmd):  # Arc commands
-            # Arc commands should have F (feedrate) parameter - required
-            if "F" not in cmd:
-                print(
-                    f"Error: Arc commands (G2/G3) must have F (feedrate) parameter: {command}"
-                )
-                return False
-            # Arc commands should have I and J parameters
-            if re.search(r'\bG3\b', cmd) and ("I" not in cmd or "J" not in cmd):
-                print(f"Warning: G3 arc command missing I or J parameters: {command}")
-            if re.search(r'\bG2\b', cmd) and ("I" not in cmd or "J" not in cmd):
-                print(f"Warning: G2 arc command missing I or J parameters: {command}")
+            # Note: F (feedrate) is modal in GRBL - it's NOT required on every arc command
+            # Only the first arc needs F, subsequent arcs use the previous F value
+            
+            # Arc commands should have I and J parameters (or R parameter)
+            has_ij = ("I" in cmd or "J" in cmd)
+            has_r = "R" in cmd
+            
+            if not has_ij and not has_r:
+                print(f"Warning: G2/G3 arc command missing I/J or R parameters: {command}")
+                # Don't reject - let GRBL decide if it's valid
 
         # Check for invalid feed rates
         if "F" in cmd:
