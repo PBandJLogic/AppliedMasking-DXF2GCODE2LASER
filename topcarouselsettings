@@ -1,0 +1,21 @@
+{
+  "preamble": "; Cleaning G-code for Carousel - top: sections 1 and 3\n; Reference points are the bottom outside corners of S3P1 and S1P16\n; reference_point1 = (-199.2901, -152.4163)\n; reference_point2 = (199.2901, -152.4163)\nG21 ; Set units to millimeters\nG90 ; Absolute positioning\nM4 S0 ; laser on at zero power\n",
+  "postscript": "M5 ; Turn off laser\n",
+  "laser_power": 10,
+  "cutting_z": 0.0,
+  "feedrate": 1500,
+  "mpos_home_x": -797.0,
+  "mpos_home_y": -397.0,
+  "mpos_home_z": -3.0,
+  "max_travel_x": 794.0,
+  "max_travel_y": 394.0,
+  "max_travel_z": -92.0,
+  "wpos_home_x": -519.0,
+  "wpos_home_y": -396.1,
+  "wpos_home_z": -74.9,
+  "raise_laser_between_paths": false,
+  "optimize_toolpath": true,
+  "proximity_threshold": 2.0,
+  "connection_multiplier": 0.001,
+  "proximity_multiplier": 0.3
+}

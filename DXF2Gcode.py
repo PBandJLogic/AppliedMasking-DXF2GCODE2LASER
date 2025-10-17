@@ -16,6 +16,8 @@ import math
 from typing import List, Tuple, Dict, Any
 import threading
 import json
+from shapely.geometry import Point, LineString, Polygon
+from shapely.ops import unary_union
 
 
 class DXFGUI:
@@ -513,6 +515,265 @@ Colors:
             self.dxf_units = "Unknown (assuming mm)"
             self.unit_conversion_factor = 1.0
 
+    def extract_geometry(self, file_path):
+        """Extract geometry from DXF file (simplified version of the original function)"""
+        doc = ezdxf.readfile(file_path)
+
+        # Detect and set up unit conversion
+        self.detect_dxf_units(doc)
+
+        msp = doc.modelspace()
+        all_points = []
+
+        # Debug: Count entities
+        entity_count = 0
+        entity_types = {}
+
+        for entity in msp:
+            entity_type = entity.dxftype()
+            entity_count += 1
+            entity_types[entity_type] = entity_types.get(entity_type, 0) + 1
+
+            if entity_type == "INSERT":
+                block_name = entity.dxf.name
+                block = doc.blocks.get(block_name)
+                if not block:
+                    continue
+
+                insert_pos = entity.dxf.insert
+                scale = (entity.dxf.xscale, entity.dxf.yscale, entity.dxf.zscale)
+                rotation = entity.dxf.rotation if entity.dxf.hasattr("rotation") else 0
+
+                print(
+                    f"Processing INSERT block: {block_name} at ({insert_pos.x:.2f}, {insert_pos.y:.2f})"
+                )
+                print(f"  Scale factors: {scale}")
+
+                for block_entity in block:
+                    if block_entity.dxftype() == "LINE":
+                        # Store line as start and end points with same element ID
+                        start_pt = block_entity.dxf.start
+                        end_pt = block_entity.dxf.end
+                        start_x, start_y = self.transform_point(
+                            start_pt.x, start_pt.y, insert_pos, scale, rotation
+                        )
+                        end_x, end_y = self.transform_point(
+                            end_pt.x, end_pt.y, insert_pos, scale, rotation
+                        )
+
+                        # Convert units to mm
+                        start_x = self.convert_units(start_x)
+                        start_y = self.convert_units(start_y)
+                        end_x = self.convert_units(end_x)
+                        end_y = self.convert_units(end_y)
+
+                        element_id = self.get_next_element_id()
+                        # Store both points with the same element ID
+                        all_points.append((start_x, start_y, 0, "LINE", element_id))
+                        all_points.append((end_x, end_y, 0, "LINE", element_id))
+
+                        # Store line data with both endpoints
+                        self.element_data[element_id] = (
+                            (start_x, end_x),  # X coordinates
+                            (start_y, end_y),  # Y coordinates
+                            0,
+                            "LINE",
+                            ((start_pt.x, start_pt.y), (end_pt.x, end_pt.y), "LINE"),
+                        )
+
+                    elif block_entity.dxftype() == "CIRCLE":
+                        original_cx = block_entity.dxf.center.x
+                        original_cy = block_entity.dxf.center.y
+                        cx, cy = self.transform_point(
+                            original_cx,
+                            original_cy,
+                            insert_pos,
+                            scale,
+                            rotation,
+                        )
+                        # Apply scale transformation to radius as well!
+                        original_radius = block_entity.dxf.radius
+                        scaled_radius = original_radius * scale[0]  # Use X scale factor
+
+                        # Convert units to mm
+                        cx = self.convert_units(cx)
+                        cy = self.convert_units(cy)
+                        scaled_radius = self.convert_units(scaled_radius)
+
+                        print(
+                            f"  Found CIRCLE: original_center=({original_cx:.2f}, {original_cy:.2f}), transformed_center=({cx:.2f}, {cy:.2f}), original_radius={original_radius:.2f}, scaled_radius={scaled_radius:.2f}"
+                        )
+                        element_id = self.get_next_element_id()
+                        all_points.append((cx, cy, scaled_radius, "CIRCLE", element_id))
+                        self.element_data[element_id] = (
+                            cx,
+                            cy,
+                            scaled_radius,
+                            "CIRCLE",
+                            (
+                                block_entity.dxf.center.x,
+                                block_entity.dxf.center.y,
+                                original_radius,
+                                "CIRCLE",
+                            ),
+                        )
+
+                    elif block_entity.dxftype() == "LWPOLYLINE":
+                        polyline_points = self.extract_lwpolyline_geometry(
+                            block_entity, insert_pos, scale, rotation
+                        )
+                        element_id = self.get_next_element_id()
+                        # Store all polyline points with the same element ID
+                        for point in polyline_points:
+                            tx, ty = point[0], point[1]  # Extract x, y from point tuple
+                            all_points.append((tx, ty, 0, "LWPOLYLINE", element_id))
+
+                        # Store polyline data
+                        self.element_data[element_id] = (
+                            [p[0] for p in polyline_points],  # X coordinates
+                            [p[1] for p in polyline_points],  # Y coordinates
+                            0,
+                            "LWPOLYLINE",
+                            (polyline_points, "LWPOLYLINE"),
+                        )
+
+                    elif block_entity.dxftype() == "ARC":
+                        # Handle ARC entities
+                        original_cx = block_entity.dxf.center.x
+                        original_cy = block_entity.dxf.center.y
+                        cx, cy = self.transform_point(
+                            original_cx,
+                            original_cy,
+                            insert_pos,
+                            scale,
+                            rotation,
+                        )
+                        original_radius = block_entity.dxf.radius
+                        scaled_radius = original_radius * scale[0]
+                        start_angle = block_entity.dxf.start_angle
+                        end_angle = block_entity.dxf.end_angle
+
+                        # Convert units to mm
+                        cx = self.convert_units(cx)
+                        cy = self.convert_units(cy)
+                        scaled_radius = self.convert_units(scaled_radius)
+
+                        print(
+                            f"  Found ARC: center=({cx:.2f}, {cy:.2f}), radius={scaled_radius:.2f}, angles={start_angle:.2f} to {end_angle:.2f}"
+                        )
+                        element_id = self.get_next_element_id()
+                        all_points.append((cx, cy, scaled_radius, "ARC", element_id))
+                        self.element_data[element_id] = (
+                            cx,
+                            cy,
+                            scaled_radius,
+                            "ARC",
+                            (
+                                block_entity.dxf.center.x,
+                                block_entity.dxf.center.y,
+                                original_radius,
+                                start_angle,
+                                end_angle,
+                                "ARC",
+                            ),
+                        )
+
+            elif entity_type == "LINE":
+                # Store line as start and end points with same element ID
+                start_pt = entity.dxf.start
+                end_pt = entity.dxf.end
+                element_id = self.get_next_element_id()
+
+                # Convert units to mm
+                start_x = self.convert_units(start_pt.x)
+                start_y = self.convert_units(start_pt.y)
+                end_x = self.convert_units(end_pt.x)
+                end_y = self.convert_units(end_pt.y)
+
+                all_points.append((start_x, start_y, 0, "LINE", element_id))
+                all_points.append((end_x, end_y, 0, "LINE", element_id))
+
+                self.element_data[element_id] = (
+                    (start_x, end_x),  # X coordinates (converted)
+                    (start_y, end_y),  # Y coordinates (converted)
+                    0,
+                    "LINE",
+                    ((start_pt.x, start_pt.y), (end_pt.x, end_pt.y), "LINE"),
+                )
+
+            elif entity_type == "CIRCLE":
+                center = entity.dxf.center
+                radius = entity.dxf.radius
+                element_id = self.get_next_element_id()
+
+                # Convert units to mm
+                cx = self.convert_units(center.x)
+                cy = self.convert_units(center.y)
+                radius_mm = self.convert_units(radius)
+
+                all_points.append((cx, cy, radius_mm, "CIRCLE", element_id))
+                self.element_data[element_id] = (
+                    cx,
+                    cy,
+                    radius_mm,
+                    "CIRCLE",
+                    (center.x, center.y, radius, "CIRCLE"),
+                )
+
+            elif entity_type == "LWPOLYLINE":
+                polyline_points = self.extract_lwpolyline_geometry(entity)
+                element_id = self.get_next_element_id()
+                # Store all polyline points with the same element ID
+                for point in polyline_points:
+                    tx, ty = point[0], point[1]  # Extract x, y from point tuple
+                    all_points.append((tx, ty, 0, "LWPOLYLINE", element_id))
+
+                # Store polyline data
+                self.element_data[element_id] = (
+                    [p[0] for p in polyline_points],  # X coordinates
+                    [p[1] for p in polyline_points],  # Y coordinates
+                    0,
+                    "LWPOLYLINE",
+                    (polyline_points, "LWPOLYLINE"),
+                )
+
+            elif entity_type == "ARC":
+                # Handle ARC entities
+                center = entity.dxf.center
+                radius = entity.dxf.radius
+                start_angle = entity.dxf.start_angle
+                end_angle = entity.dxf.end_angle
+                element_id = self.get_next_element_id()
+
+                # Convert units to mm
+                cx = self.convert_units(center.x)
+                cy = self.convert_units(center.y)
+                radius_mm = self.convert_units(radius)
+
+                print(
+                    f"Found ARC: center=({cx:.2f}, {cy:.2f}), radius={radius_mm:.2f}, angles={start_angle:.2f} to {end_angle:.2f}"
+                )
+                all_points.append((cx, cy, radius_mm, "ARC", element_id))
+                self.element_data[element_id] = (
+                    cx,
+                    cy,
+                    radius_mm,
+                    "ARC",
+                    (center.x, center.y, radius, start_angle, end_angle, "ARC"),
+                )
+
+        print("DXF File Analysis:")
+        print(f"  Total entities found: {entity_count}")
+        print(f"  Entity types: {entity_types}")
+        print(f"  Points extracted: {len(all_points)}")
+
+        if entity_count == 0:
+            print("  WARNING: No entities found in DXF file!")
+            print("  This suggests the file may be incomplete or corrupted.")
+            print("  Expected to find ENTITIES section with geometry data.")
+
+        return all_points
+
     def convert_units(self, value):
         """Convert a value from DXF units to millimeters"""
         return value * self.unit_conversion_factor
@@ -592,212 +853,461 @@ Colors:
         """Calculate Euclidean distance between two points"""
         return math.sqrt((point1[0] - point2[0]) ** 2 + (point1[1] - point2[1]) ** 2)
 
-    def are_points_connected(self, point1, point2, tolerance=0.1):
-        """Check if two points are connected (within tolerance)"""
-        # Increased tolerance to 0.1mm to catch more connected elements
-        return self.calculate_distance(point1, point2) < tolerance
+    def arc_to_linestring(self, element_info, segments=8):
+        """Convert an arc element to a Shapely LineString for geometric analysis"""
+        geom_type = element_info["geom_type"]
+        if geom_type != "ARC":
+            return None
 
-    def find_connected_chains(self, elements_by_id):
-        """Group connected elements into chains before optimization"""
-        # Create a list of elements with their endpoints
-        elements_list = list(elements_by_id.items())
-        visited = set()
-        chains = []
+        points = element_info["points"]
+        radius = element_info["radius"]
 
-        # print(f"Finding connected chains among {len(elements_list)} elements...")
+        if len(points) < 1:
+            return None
 
-        for start_idx, (element_id, element_info) in enumerate(elements_list):
-            if element_id in visited:
+        # Get arc center
+        cx, cy = points[0]
+
+        # Get start and end angles from element_data
+        element_id = None
+        for eid, einfo in self.element_data.items():
+            if einfo == element_info:
+                element_id = eid
+                break
+
+        if element_id and element_id in self.element_data:
+            element_data = self.element_data[element_id]
+            if len(element_data) >= 5:
+                _, _, _, _, original_data = element_data
+                if len(original_data) >= 6:
+                    _, _, _, start_angle, end_angle, _ = original_data
+
+                    # Convert angles to radians
+                    start_rad = math.radians(start_angle)
+                    end_rad = math.radians(end_angle)
+
+                    # Generate interpolated points
+                    coords = []
+                    for i in range(segments + 1):
+                        t = i / segments
+                        angle = start_rad + t * (end_rad - start_rad)
+                        x = cx + radius * math.cos(angle)
+                        y = cy + radius * math.sin(angle)
+                        coords.append((x, y))
+
+                    return LineString(coords)
+
+        # Fallback: create a simple arc approximation
+        coords = []
+        for i in range(segments + 1):
+            angle = i * (2 * math.pi / segments)
+            x = cx + radius * math.cos(angle)
+            y = cy + radius * math.sin(angle)
+            coords.append((x, y))
+
+        return LineString(coords)
+
+    def arc_to_simple_linestring(self, element_info):
+        """Convert an arc element to a simple 2-point Shapely LineString for geometric analysis"""
+        geom_type = element_info["geom_type"]
+        if geom_type != "ARC":
+            return None
+
+        points = element_info["points"]
+        radius = element_info["radius"]
+
+        if len(points) < 1:
+            return None
+
+        # Get arc center
+        cx, cy = points[0]
+
+        # Get start and end angles from element_data
+        element_id = None
+        for eid, einfo in self.element_data.items():
+            if einfo == element_info:
+                element_id = eid
+                break
+
+        if element_id and element_id in self.element_data:
+            element_data = self.element_data[element_id]
+            if len(element_data) >= 5:
+                _, _, _, _, original_data = element_data
+                if len(original_data) >= 6:
+                    _, _, _, start_angle, end_angle, _ = original_data
+
+                    # Convert angles to radians
+                    start_rad = math.radians(start_angle)
+                    end_rad = math.radians(end_angle)
+
+                    # Create simple 2-point representation (start and end only)
+                    start_x = cx + radius * math.cos(start_rad)
+                    start_y = cy + radius * math.sin(start_rad)
+                    end_x = cx + radius * math.cos(end_rad)
+                    end_y = cy + radius * math.sin(end_rad)
+
+                    return LineString([(start_x, start_y), (end_x, end_y)])
+                else:
+                    print(f"    DEBUG: original_data too short: {len(original_data)}")
+            else:
+                print(f"    DEBUG: element_data too short: {len(element_data)}")
+        else:
+            print(f"    DEBUG: element_id not found or not in element_data")
+
+        # Fallback: create a simple 2-point arc approximation
+        start_x = cx + radius
+        start_y = cy
+        end_x = cx - radius
+        end_y = cy
+
+        return LineString([(start_x, start_y), (end_x, end_y)])
+
+    def line_to_linestring(self, element_info):
+        """Convert a line element to a Shapely LineString"""
+        geom_type = element_info["geom_type"]
+        points = element_info["points"]
+
+        if geom_type == "LINE" and len(points) >= 2:
+            return LineString(
+                [(points[0][0], points[0][1]), (points[1][0], points[1][1])]
+            )
+        elif geom_type in ["LWPOLYLINE", "POLYLINE"] and len(points) >= 2:
+            coords = [(p[0], p[1]) for p in points]
+            return LineString(coords)
+
+        return None
+
+    def should_interpolate_arc(self, element_info, tolerance=0.1):
+        """Determine if an arc should be interpolated for G-code generation"""
+        geom_type = element_info["geom_type"]
+        if geom_type != "ARC":
+            return False
+
+        radius = element_info["radius"]
+
+        # DISABLED: Don't interpolate arcs for now to preserve geometric connections
+        # The interpolation was breaking the chaining algorithm
+        # Only interpolate if absolutely necessary for GRBL compatibility
+        return False
+
+    def interpolate_arc_smart(self, element_info, max_segments=8):
+        """Interpolate an arc with a smart number of segments"""
+        geom_type = element_info["geom_type"]
+        if geom_type != "ARC":
+            return element_info
+
+        radius = element_info["radius"]
+
+        # Calculate appropriate number of segments based on arc size
+        # Larger arcs get more segments, but cap at max_segments
+        segments = min(max_segments, max(4, int(radius / 10)))
+
+        # Create interpolated version
+        linestring = self.arc_to_linestring(element_info, segments=segments)
+        if linestring:
+            # Convert back to element_info format with interpolated points
+            coords = list(linestring.coords)
+            interpolated_info = element_info.copy()
+            interpolated_info["points"] = [(x, y) for x, y in coords]
+            interpolated_info["geom_type"] = "LWPOLYLINE"  # Treat as polyline
+            interpolated_info["_interpolated"] = True
+            return interpolated_info
+
+        return element_info
+
+    def convert_dxf_to_shapely_hybrid(self, elements_by_id):
+        """Convert DXF elements to Shapely objects for geometric analysis while preserving original for G-code"""
+        shapely_objects = []
+        gcode_elements = []
+        element_mapping = {}  # Maps Shapely objects back to original elements
+
+        print("Converting DXF elements to Shapely for geometric analysis...")
+
+        for element_id, element_info in elements_by_id.items():
+            geom_type = element_info["geom_type"]
+
+            # Create Shapely object for geometric analysis
+            if geom_type == "ARC":
+                # Use simple 2-point representation to preserve geometric connections
+                shapely_obj = self.arc_to_simple_linestring(element_info)
+                if shapely_obj:
+                    shapely_objects.append(shapely_obj)
+                    element_mapping[shapely_obj] = (element_id, element_info)
+                    print(
+                        f"  Created simple 2-point arc {element_id} (radius: {element_info['radius']:.1f})"
+                    )
+                else:
+                    print(
+                        f"  WARNING: Failed to create simple arc {element_id}, falling back to interpolation"
+                    )
+                    # Fallback to interpolated version
+                    shapely_obj = self.arc_to_linestring(element_info, segments=8)
+                    if shapely_obj:
+                        shapely_objects.append(shapely_obj)
+                        element_mapping[shapely_obj] = (element_id, element_info)
+                        print(
+                            f"  Interpolated arc {element_id} (radius: {element_info['radius']:.1f})"
+                        )
+
+                # Keep original for G-code (unless problematic)
+                if self.should_interpolate_arc(element_info):
+                    gcode_elements.append(self.interpolate_arc_smart(element_info))
+                else:
+                    gcode_elements.append((element_id, element_info))  # Native G2/G3
+
+            elif geom_type in ["LINE", "LWPOLYLINE", "POLYLINE"]:
+                shapely_obj = self.line_to_linestring(element_info)
+                if shapely_obj:
+                    shapely_objects.append(shapely_obj)
+                    element_mapping[shapely_obj] = (element_id, element_info)
+                    gcode_elements.append((element_id, element_info))
+
+        print(
+            f"  Created {len(shapely_objects)} Shapely objects from {len(elements_by_id)} DXF elements"
+        )
+        return shapely_objects, gcode_elements, element_mapping
+
+    def analyze_geometric_relationships(self, shapely_objects, element_mapping):
+        """Build geometrically ordered chains from Shapely objects"""
+        print("Building geometrically ordered chains...")
+
+        # Find connected objects and build ordered chains
+        ordered_chains = []
+        processed = set()
+
+        for i, obj1 in enumerate(shapely_objects):
+            if i in processed:
                 continue
 
-            # Start a new chain
-            chain = [(element_id, element_info)]
-            visited.add(element_id)
+            # Start a new ordered chain
+            chain = [obj1]
+            processed.add(i)
 
-            # Try to extend the chain in both directions
+            # Build the chain by finding the next connected element
+            current_obj = obj1
             changed = True
-            loop_count = 0
-            max_loops = 1000  # Safety limit to prevent infinite loops
             while changed:
-                loop_count += 1
-                if loop_count > max_loops:
-                    print(
-                        f"WARNING: find_connected_chains loop exceeded {max_loops} iterations for element {element_id}"
-                    )
-                    break
                 changed = False
-                chain_start_point = self.get_element_start_point(
-                    chain[0][0], chain[0][1]
-                )
-                chain_end_point = self.get_element_end_point(chain[-1][0], chain[-1][1])
 
-                # Look for elements that connect to either end of the chain
-                for element_id, element_info in elements_list:
-                    if element_id in visited:
+                # Find the next element that connects to the end of current element
+                for j, obj2 in enumerate(shapely_objects):
+                    if j in processed:
                         continue
 
-                    elem_start = self.get_element_start_point(element_id, element_info)
-                    elem_end = self.get_element_end_point(element_id, element_info)
-
-                    # Check if this element connects to the end of the chain
-                    if self.are_points_connected(chain_end_point, elem_start):
-                        chain.append((element_id, element_info))
-                        visited.add(element_id)
-                        changed = True
-                        break
-                    elif self.are_points_connected(chain_end_point, elem_end):
-                        # Need to reverse this element
-                        elem_info_copy = element_info.copy()
-                        geom_type = elem_info_copy["geom_type"]
-                        if geom_type in [
-                            "LINE",
-                            "LWPOLYLINE",
-                            "POLYLINE",
-                            "ELLIPSE",
-                            "SPLINE",
-                        ]:
-                            points = elem_info_copy["points"]
-                            elem_info_copy["points"] = list(reversed(points))
-                            elem_info_copy["_reverse_path"] = True
-                        chain.append((element_id, elem_info_copy))
-                        visited.add(element_id)
+                    # Check if obj2 connects to the end of current_obj
+                    if self.shapely_objects_connect_end_to_start(current_obj, obj2):
+                        chain.append(obj2)
+                        processed.add(j)
+                        current_obj = obj2
                         changed = True
                         break
 
-                    # Check if this element connects to the start of the chain
-                    elif self.are_points_connected(chain_start_point, elem_end):
-                        chain.insert(0, (element_id, element_info))
-                        visited.add(element_id)
-                        changed = True
-                        break
-                    elif self.are_points_connected(chain_start_point, elem_start):
-                        # Need to reverse this element
-                        elem_info_copy = element_info.copy()
-                        geom_type = elem_info_copy["geom_type"]
-                        if geom_type in [
-                            "LINE",
-                            "LWPOLYLINE",
-                            "POLYLINE",
-                            "ELLIPSE",
-                            "SPLINE",
-                        ]:
-                            points = elem_info_copy["points"]
-                            elem_info_copy["points"] = list(reversed(points))
-                            elem_info_copy["_reverse_path"] = True
-                        chain.insert(0, (element_id, elem_info_copy))
-                        visited.add(element_id)
-                        changed = True
-                        break
+            # If we couldn't build forward, try building backward from the start
+            if len(chain) == 1:
+                current_obj = obj1
+                changed = True
+                while changed:
+                    changed = False
 
-            chains.append(chain)
+                    # Find an element that connects to the start of current_obj
+                    for j, obj2 in enumerate(shapely_objects):
+                        if j in processed:
+                            continue
 
-        # Report chaining results
-        multi_element_chains = [c for c in chains if len(c) > 1]
-        if multi_element_chains:
-            # print(f"  Found {len(multi_element_chains)} connected chains:")
-            # for i, chain in enumerate(multi_element_chains):
-            #     print(f"    Chain {i+1}: {len(chain)} connected elements")
-            pass
-        # else:
-        #     print(f"  No connected chains found - all elements are disconnected")
+                        # Check if obj2 connects to the start of current_obj
+                        if self.shapely_objects_connect_end_to_start(obj2, current_obj):
+                            chain.insert(0, obj2)  # Insert at beginning
+                            processed.add(j)
+                            current_obj = obj2
+                            changed = True
+                            break
 
-        return chains
+            ordered_chains.append(chain)
 
-    def optimize_toolpath(self, elements_by_id, start_x, start_y):
-        """Optimize toolpath using nearest neighbor algorithm with path chaining and reversal"""
+        # Convert back to element chains
+        element_chains = []
+        for chain in ordered_chains:
+            element_chain = []
+            for shapely_obj in chain:
+                if shapely_obj in element_mapping:
+                    element_id, element_info = element_mapping[shapely_obj]
+                    element_chain.append((element_id, element_info))
+            if element_chain:
+                element_chains.append(element_chain)
+
+        print(f"  Built {len(element_chains)} geometrically ordered chains")
+
+        # Debug: Show chain details
+        for i, chain in enumerate(element_chains[:5]):  # Show first 5 chains
+            print(f"    Chain {i+1}: {len(chain)} elements in geometric order")
+            if (
+                len(chain) == 4
+            ):  # Show details for 4-element chains (your polygon pattern)
+                for j, (elem_id, elem_info) in enumerate(chain):
+                    start_pt = self.get_element_start_point(elem_id, elem_info)
+                    end_pt = self.get_element_end_point(elem_id, elem_info)
+                    print(
+                        f"      {j+1}. ID:{elem_id} {elem_info['geom_type']} ({start_pt[0]:.2f},{start_pt[1]:.2f}) -> ({end_pt[0]:.2f},{end_pt[1]:.2f})"
+                    )
+
+                    # Check connection to next element
+                    if j < len(chain) - 1:
+                        next_elem_id, next_elem_info = chain[j + 1]
+                        next_start_pt = self.get_element_start_point(
+                            next_elem_id, next_elem_info
+                        )
+                        dist = self.calculate_distance(end_pt, next_start_pt)
+                        if dist < 0.1:
+                            print(
+                                f"        ✓ Connects to next element (dist: {dist:.3f})"
+                            )
+                        else:
+                            print(f"        ✗ Gap to next element (dist: {dist:.3f})")
+
+        return element_chains
+
+    def shapely_objects_connect(self, obj1, obj2, tolerance=0.1):
+        """Check if two Shapely objects are connected (share endpoints)"""
+        try:
+            # Get the endpoints of both objects
+            if hasattr(obj1, "coords") and hasattr(obj2, "coords"):
+                coords1 = list(obj1.coords)
+                coords2 = list(obj2.coords)
+
+                if len(coords1) >= 2 and len(coords2) >= 2:
+                    # Check if any endpoint of obj1 is close to any endpoint of obj2
+                    endpoints1 = [coords1[0], coords1[-1]]
+                    endpoints2 = [coords2[0], coords2[-1]]
+
+                    for ep1 in endpoints1:
+                        for ep2 in endpoints2:
+                            if Point(ep1).distance(Point(ep2)) < tolerance:
+                                return True
+        except Exception as e:
+            print(f"  Warning: Error checking connection between objects: {e}")
+
+        return False
+
+    def shapely_objects_connect_end_to_start(self, obj1, obj2, tolerance=0.1):
+        """Check if the end of obj1 connects to the start of obj2 (for ordered chaining)"""
+        try:
+            # Get the endpoints of both objects
+            if hasattr(obj1, "coords") and hasattr(obj2, "coords"):
+                coords1 = list(obj1.coords)
+                coords2 = list(obj2.coords)
+
+                if len(coords1) >= 2 and len(coords2) >= 2:
+                    # Check if end of obj1 is close to start of obj2
+                    end_of_obj1 = coords1[-1]
+                    start_of_obj2 = coords2[0]
+
+                    if Point(end_of_obj1).distance(Point(start_of_obj2)) < tolerance:
+                        return True
+        except Exception as e:
+            print(f"  Warning: Error checking end-to-start connection: {e}")
+
+        return False
+
+    def optimize_toolpath_shapely(self, elements_by_id, start_x, start_y):
+        """Optimize toolpath using Shapely geometric analysis instead of manual chaining"""
         if not elements_by_id:
             return []
 
-        elements_list = list(elements_by_id.items())
+        print("Using Shapely-based geometric analysis for toolpath optimization...")
 
-        # First, find connected chains
-        chains = self.find_connected_chains(elements_by_id)
-
-        print(
-            f"Optimizing toolpath for {len(chains)} chains (from {len(elements_list)} elements)..."
+        # Convert to Shapely objects for analysis
+        shapely_objects, gcode_elements, element_mapping = (
+            self.convert_dxf_to_shapely_hybrid(elements_by_id)
         )
-        
-        print("=" * 80)
-        print("ENTERING BOTTOM-LEFT SELECTION CODE")
-        print("=" * 80)
 
-        # Debug: Print chain details
-        for i, chain in enumerate(chains[:5]):  # Just print first 5 chains
-            print(f"  Chain {i+1}: {len(chain)} elements")
-            if len(chain) > 5:  # Only print details for chains with many elements
-                print(f"    First element: {chain[0][0]}")
-                print(f"    Last element: {chain[-1][0]}")
+        # Analyze geometric relationships
+        element_chains = self.analyze_geometric_relationships(
+            shapely_objects, element_mapping
+        )
 
-        # Now optimize the order of chains (not individual elements)
+        # Use the existing chain optimization logic but with Shapely-found chains
+        return self.optimize_chain_order(element_chains, start_x, start_y)
+
+    def optimize_chain_order(self, chains, start_x, start_y):
+        """Optimize the order of chains using the existing nearest neighbor algorithm"""
+        if not chains:
+            return []
+
+        print(f"Optimizing order of {len(chains)} geometrically-analyzed chains...")
+
+        # Use the existing chain optimization logic
         optimized = []
         remaining_chains = chains.copy()
 
-        print(
-            f"DEBUG: chains has {len(chains)} elements, remaining_chains has {len(remaining_chains)} elements"
-        )
-        print(f"DEBUG: Starting position is ({start_x}, {start_y})")
-
-        # Find the element closest to bottom-left of workspace
+        # Find the chain closest to lower-left corner (same logic as before)
         if chains:
-            min_x = float("inf")
-            min_y = float("inf")
+            # Get workspace boundaries
+            mpos_min_x = self.gcode_settings["mpos_home_x"]
+            mpos_min_y = self.gcode_settings["mpos_home_y"]
+            mpos_max_x = mpos_min_x + self.gcode_settings["max_travel_x"]
+            mpos_max_y = mpos_min_y + self.gcode_settings["max_travel_y"]
+
+            # Convert workspace lower-left corner to world coordinates
+            wpos_min_x, wpos_min_y = self.mpos_to_wpos(mpos_min_x, mpos_min_y)
+            lower_left_corner = (wpos_min_x, wpos_min_y)
+
+            min_distance = float("inf")
             bottom_left_chain_index = 0
 
-            print(f"Finding bottom-left element from {len(chains)} chains...")
+            print(
+                f"Finding chain closest to lower-left corner from {len(chains)} chains..."
+            )
+            print(
+                f"  Lower-left corner of workspace: ({wpos_min_x:.2f}, {wpos_min_y:.2f})"
+            )
 
             for i, chain in enumerate(chains):
                 # Get start point of first element in chain
-                chain_start = self.get_element_start_point(chain[0][0], chain[0][1])
-                x, y = chain_start
+                if chain:
+                    chain_start = self.get_element_start_point(chain[0][0], chain[0][1])
+                    distance = self.calculate_distance(chain_start, lower_left_corner)
 
-                # Debug output for first few chains
-                if i < 5:
-                    print(f"  Chain {i}: starts at ({x:.2f}, {y:.2f})")
+                    if distance < min_distance:
+                        min_distance = distance
+                        bottom_left_chain_index = i
+                        print(
+                            f"    New closest candidate: chain {i} at ({chain_start[0]:.2f}, {chain_start[1]:.2f}), distance: {distance:.2f}"
+                        )
 
-                # Check if this is more bottom-left (lower Y, then leftmost X)
-                if y < min_y or (y == min_y and x < min_x):
-                    min_x, min_y = x, y
-                    bottom_left_chain_index = i
-                    print(
-                        f"    New bottom-left candidate: chain {i} at ({x:.2f}, {y:.2f})"
-                    )
-
-            # Start with the bottom-left chain
+            # Start with the chain closest to lower-left corner
             bottom_left_chain = remaining_chains.pop(bottom_left_chain_index)
             optimized.append(bottom_left_chain)
             current_pos = self.get_element_end_point(
                 bottom_left_chain[-1][0], bottom_left_chain[-1][1]
             )
-            print(
-                f"SELECTED: Starting from bottom-left chain {bottom_left_chain_index} at ({min_x:.2f}, {min_y:.2f})"
+            selected_start = self.get_element_start_point(
+                bottom_left_chain[0][0], bottom_left_chain[0][1]
             )
-            print(f"  First element ID: {bottom_left_chain[0][0]}")
+            print(
+                f"SELECTED: Starting from chain {bottom_left_chain_index} at ({selected_start[0]:.2f}, {selected_start[1]:.2f}) - closest to lower-left corner (distance: {min_distance:.2f})"
+            )
         else:
             current_pos = (start_x, start_y)
 
-        # Use nearest neighbor algorithm on chains
+        # Use nearest neighbor algorithm on remaining chains (same as before)
         chain_iteration = 0
         while remaining_chains:
             chain_iteration += 1
             if chain_iteration > len(chains) + 10:  # Safety check
-                print(f"WARNING: optimize_toolpath loop exceeded expected iterations")
+                print(
+                    f"WARNING: optimize_chain_order loop exceeded expected iterations"
+                )
                 break
-            print(
-                f"  Processing chain {chain_iteration}/{len(chains)} (remaining: {len(remaining_chains)})"
-            )
+
             # Find the chain with the closest entry point to current position
             min_distance = float("inf")
             closest_index = 0
             should_reverse_chain = False
 
-            # Get optimization parameters from settings
-            proximity_threshold = self.gcode_settings.get("proximity_threshold", 2.0)
-            connection_multiplier = self.gcode_settings.get(
-                "connection_multiplier", 0.001
-            )
-            proximity_multiplier = self.gcode_settings.get("proximity_multiplier", 0.3)
-
             for i, chain in enumerate(remaining_chains):
+                if not chain:
+                    continue
+
                 # Get start and end points of the entire chain
                 chain_start = self.get_element_start_point(chain[0][0], chain[0][1])
                 chain_end = self.get_element_end_point(chain[-1][0], chain[-1][1])
@@ -806,7 +1316,7 @@ Colors:
                 distance_to_start = self.calculate_distance(current_pos, chain_start)
                 distance_to_end = self.calculate_distance(current_pos, chain_end)
 
-                # Choose the closer entry point (chains can be reversed)
+                # Choose the closer entry point
                 if distance_to_end < distance_to_start:
                     distance = distance_to_end
                     reverse_chain = True
@@ -814,117 +1324,373 @@ Colors:
                     distance = distance_to_start
                     reverse_chain = False
 
-                # Apply connection and proximity multipliers
-                if optimized:
-                    # Check if this chain connects to the last processed chain
-                    last_chain = optimized[
-                        -1
-                    ]  # optimized now always contains chains (lists)
-                    last_chain_end = self.get_element_end_point(
-                        last_chain[-1][0], last_chain[-1][1]
+                if distance < min_distance:
+                    min_distance = distance
+                    closest_index = i
+                    should_reverse_chain = reverse_chain
+
+            # Add the closest chain
+            closest_chain = remaining_chains.pop(closest_index)
+            if should_reverse_chain:
+                # Reverse the chain
+                closest_chain = list(reversed(closest_chain))
+                # Reverse individual elements if needed
+                for i, (element_id, element_info) in enumerate(closest_chain):
+                    if element_info.get("_reverse_path", False):
+                        # Already reversed, unreverse it
+                        element_info = element_info.copy()
+                        element_info["_reverse_path"] = False
+                        if "points" in element_info:
+                            element_info["points"] = list(
+                                reversed(element_info["points"])
+                            )
+                        closest_chain[i] = (element_id, element_info)
+                    else:
+                        # Reverse this element
+                        element_info = element_info.copy()
+                        element_info["_reverse_path"] = True
+                        if "points" in element_info:
+                            element_info["points"] = list(
+                                reversed(element_info["points"])
+                            )
+                        closest_chain[i] = (element_id, element_info)
+
+            optimized.append(closest_chain)
+            current_pos = self.get_element_end_point(
+                closest_chain[-1][0], closest_chain[-1][1]
+            )
+
+        # Flatten chains back to individual elements
+        flattened_optimized = []
+        for chain in optimized:
+            flattened_optimized.extend(chain)
+
+        print(
+            f"Shapely-based optimization complete: {len(flattened_optimized)} elements in {len(optimized)} chains"
+        )
+        return flattened_optimized
+
+    def optimize_toolpath_improved(self, elements_by_id, start_x, start_y):
+        """Graph-based optimization for 960+ points - O(n + m) performance"""
+        if not elements_by_id:
+            return []
+
+        print("Using graph-based optimization for large datasets...")
+
+        # 1. Build connection graph - O(n)
+        graph, point_to_elements = self.build_connection_graph(elements_by_id)
+
+        # 2. Find connected components - O(n + m)
+        components = self.find_connected_components(graph, point_to_elements)
+
+        # 3. Build ordered chains - O(n + m)
+        chains = self.build_ordered_chains(components, elements_by_id)
+
+        # 4. Optimize chain order - O(k²) where k = number of chains
+        return self.optimize_chain_order_graph(chains, start_x, start_y)
+
+    def build_connection_graph(self, elements_by_id):
+        """Build connection graph with rounded points for fast lookup - O(n)"""
+        print("Building connection graph...")
+
+        graph = {}
+        point_to_elements = {}
+
+        for element_id, element_info in elements_by_id.items():
+            start_pt = self.round_point(
+                self.get_element_start_point(element_id, element_info)
+            )
+            end_pt = self.round_point(
+                self.get_element_end_point(element_id, element_info)
+            )
+
+            # Add to graph
+            graph.setdefault(start_pt, []).append((end_pt, element_id, element_info))
+            graph.setdefault(end_pt, []).append((start_pt, element_id, element_info))
+
+            # Track which elements use each point
+            point_to_elements.setdefault(start_pt, []).append(element_id)
+            point_to_elements.setdefault(end_pt, []).append(element_id)
+
+        # Debug: Show connection statistics
+        connections_found = 0
+        for point, connections in graph.items():
+            if len(connections) > 1:
+                connections_found += len(connections) - 1
+                print(f"  Point {point} has {len(connections)} connections")
+                for end_pt, elem_id, elem_info in connections:
+                    print(
+                        f"    -> {end_pt} (element {elem_id}, type {elem_info.get('geom_type', 'unknown')})"
                     )
 
-                    # Check connection (within tolerance)
-                    connects_to_start = (
-                        self.calculate_distance(last_chain_end, chain_start) < 0.1
+        print(
+            f"  Built graph with {len(graph)} unique points, {connections_found} total connections"
+        )
+        return graph, point_to_elements
+
+    def round_point(self, point, precision=3):
+        """Round point to avoid floating-point precision issues"""
+        return (round(point[0], precision), round(point[1], precision))
+
+    def find_connected_components(self, graph, point_to_elements):
+        """Find connected components using graph traversal - O(n + m)"""
+        print("Finding connected components...")
+
+        visited_points = set()
+        components = []
+
+        for point in graph:
+            if point in visited_points:
+                continue
+
+            # Start new component
+            component = []
+            stack = [point]
+
+            while stack:
+                current_point = stack.pop()
+                if current_point in visited_points:
+                    continue
+
+                visited_points.add(current_point)
+                component.append(current_point)
+
+                # Add connected points to stack
+                for connected_point, element_id, element_info in graph[current_point]:
+                    if connected_point not in visited_points:
+                        stack.append(connected_point)
+
+            if component:
+                components.append(component)
+
+        print(f"  Found {len(components)} connected components")
+        return components
+
+    def build_ordered_chains(self, components, elements_by_id):
+        """Build ordered chains from connected components - O(n + m)"""
+        print("Building ordered chains from components...")
+
+        chains = []
+
+        for component in components:
+            if len(component) < 2:
+                # Single point - create single-element chain
+                point = component[0]
+                for element_id in elements_by_id:
+                    start_pt = self.round_point(
+                        self.get_element_start_point(
+                            element_id, elements_by_id[element_id]
+                        )
                     )
-                    connects_to_end = (
-                        self.calculate_distance(last_chain_end, chain_end) < 0.1
+                    end_pt = self.round_point(
+                        self.get_element_end_point(
+                            element_id, elements_by_id[element_id]
+                        )
+                    )
+                    if start_pt == point or end_pt == point:
+                        chains.append([(element_id, elements_by_id[element_id])])
+                        break
+                continue
+
+            # Multi-point component - build ordered chain
+            chain = []
+            visited_elements = set()
+
+            # Start with first point
+            start_point = component[0]
+
+            # Find element that starts at this point
+            for element_id, element_info in elements_by_id.items():
+                if element_id in visited_elements:
+                    continue
+
+                start_pt = self.round_point(
+                    self.get_element_start_point(element_id, element_info)
+                )
+                end_pt = self.round_point(
+                    self.get_element_end_point(element_id, element_info)
+                )
+
+                if start_pt == start_point:
+                    chain.append((element_id, element_info))
+                    visited_elements.add(element_id)
+                    current_end = end_pt
+                    break
+
+            # Extend chain by following connections
+            while True:
+                found_next = False
+
+                for element_id, element_info in elements_by_id.items():
+                    if element_id in visited_elements:
+                        continue
+
+                    start_pt = self.round_point(
+                        self.get_element_start_point(element_id, element_info)
+                    )
+                    end_pt = self.round_point(
+                        self.get_element_end_point(element_id, element_info)
                     )
 
-                    if connects_to_start or connects_to_end:
-                        # Connected chains - highest priority
-                        distance *= connection_multiplier
-                        print(
-                            f"    Chain {i} is CONNECTED (distance multiplier: {connection_multiplier})"
-                        )
-                    elif distance < proximity_threshold:
-                        # Nearby chains - medium priority
-                        distance *= proximity_multiplier
-                        print(
-                            f"    Chain {i} is NEARBY ({distance:.2f}mm, multiplier: {proximity_multiplier})"
-                        )
+                    if start_pt == current_end:
+                        # Element connects to current end
+                        chain.append((element_id, element_info))
+                        visited_elements.add(element_id)
+                        current_end = end_pt
+                        found_next = True
+                        break
+                    elif end_pt == current_end:
+                        # Element connects in reverse
+                        # For dictionary-based element data, we need to reverse the points
+                        if isinstance(element_info, dict) and "points" in element_info:
+                            # element_info is a dict: {"geom_type": ..., "radius": ..., "points": [...]}
+                            reversed_info = element_info.copy()
+                            reversed_info["points"] = list(
+                                reversed(element_info["points"])
+                            )
+                            reversed_info["_reverse_path"] = True
+                        else:
+                            reversed_info = element_info
+
+                        chain.append((element_id, reversed_info))
+                        visited_elements.add(element_id)
+                        current_end = start_pt
+                        found_next = True
+                        break
+
+                if not found_next:
+                    break
+
+            if chain:
+                chains.append(chain)
+
+        # Report results
+        multi_element_chains = [c for c in chains if len(c) > 1]
+        single_element_chains = [c for c in chains if len(c) == 1]
+        print(f"  Built {len(multi_element_chains)} multi-element chains")
+        print(f"  Built {len(single_element_chains)} single-element chains")
+
+        # Debug: Show chain details
+        for i, chain in enumerate(multi_element_chains):
+            print(f"  Chain {i+1}: {len(chain)} elements")
+            for j, (elem_id, elem_info) in enumerate(chain):
+                start_pt = self.get_element_start_point(elem_id, elem_info)
+                end_pt = self.get_element_end_point(elem_id, elem_info)
+                print(
+                    f"    {j+1}. Element {elem_id} ({elem_info.get('geom_type', 'unknown')}): {start_pt} -> {end_pt}"
+                )
+
+        return chains
+
+    def optimize_chain_order_graph(self, chains, start_x, start_y):
+        """Optimize chain order using nearest neighbor - O(k²) where k = number of chains"""
+        print(f"Optimizing order of {len(chains)} chains...")
+
+        if not chains:
+            return []
+
+        optimized = []
+        remaining_chains = chains.copy()
+
+        # Find chain closest to lower-left corner
+        if chains:
+            # Get workspace boundaries
+            mpos_min_x = self.gcode_settings["mpos_home_x"]
+            mpos_min_y = self.gcode_settings["mpos_home_y"]
+            wpos_min_x, wpos_min_y = self.mpos_to_wpos(mpos_min_x, mpos_min_y)
+            lower_left_corner = (wpos_min_x, wpos_min_y)
+
+            min_distance = float("inf")
+            bottom_left_chain_index = 0
+
+            for i, chain in enumerate(chains):
+                if chain:
+                    chain_start = self.get_element_start_point(chain[0][0], chain[0][1])
+                    distance = self.calculate_distance(chain_start, lower_left_corner)
+
+                    if distance < min_distance:
+                        min_distance = distance
+                        bottom_left_chain_index = i
+
+            # Start with closest chain
+            bottom_left_chain = remaining_chains.pop(bottom_left_chain_index)
+            optimized.append(bottom_left_chain)
+            current_pos = self.get_element_end_point(
+                bottom_left_chain[-1][0], bottom_left_chain[-1][1]
+            )
+        else:
+            current_pos = (start_x, start_y)
+
+        # Use nearest neighbor on remaining chains
+        while remaining_chains:
+            min_distance = float("inf")
+            closest_index = 0
+            should_reverse_chain = False
+
+            for i, chain in enumerate(remaining_chains):
+                if not chain:
+                    continue
+
+                chain_start = self.get_element_start_point(chain[0][0], chain[0][1])
+                chain_end = self.get_element_end_point(chain[-1][0], chain[-1][1])
+
+                distance_to_start = self.calculate_distance(current_pos, chain_start)
+                distance_to_end = self.calculate_distance(current_pos, chain_end)
+
+                if distance_to_end < distance_to_start:
+                    distance = distance_to_end
+                    reverse_chain = True
+                else:
+                    distance = distance_to_start
+                    reverse_chain = False
 
                 if distance < min_distance:
                     min_distance = distance
                     closest_index = i
                     should_reverse_chain = reverse_chain
 
-            # Add the closest chain to optimized list
+            # Add closest chain
             closest_chain = remaining_chains.pop(closest_index)
-
-            # If chain should be reversed, reverse the order and flip each element
             if should_reverse_chain:
                 closest_chain = list(reversed(closest_chain))
-                # Also need to reverse each element in the chain
-                reversed_chain = []
-                for element_id, element_info in closest_chain:
-                    elem_info_copy = element_info.copy()
-                    geom_type = elem_info_copy["geom_type"]
-                    if geom_type in [
-                        "LINE",
-                        "LWPOLYLINE",
-                        "POLYLINE",
-                        "ELLIPSE",
-                        "SPLINE",
-                    ]:
-                        points = elem_info_copy["points"]
-                        elem_info_copy["points"] = list(reversed(points))
-                        elem_info_copy["_reverse_path"] = not elem_info_copy.get(
-                            "_reverse_path", False
-                        )
-                    reversed_chain.append((element_id, elem_info_copy))
-                closest_chain = reversed_chain
+                # Reverse individual elements if needed
+                for i, (element_id, element_info) in enumerate(closest_chain):
+                    # For dictionary-based element data, we need to reverse the points
+                    if isinstance(element_info, dict) and "points" in element_info:
+                        # element_info is a dict: {"geom_type": ..., "radius": ..., "points": [...]}
+                        reversed_info = element_info.copy()
+                        reversed_info["points"] = list(reversed(element_info["points"]))
+                        reversed_info["_reverse_path"] = True
+                    else:
+                        reversed_info = element_info
 
-            # Add the entire chain to optimized (as a list)
+                    closest_chain[i] = (element_id, reversed_info)
+
             optimized.append(closest_chain)
+            current_pos = self.get_element_end_point(
+                closest_chain[-1][0], closest_chain[-1][1]
+            )
 
-            # Update current position to the end of this chain
-            last_element_id, last_element_info = closest_chain[-1]
-            current_pos = self.get_element_end_point(last_element_id, last_element_info)
-
-        # Flatten chains back to individual elements for final output
+        # Flatten chains back to individual elements
         flattened_optimized = []
         for chain in optimized:
             flattened_optimized.extend(chain)
 
-        # Calculate total optimized travel distance
-        optimized_distance = 0.0
-        current_pos = (start_x, start_y)
-        for element_id, element_info in flattened_optimized:
-            start_point = self.get_element_start_point(element_id, element_info)
-            optimized_distance += self.calculate_distance(current_pos, start_point)
-
-            # Update current position to end of element (using modified points if reversed)
-            current_pos = self.get_element_end_point(element_id, element_info)
-
-        # Calculate unoptimized distance for comparison
-        unoptimized_distance = 0.0
-        current_pos = (start_x, start_y)
-        for element_id, element_info in elements_list:
-            start_point = self.get_element_start_point(element_id, element_info)
-            unoptimized_distance += self.calculate_distance(current_pos, start_point)
-            current_pos = self.get_element_end_point(element_id, element_info)
-
-        savings = unoptimized_distance - optimized_distance
-        savings_percent = (
-            (savings / unoptimized_distance * 100) if unoptimized_distance > 0 else 0
-        )
-
         print(
-            f"Toolpath optimization complete:\n"
-            f"  Original order travel: {unoptimized_distance:.2f} mm\n"
-            f"  Optimized travel: {optimized_distance:.2f} mm\n"
-            f"  Savings: {savings:.2f} mm ({savings_percent:.1f}%)"
+            f"Graph-based optimization complete: {len(flattened_optimized)} elements in {len(optimized)} chains"
         )
-
         return flattened_optimized
 
-    def extract_geometry(self, file_path):
-        """Extract geometry from DXF file (simplified version of the original function)"""
-        doc = ezdxf.readfile(file_path)
-
-        # Detect and set up unit conversion
+    def are_points_connected(self, point1, point2, tolerance=1.0):
+        """Check if two points are connected (within tolerance)"""
+        # Increased tolerance to 1.0mm to catch more connections in concentric polygons
+        distance = self.calculate_distance(point1, point2)
+        connected = distance < tolerance
+        if distance < 5.0:  # Only print for potentially connected points
+            print(
+                f"    Point connection check: {point1} <-> {point2}, distance: {distance:.3f}mm, connected: {connected}"
+            )
+        return connected
         self.detect_dxf_units(doc)
 
         msp = doc.modelspace()
@@ -1947,39 +2713,45 @@ Colors:
                             if (
                                 dist_arc_end_to_move_end < 0.001
                             ):  # Arc returns to where move ended (circular!)
-                                # This is a circular arc pattern - optimize it!
-                                # Calculate arc center from G0 position (arc start)
-                                arc_center_x = g0_x + i_offset
-                                arc_center_y = g0_y + j_offset
+                                # DISABLED: This optimization is creating redundant back-and-forth motion
+                                # The circular arc optimization needs to be redesigned
+                                # For now, just treat it as a normal sequence
+                                pass
 
-                                # Create reversed arc from move end (A) to G0 end (B)
-                                new_start_x, new_start_y = end_x, end_y  # Start at A
-                                new_end_x, new_end_y = g0_x, g0_y  # End at B
-                                new_i_offset = arc_center_x - new_start_x
-                                new_j_offset = arc_center_y - new_start_y
-                                new_arc_type = (
-                                    "3" if arc_type == "2" else "2"
-                                )  # Flip G2<->G3
-
-                                # Add the original move first (it's still needed!)
-                                optimized_lines.append(gcode_lines[i])
-                                # Update position after the original move
-                                current_x, current_y = end_x, end_y
-
-                                # Then add the reversed arc to replace the G0 + G3 sequence
-                                optimized_arc = f"G{new_arc_type} X{new_end_x:.3f} Y{new_end_y:.3f} I{new_i_offset:.3f} J{new_j_offset:.3f} F{self.gcode_settings['feedrate']} S{self.gcode_settings['laser_power']}"
-
-                                optimized_lines.append(
-                                    f"; Optimized: eliminated G0 travel by reversing circular arc"
-                                )
-                                optimized_lines.append(optimized_arc)
-                                # Update position after the reversed arc
-                                current_x, current_y = new_end_x, new_end_y
-                                i = (
-                                    k + 1
-                                )  # Skip G0 and original arc (but we already added the move)
-                                optimization_applied = True
-                                break  # Break inner loop
+                                # Original broken code commented out:
+                                # # This is a circular arc pattern - optimize it!
+                                # # Calculate arc center from G0 position (arc start)
+                                # arc_center_x = g0_x + i_offset
+                                # arc_center_y = g0_y + j_offset
+                                #
+                                # # Create reversed arc from move end (A) to G0 end (B)
+                                # new_start_x, new_start_y = end_x, end_y  # Start at A
+                                # new_end_x, new_end_y = g0_x, g0_y  # End at B
+                                # new_i_offset = arc_center_x - new_start_x
+                                # new_j_offset = arc_center_y - new_start_y
+                                # new_arc_type = (
+                                #     "3" if arc_type == "2" else "2"
+                                # )  # Flip G2<->G3
+                                #
+                                # # Add the original move first (it's still needed!)
+                                # optimized_lines.append(gcode_lines[i])
+                                # # Update position after the original move
+                                # current_x, current_y = end_x, end_y
+                                #
+                                # # Then add the reversed arc to replace the G0 + G3 sequence
+                                # optimized_arc = f"G{new_arc_type} X{new_end_x:.3f} Y{new_end_y:.3f} I{new_i_offset:.3f} J{new_j_offset:.3f} F{self.gcode_settings['feedrate']} S{self.gcode_settings['laser_power']}"
+                                #
+                                # optimized_lines.append(
+                                #     f"; Optimized: eliminated G0 travel by reversing circular arc"
+                                # )
+                                # optimized_lines.append(optimized_arc)
+                                # # Update position after the reversed arc
+                                # current_x, current_y = new_end_x, new_end_y
+                                # i = (
+                                #     k + 1
+                                # )  # Skip G0 and original arc (but we already added the move)
+                                # optimization_applied = True
+                                # break  # Break inner loop
                             # If arc doesn't match optimization criteria, stop looking
                             break
                         # Check for G1 line
@@ -2026,7 +2798,7 @@ Colors:
             optimized_lines.append(gcode_lines[i])
             i += 1
 
-        # Second pass: Add settling G1 commands after G0 when followed by G2/G3
+        # Second pass: Add settling G1 commands after G0 when followed by G2/G3, but eliminate redundant ones
         print("Adding settling G1 commands for arc stability...")
         final_lines = []
         i = 0
@@ -2067,6 +2839,26 @@ Colors:
                         x, y = g0_match.group(1), g0_match.group(2)
                         z = g0_match.group(3) if g0_match.group(3) else None
 
+                        # Check if there's already a G1 to the same position right after
+                        if j < len(optimized_lines):
+                            next_line = optimized_lines[j].strip()
+                            g1_match = re.match(
+                                r"G1\s+X([\d.-]+)\s+Y([\d.-]+)", next_line
+                            )
+                            if g1_match:
+                                g1_x, g1_y = g1_match.group(1), g1_match.group(2)
+                                if (
+                                    abs(float(x) - float(g1_x)) < 0.001
+                                    and abs(float(y) - float(g1_y)) < 0.001
+                                ):
+                                    # G1 already goes to the same position - skip adding settling move
+                                    print(
+                                        f"  Skipped redundant settling move - G1 already at ({x}, {y})"
+                                    )
+                                    i = next_gcode_index - 1
+                                    i += 1
+                                    continue
+
                         # Insert settling G1 command
                         settling_cmd = f"G1 X{x} Y{y}"
                         if z:
@@ -2081,13 +2873,16 @@ Colors:
 
         print(f"Added {settling_count} settling G1 commands")
 
-        # Third pass: Final cleanup - remove any remaining unnecessary G0 moves
-        print("Final cleanup pass - removing remaining unnecessary G0 moves...")
+        # Third pass: Final cleanup - remove any remaining unnecessary G0 moves and duplicates
+        print(
+            "Final cleanup pass - removing remaining unnecessary G0 moves and duplicates..."
+        )
         cleaned_lines = []
         current_x, current_y = None, None
         removed_count = 0
         last_was_g0 = False
         last_g0_line = None
+        last_movement_line = None
 
         for i, line in enumerate(final_lines):
             line_stripped = line.strip()
@@ -2115,7 +2910,7 @@ Colors:
                         dist = math.sqrt(
                             (target_x - current_x) ** 2 + (target_y - current_y) ** 2
                         )
-                        if dist < 0.01:  # Increased tolerance to 0.01mm
+                        if dist < 0.001:  # Very tight tolerance for G0 elimination
                             # Skip this unnecessary G0
                             removed_count += 1
                             print(
@@ -2132,10 +2927,23 @@ Colors:
                     current_x = float(x_match.group(1))
                     current_y = float(y_match.group(1))
                     last_was_g0 = False
+
+                    # Check for duplicate consecutive movement commands
+                    if (
+                        last_movement_line
+                        and line_stripped == last_movement_line.strip()
+                    ):
+                        # Skip this duplicate movement
+                        removed_count += 1
+                        print(f"  Removed duplicate movement: {line_stripped}")
+                        continue
+
+                    last_movement_line = line
             else:
                 # Not a movement command
                 if not line_stripped.startswith(";"):
                     last_was_g0 = False
+                    last_movement_line = None
 
             cleaned_lines.append(line)
 
@@ -2335,13 +3143,26 @@ Colors:
                     )
                     segments_added += 1
 
-            print(f"      Generated {segments_added} G-code segments")
-
-            # Return the last position we moved to
-            if inside_points:
-                final_x, final_y = inside_points[-1]
+                # CRITICAL FIX: Always ensure we end at the intended end point
+                # If the end point is inside workspace, add a final move to it
+                if end_inside:
+                    # Check if we're not already at the end point
+                    last_x, last_y = inside_points[-1]
+                    if abs(last_x - end_x) > 0.001 or abs(last_y - end_y) > 0.001:
+                        gcode_lines.append(
+                            f"G1 X{end_x:.3f} Y{end_y:.3f} F{self.gcode_settings['feedrate']} S{self.gcode_settings['laser_power']}"
+                        )
+                        segments_added += 1
+                        final_x, final_y = end_x, end_y
+                    else:
+                        final_x, final_y = end_x, end_y
+                else:
+                    final_x, final_y = inside_points[-1]
             else:
+                # No inside points - return current position
                 final_x, final_y = current_x, current_y
+
+            print(f"      Generated {segments_added} G-code segments")
 
             return gcode_lines, final_x, final_y
         else:
@@ -4169,10 +4990,12 @@ DXF Units: {self.dxf_units}"""
                     f"  Example {i+1}: ID={eid}, Type={einfo['geom_type']}, First point={einfo['points'][0]}"
                 )
 
-        # Optimize toolpath by sorting elements to minimize travel distance (if enabled)
+        # Optimize toolpath using improved geometric analysis (if enabled)
         if self.gcode_settings.get("optimize_toolpath", True):
-            print(f"\nCalling optimize_toolpath with {len(elements_by_id)} elements...")
-            optimized_elements = self.optimize_toolpath(
+            print(
+                f"\nCalling improved geometric optimize_toolpath with {len(elements_by_id)} elements..."
+            )
+            optimized_elements = self.optimize_toolpath_improved(
                 elements_by_id, current_x, current_y
             )
             print(
@@ -4198,13 +5021,30 @@ DXF Units: {self.dxf_units}"""
                     print(f"  {i+1}. ID:{elem_id} Type:{elem_info['geom_type']}")
 
         element_count = 0
-        for element_id, element_info in optimized_elements:
+        for i, (element_id, element_info) in enumerate(optimized_elements):
             element_count += 1
             # Only print for first few elements to reduce noise
             if element_count <= 3:
                 print(
                     f"  Processing element {element_count}/{len(optimized_elements)}: {element_id} ({element_info['geom_type']})"
                 )
+
+            # Check if this element is connected to the previous one
+            is_connected_to_previous = False
+            if i > 0:
+                prev_element_id, prev_element_info = optimized_elements[i - 1]
+                prev_end = self.get_element_end_point(
+                    prev_element_id, prev_element_info
+                )
+                current_start = self.get_element_start_point(element_id, element_info)
+                distance = self.calculate_distance(prev_end, current_start)
+                is_connected_to_previous = (
+                    distance < 2.0
+                )  # 2mm tolerance for connection
+                if element_count <= 3:
+                    print(
+                        f"    Connection check: prev_end={prev_end}, current_start={current_start}, distance={distance:.3f}mm, connected={is_connected_to_previous}"
+                    )
             geom_type = element_info["geom_type"]
             radius = element_info["radius"]
 
@@ -4242,10 +5082,14 @@ DXF Units: {self.dxf_units}"""
                         # Only add header if we're actually going to engrave
                         gcode.append("; === LINE GEOMETRY ===")
 
-                        # G0 move to start point if not already there
-                        if need_move:
+                        # G0 move to start point if not already there AND not connected to previous element
+                        if need_move and not is_connected_to_previous:
                             gcode.append(
                                 f"G0 X{clipped_start_x:.3f} Y{clipped_start_y:.3f} Z{self.gcode_settings['cutting_z']:.3f}"
+                            )
+                        elif is_connected_to_previous and element_count <= 3:
+                            print(
+                                f"    Skipping G0 move - element connected to previous"
                             )
 
                         # Engrave to clipped end point combined laser power into move
@@ -4489,8 +5333,11 @@ DXF Units: {self.dxf_units}"""
                                 # Only add header if we're actually going to engrave
                                 gcode.append("; === ARC GEOMETRY ===")
 
-                                # G0 move to start point if not already there and start point is accessible
-                                if (current_x, current_y) != (start_x, start_y):
+                                # G0 move to start point if not already there and start point is accessible AND not connected to previous
+                                if (current_x, current_y) != (
+                                    start_x,
+                                    start_y,
+                                ) and not is_connected_to_previous:
                                     # If start point is outside workspace, move to intersection instead
                                     if start_outside:
                                         # Find intersection point with workspace boundary
@@ -4516,10 +5363,51 @@ DXF Units: {self.dxf_units}"""
                                         gcode.append(
                                             f"G0 X{start_x:.3f} Y{start_y:.3f} Z{self.gcode_settings['cutting_z']:.3f}"
                                         )
+                                elif is_connected_to_previous and element_count <= 3:
+                                    print(
+                                        f"    Skipping G0 move for arc - element connected to previous"
+                                    )
 
-                                # DXF ARC entities are ALWAYS counterclockwise from start_angle to end_angle
-                                # This is a fundamental property of DXF format
-                                ccw = True
+                                # Determine arc direction based on flow from previous element
+                                # If connected to previous element, maintain flow direction
+                                if is_connected_to_previous:
+                                    # Calculate the direction from previous element's end to arc start
+                                    prev_end = self.get_element_end_point(
+                                        prev_element_id, prev_element_info
+                                    )
+                                    flow_direction = (
+                                        start_x - prev_end[0],
+                                        start_y - prev_end[1],
+                                    )
+
+                                    # Calculate the direction from arc start to arc end
+                                    arc_direction = (end_x - start_x, end_y - start_y)
+
+                                    # Determine if we should go clockwise or counterclockwise
+                                    # Cross product to determine direction
+                                    cross_product = (
+                                        flow_direction[0] * arc_direction[1]
+                                        - flow_direction[1] * arc_direction[0]
+                                    )
+
+                                    # If cross product is positive, we should go counterclockwise (G3)
+                                    # If cross product is negative, we should go clockwise (G2)
+                                    ccw = cross_product > 0
+
+                                    if element_count <= 3:
+                                        print(
+                                            f"    Arc direction: flow={flow_direction}, arc={arc_direction}, cross={cross_product:.3f}, ccw={ccw}"
+                                        )
+                                else:
+                                    # For disconnected arcs, use the DXF arc direction
+                                    # DXF ARC entities are ALWAYS counterclockwise from start_angle to end_angle
+                                    # This is a fundamental property of DXF format
+                                    ccw = True
+
+                                    if element_count <= 3:
+                                        print(
+                                            f"    Arc direction: disconnected, using DXF default (CCW)"
+                                        )
 
                                 # print(
                                 #     f"\nG-code generation for ARC element {element_id}:"
@@ -5423,7 +6311,7 @@ DXF Units: {self.dxf_units}"""
                     if key in self.gcode_settings:
                         self.gcode_settings[key] = value
 
-                messagebox.showinfo("Success", f"Settings loaded from {file_path}")
+                # messagebox.showinfo("Success", f"Settings loaded from {file_path}")
                 # Update the plot if workspace bounds changed
                 self.update_plot()
             except json.JSONDecodeError:
@@ -5460,6 +6348,132 @@ DXF Units: {self.dxf_units}"""
         # Main frame inside scrollable area
         main_frame = ttk.Frame(scrollable_frame)
         main_frame.pack(fill="both", expand=True, padx=20, pady=20)
+
+        # Top button row - Load, Save, Apply, Cancel buttons (moved to top)
+        top_button_frame = ttk.Frame(main_frame)
+        top_button_frame.pack(fill="x", pady=(0, 20))
+
+        # Button functions (moved to top for early definition)
+        def save_to_file():
+            """Save current form values to a file"""
+            # First update the settings from the form
+            self.gcode_settings["preamble"] = preamble_text.get("1.0", "end-1c")
+            self.gcode_settings["postscript"] = postscript_text.get("1.0", "end-1c")
+            self.gcode_settings["laser_power"] = laser_power_var.get()
+            self.gcode_settings["cutting_z"] = cutting_z_var.get()
+            self.gcode_settings["feedrate"] = feedrate_var.get()
+            self.gcode_settings["mpos_home_x"] = mpos_home_x_var.get()
+            self.gcode_settings["mpos_home_y"] = mpos_home_y_var.get()
+            self.gcode_settings["mpos_home_z"] = mpos_home_z_var.get()
+            self.gcode_settings["max_travel_x"] = max_travel_x_var.get()
+            self.gcode_settings["max_travel_y"] = max_travel_y_var.get()
+            self.gcode_settings["max_travel_z"] = max_travel_z_var.get()
+            self.gcode_settings["wpos_home_x"] = wpos_home_x_var.get()
+            self.gcode_settings["wpos_home_y"] = wpos_home_y_var.get()
+            self.gcode_settings["wpos_home_z"] = wpos_home_z_var.get()
+            self.gcode_settings["raise_laser_between_paths"] = raise_laser_var.get()
+            self.gcode_settings["optimize_toolpath"] = optimize_toolpath_var.get()
+            # Toolpath optimization settings
+            self.gcode_settings["proximity_threshold"] = proximity_var.get()
+            self.gcode_settings["connection_multiplier"] = connection_var.get()
+            self.gcode_settings["proximity_multiplier"] = proximity_mult_var.get()
+            # Now save to file
+            self.save_settings_to_file()
+
+        def load_from_file():
+            """Load settings from a file and update the form"""
+            self.load_settings_from_file()
+            # Update all form variables with loaded settings
+            preamble_text.delete("1.0", "end")
+            preamble_text.insert("1.0", self.gcode_settings["preamble"])
+            postscript_text.delete("1.0", "end")
+            postscript_text.insert("1.0", self.gcode_settings["postscript"])
+            laser_power_var.set(self.gcode_settings["laser_power"])
+            cutting_z_var.set(self.gcode_settings["cutting_z"])
+            feedrate_var.set(self.gcode_settings["feedrate"])
+            mpos_home_x_var.set(self.gcode_settings["mpos_home_x"])
+            mpos_home_y_var.set(self.gcode_settings["mpos_home_y"])
+            mpos_home_z_var.set(self.gcode_settings["mpos_home_z"])
+            max_travel_x_var.set(self.gcode_settings["max_travel_x"])
+            max_travel_y_var.set(self.gcode_settings["max_travel_y"])
+            max_travel_z_var.set(self.gcode_settings["max_travel_z"])
+            wpos_home_x_var.set(self.gcode_settings["wpos_home_x"])
+            wpos_home_y_var.set(self.gcode_settings["wpos_home_y"])
+            wpos_home_z_var.set(self.gcode_settings["wpos_home_z"])
+            raise_laser_var.set(
+                self.gcode_settings.get("raise_laser_between_paths", False)
+            )
+            optimize_toolpath_var.set(
+                self.gcode_settings.get("optimize_toolpath", True)
+            )
+            force_ccw_arcs_var.set(self.gcode_settings.get("force_ccw_arcs", True))
+            # Toolpath optimization settings
+            proximity_var.set(self.gcode_settings.get("proximity_threshold", 2.0))
+            connection_var.set(self.gcode_settings.get("connection_multiplier", 0.001))
+            proximity_mult_var.set(self.gcode_settings.get("proximity_multiplier", 0.3))
+
+        def save_settings():
+            """Save the settings and close the window"""
+            self.gcode_settings["preamble"] = preamble_text.get("1.0", "end-1c")
+            self.gcode_settings["postscript"] = postscript_text.get("1.0", "end-1c")
+            self.gcode_settings["laser_power"] = laser_power_var.get()
+            self.gcode_settings["cutting_z"] = cutting_z_var.get()
+            self.gcode_settings["feedrate"] = feedrate_var.get()
+            # Save coordinate system settings
+            self.gcode_settings["mpos_home_x"] = mpos_home_x_var.get()
+            self.gcode_settings["mpos_home_y"] = mpos_home_y_var.get()
+            self.gcode_settings["mpos_home_z"] = mpos_home_z_var.get()
+            self.gcode_settings["max_travel_x"] = max_travel_x_var.get()
+            self.gcode_settings["max_travel_y"] = max_travel_y_var.get()
+            self.gcode_settings["max_travel_z"] = max_travel_z_var.get()
+            self.gcode_settings["wpos_home_x"] = wpos_home_x_var.get()
+            self.gcode_settings["wpos_home_y"] = wpos_home_y_var.get()
+            self.gcode_settings["wpos_home_z"] = wpos_home_z_var.get()
+            self.gcode_settings["raise_laser_between_paths"] = raise_laser_var.get()
+            self.gcode_settings["optimize_toolpath"] = optimize_toolpath_var.get()
+            # Toolpath optimization settings
+            self.gcode_settings["proximity_threshold"] = proximity_var.get()
+            self.gcode_settings["connection_multiplier"] = connection_var.get()
+            self.gcode_settings["proximity_multiplier"] = proximity_mult_var.get()
+            # Update plot to reflect new workspace bounds
+            self.update_plot()
+            cleanup_and_close()
+
+        def cleanup_and_close():
+            # Clean up mousewheel bindings to prevent memory leaks
+            def unbind_scroll_events(widget):
+                """Recursively unbind scroll events from widget and all its children"""
+                try:
+                    widget.unbind("<MouseWheel>")
+                    widget.unbind("<Button-4>")
+                    widget.unbind("<Button-5>")
+                except:
+                    pass  # Some widgets might not have these bindings
+
+                # Unbind from all child widgets recursively
+                for child in widget.winfo_children():
+                    unbind_scroll_events(child)
+
+            # Clean up all scroll bindings
+            unbind_scroll_events(settings_window)
+            canvas.unbind("<1>")
+            settings_window.destroy()
+
+        # Load and Save buttons on the left
+        ttk.Button(top_button_frame, text="Load Settings", command=load_from_file).pack(
+            side="left", padx=(0, 5)
+        )
+        ttk.Button(top_button_frame, text="Save Settings", command=save_to_file).pack(
+            side="left", padx=(0, 20)
+        )
+
+        # Apply and Cancel buttons on the right
+        ttk.Button(top_button_frame, text="Apply", command=save_settings).pack(
+            side="right", padx=(5, 0)
+        )
+        ttk.Button(top_button_frame, text="Cancel", command=cleanup_and_close).pack(
+            side="right"
+        )
 
         # Enable mousewheel scrolling (works on both Windows/Linux and Mac)
         def _on_mousewheel(event):
@@ -5714,133 +6728,6 @@ DXF Units: {self.dxf_units}"""
             text="Force CCW arcs (counter-clockwise direction)",
             variable=force_ccw_arcs_var,
         ).pack(anchor="w", pady=(5, 0))
-
-        # File operations frame
-        file_frame = ttk.Frame(main_frame)
-        file_frame.pack(fill="x", pady=(10, 0))
-
-        def save_to_file():
-            """Save current form values to a file"""
-            # First update the settings from the form
-            self.gcode_settings["preamble"] = preamble_text.get("1.0", "end-1c")
-            self.gcode_settings["postscript"] = postscript_text.get("1.0", "end-1c")
-            self.gcode_settings["laser_power"] = laser_power_var.get()
-            self.gcode_settings["cutting_z"] = cutting_z_var.get()
-            self.gcode_settings["feedrate"] = feedrate_var.get()
-            self.gcode_settings["mpos_home_x"] = mpos_home_x_var.get()
-            self.gcode_settings["mpos_home_y"] = mpos_home_y_var.get()
-            self.gcode_settings["mpos_home_z"] = mpos_home_z_var.get()
-            self.gcode_settings["max_travel_x"] = max_travel_x_var.get()
-            self.gcode_settings["max_travel_y"] = max_travel_y_var.get()
-            self.gcode_settings["max_travel_z"] = max_travel_z_var.get()
-            self.gcode_settings["wpos_home_x"] = wpos_home_x_var.get()
-            self.gcode_settings["wpos_home_y"] = wpos_home_y_var.get()
-            self.gcode_settings["wpos_home_z"] = wpos_home_z_var.get()
-            self.gcode_settings["raise_laser_between_paths"] = raise_laser_var.get()
-            self.gcode_settings["optimize_toolpath"] = optimize_toolpath_var.get()
-            # Toolpath optimization settings
-            self.gcode_settings["proximity_threshold"] = proximity_var.get()
-            self.gcode_settings["connection_multiplier"] = connection_var.get()
-            self.gcode_settings["proximity_multiplier"] = proximity_mult_var.get()
-            # Now save to file
-            self.save_settings_to_file()
-
-        def load_from_file():
-            """Load settings from a file and update the form"""
-            self.load_settings_from_file()
-            # Update all form variables with loaded settings
-            preamble_text.delete("1.0", "end")
-            preamble_text.insert("1.0", self.gcode_settings["preamble"])
-            postscript_text.delete("1.0", "end")
-            postscript_text.insert("1.0", self.gcode_settings["postscript"])
-            laser_power_var.set(self.gcode_settings["laser_power"])
-            cutting_z_var.set(self.gcode_settings["cutting_z"])
-            feedrate_var.set(self.gcode_settings["feedrate"])
-            mpos_home_x_var.set(self.gcode_settings["mpos_home_x"])
-            mpos_home_y_var.set(self.gcode_settings["mpos_home_y"])
-            mpos_home_z_var.set(self.gcode_settings["mpos_home_z"])
-            max_travel_x_var.set(self.gcode_settings["max_travel_x"])
-            max_travel_y_var.set(self.gcode_settings["max_travel_y"])
-            max_travel_z_var.set(self.gcode_settings["max_travel_z"])
-            wpos_home_x_var.set(self.gcode_settings["wpos_home_x"])
-            wpos_home_y_var.set(self.gcode_settings["wpos_home_y"])
-            wpos_home_z_var.set(self.gcode_settings["wpos_home_z"])
-            raise_laser_var.set(
-                self.gcode_settings.get("raise_laser_between_paths", False)
-            )
-            optimize_toolpath_var.set(
-                self.gcode_settings.get("optimize_toolpath", True)
-            )
-            force_ccw_arcs_var.set(self.gcode_settings.get("force_ccw_arcs", True))
-            # Toolpath optimization settings
-            proximity_var.set(self.gcode_settings.get("proximity_threshold", 2.0))
-            connection_var.set(self.gcode_settings.get("connection_multiplier", 0.001))
-            proximity_mult_var.set(self.gcode_settings.get("proximity_multiplier", 0.3))
-
-        ttk.Button(
-            file_frame, text="Load Settings from File", command=load_from_file
-        ).pack(side="left", padx=(0, 5))
-        ttk.Button(file_frame, text="Save Settings to File", command=save_to_file).pack(
-            side="left"
-        )
-
-        # Buttons
-        button_frame = ttk.Frame(main_frame)
-        button_frame.pack(fill="x", pady=(20, 0))
-
-        def save_settings():
-            """Save the settings and close the window"""
-            self.gcode_settings["preamble"] = preamble_text.get("1.0", "end-1c")
-            self.gcode_settings["postscript"] = postscript_text.get("1.0", "end-1c")
-            self.gcode_settings["laser_power"] = laser_power_var.get()
-            self.gcode_settings["cutting_z"] = cutting_z_var.get()
-            self.gcode_settings["feedrate"] = feedrate_var.get()
-            # Save coordinate system settings
-            self.gcode_settings["mpos_home_x"] = mpos_home_x_var.get()
-            self.gcode_settings["mpos_home_y"] = mpos_home_y_var.get()
-            self.gcode_settings["mpos_home_z"] = mpos_home_z_var.get()
-            self.gcode_settings["max_travel_x"] = max_travel_x_var.get()
-            self.gcode_settings["max_travel_y"] = max_travel_y_var.get()
-            self.gcode_settings["max_travel_z"] = max_travel_z_var.get()
-            self.gcode_settings["wpos_home_x"] = wpos_home_x_var.get()
-            self.gcode_settings["wpos_home_y"] = wpos_home_y_var.get()
-            self.gcode_settings["wpos_home_z"] = wpos_home_z_var.get()
-            self.gcode_settings["raise_laser_between_paths"] = raise_laser_var.get()
-            self.gcode_settings["optimize_toolpath"] = optimize_toolpath_var.get()
-            # Toolpath optimization settings
-            self.gcode_settings["proximity_threshold"] = proximity_var.get()
-            self.gcode_settings["connection_multiplier"] = connection_var.get()
-            self.gcode_settings["proximity_multiplier"] = proximity_mult_var.get()
-            # Update plot to reflect new workspace bounds
-            self.update_plot()
-            cleanup_and_close()
-
-        def cleanup_and_close():
-            # Clean up mousewheel bindings to prevent memory leaks
-            def unbind_scroll_events(widget):
-                """Recursively unbind scroll events from widget and all its children"""
-                try:
-                    widget.unbind("<MouseWheel>")
-                    widget.unbind("<Button-4>")
-                    widget.unbind("<Button-5>")
-                except:
-                    pass  # Some widgets might not have these bindings
-
-                # Unbind from all child widgets recursively
-                for child in widget.winfo_children():
-                    unbind_scroll_events(child)
-
-            # Clean up all scroll bindings
-            unbind_scroll_events(settings_window)
-            canvas.unbind("<1>")
-            settings_window.destroy()
-
-        ttk.Button(button_frame, text="Apply", command=save_settings).pack(
-            side="right", padx=(5, 0)
-        )
-        ttk.Button(button_frame, text="Cancel", command=cleanup_and_close).pack(
-            side="right"
-        )
 
 
 def main():
