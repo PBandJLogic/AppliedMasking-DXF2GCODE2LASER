@@ -864,10 +864,15 @@ Colors:
             last_element_id, last_element_info = closest_chain[-1]
             current_pos = self.get_element_end_point(last_element_id, last_element_info)
 
+        # Flatten chains back to individual elements for final output
+        flattened_optimized = []
+        for chain in optimized:
+            flattened_optimized.extend(chain)
+        
         # Calculate total optimized travel distance
         optimized_distance = 0.0
         current_pos = (start_x, start_y)
-        for element_id, element_info in optimized:
+        for element_id, element_info in flattened_optimized:
             start_point = self.get_element_start_point(element_id, element_info)
             optimized_distance += self.calculate_distance(current_pos, start_point)
 
@@ -894,7 +899,7 @@ Colors:
             f"  Savings: {savings:.2f} mm ({savings_percent:.1f}%)"
         )
 
-        return optimized
+        return flattened_optimized
 
     def extract_geometry(self, file_path):
         """Extract geometry from DXF file (simplified version of the original function)"""
@@ -5318,9 +5323,13 @@ DXF Units: {self.dxf_units}"""
 
         # Bind mousewheel events for different platforms
         canvas.bind("<MouseWheel>", _on_mousewheel)  # Windows/Linux
-        canvas.bind("<Button-4>", lambda e: canvas.yview_scroll(-1, "units"))  # Linux scroll up
-        canvas.bind("<Button-5>", lambda e: canvas.yview_scroll(1, "units"))   # Linux scroll down
-        
+        canvas.bind(
+            "<Button-4>", lambda e: canvas.yview_scroll(-1, "units")
+        )  # Linux scroll up
+        canvas.bind(
+            "<Button-5>", lambda e: canvas.yview_scroll(1, "units")
+        )  # Linux scroll down
+
         # Make sure the canvas can receive focus for scrolling
         canvas.bind("<1>", lambda e: canvas.focus_set())
 
