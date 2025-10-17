@@ -1866,7 +1866,7 @@ Vector Analysis:
         
         # Check if radii match within tolerance
         radius_error = abs(radius_start - radius_end)
-        if radius_error > 0.01:  # More than 0.01mm error
+        if radius_error > 0.005:  # More than 0.005mm error (tighter tolerance)
             # Adjust end point to match the radius from start point
             # This keeps the arc valid while minimizing position error
             if radius_start > 0:
@@ -1876,15 +1876,23 @@ Vector Analysis:
                 distance = np.sqrt(dx**2 + dy**2)
                 
                 if distance > 0:
+                    # Store original end point for comparison
+                    orig_end_x = adjusted_end_x
+                    orig_end_y = adjusted_end_y
+                    
                     # Normalize and scale to correct radius
                     adjusted_end_x = adjusted_center_x + (dx / distance) * radius_start
                     adjusted_end_y = adjusted_center_y + (dy / distance) * radius_start
                     
-                    # Log if adjustment is significant
-                    adjustment = np.sqrt((adjusted_end_x - (adjusted_center_x + i_from_end))**2 + 
-                                       (adjusted_end_y - (adjusted_center_y + j_from_end))**2)
+                    # Calculate actual adjustment
+                    adjustment = np.sqrt((adjusted_end_x - orig_end_x)**2 + 
+                                       (adjusted_end_y - orig_end_y)**2)
+                    
+                    # Log correction details
+                    print(f"Arc corrected: radius_error={radius_error:.4f}mm, endpoint adjusted by {adjustment:.4f}mm")
+                    
                     if adjustment > 0.05:
-                        print(f"Warning: Arc radius corrected by {adjustment:.3f}mm (exceeds 0.05mm threshold)")
+                        print(f"WARNING: Arc correction {adjustment:.3f}mm exceeds 0.05mm threshold!")
 
         # Replace coordinates in the line
         adjusted_line = line
