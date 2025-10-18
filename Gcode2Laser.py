@@ -230,11 +230,11 @@ class GCodeAdjuster:
         self.log_status_queries = False  # Toggle for logging status queries
         self.log_update_buffer = []  # Buffer for batched log updates
         self.log_update_timer = None  # Timer for batched updates
-        
+
         # Position display batching
         self.position_update_pending = False  # Flag for pending position update
         self.last_position_update = 0  # Timestamp of last position label update
-        
+
         # Modal units (G20/G21) detected from file; default None -> will inject G21 if absent
         self.modal_units = None
 
@@ -243,7 +243,9 @@ class GCodeAdjuster:
 
         # Buffer management for manual commands
         self.manual_command_queue = []  # Queue of manual commands waiting to be sent
-        self.waiting_for_ok = False  # Track if we're waiting for an 'ok' response (manual commands only)
+        self.waiting_for_ok = (
+            False  # Track if we're waiting for an 'ok' response (manual commands only)
+        )
 
         # Laser state
         self.laser_on = False
@@ -258,8 +260,12 @@ class GCodeAdjuster:
 
         # GRBL streaming - simplified command counting
         self.gcode_buffer = []  # Queue of G-code lines to send
-        self.buffer_size = 0  # Current commands in GRBL's buffer (command count, not bytes)
-        self.max_buffer_size = 4  # Conservative buffer (was 15, reduced to prevent arc errors)
+        self.buffer_size = (
+            0  # Current commands in GRBL's buffer (command count, not bytes)
+        )
+        self.max_buffer_size = (
+            4  # Conservative buffer (was 15, reduced to prevent arc errors)
+        )
         self.streaming = False
         self.status_update_id = None  # Timer ID for status updates
         self.command_queue = []  # Track sent commands for proper ok matching
@@ -1254,7 +1260,7 @@ class GCodeAdjuster:
                 last_y = current_y
 
             # Parse G1 (engraving) moves
-            elif line_upper.startswith("G1"):
+            elif line_upper.startswith("G1 "):
                 x_pos = None
                 y_pos = None
 
@@ -1536,7 +1542,7 @@ class GCodeAdjuster:
         # Validate that reference points are not identical
         expected_dist = np.linalg.norm(v_expected)
         actual_dist = np.linalg.norm(v_actual)
-        
+
         if expected_dist < 0.1:  # Points are too close (< 0.1mm apart)
             messagebox.showerror(
                 "Error",
@@ -1544,10 +1550,10 @@ class GCodeAdjuster:
                 f"Distance: {expected_dist:.3f}mm\n\n"
                 f"Point 1: ({P1[0]:.3f}, {P1[1]:.3f})\n"
                 f"Point 2: ({P2[0]:.3f}, {P2[1]:.3f})\n\n"
-                f"Please use reference points at least 10mm apart."
+                f"Please use reference points at least 10mm apart.",
             )
             return
-        
+
         if actual_dist < 0.1:  # Points are too close (< 0.1mm apart)
             messagebox.showerror(
                 "Error",
@@ -1555,7 +1561,7 @@ class GCodeAdjuster:
                 f"Distance: {actual_dist:.3f}mm\n\n"
                 f"Point 1: ({Q1[0]:.3f}, {Q1[1]:.3f})\n"
                 f"Point 2: ({Q2[0]:.3f}, {Q2[1]:.3f})\n\n"
-                f"Please use reference points at least 10mm apart."
+                f"Please use reference points at least 10mm apart.",
             )
             return
 
@@ -1889,12 +1895,12 @@ Vector Analysis:
         # Validate and correct arc radius AFTER rounding to prevent GRBL error:24
         # GRBL checks that distance(start, center) == distance(end, center)
         radius_start = np.sqrt(new_i_offset**2 + new_j_offset**2)
-        
+
         # Calculate radius from rounded end point
         i_from_end = adjusted_center_x - adjusted_end_x_rounded
         j_from_end = adjusted_center_y - adjusted_end_y_rounded
         radius_end = np.sqrt(i_from_end**2 + j_from_end**2)
-        
+
         # Check if radii match within tolerance
         radius_error = abs(radius_start - radius_end)
         if radius_error > 0.001:  # More than 0.001mm error (very tight tolerance)
@@ -1905,21 +1911,31 @@ Vector Analysis:
                 dx = adjusted_end_x_rounded - adjusted_center_x
                 dy = adjusted_end_y_rounded - adjusted_center_y
                 distance = np.sqrt(dx**2 + dy**2)
-                
+
                 if distance > 0:
                     # Normalize and scale to exact radius
-                    adjusted_end_x_rounded = adjusted_center_x + (dx / distance) * radius_start
-                    adjusted_end_y_rounded = adjusted_center_y + (dy / distance) * radius_start
-                    
+                    adjusted_end_x_rounded = (
+                        adjusted_center_x + (dx / distance) * radius_start
+                    )
+                    adjusted_end_y_rounded = (
+                        adjusted_center_y + (dy / distance) * radius_start
+                    )
+
                     # Calculate actual adjustment
-                    adjustment = np.sqrt((adjusted_end_x_rounded - adjusted_end_x)**2 + 
-                                       (adjusted_end_y_rounded - adjusted_end_y)**2)
-                    
+                    adjustment = np.sqrt(
+                        (adjusted_end_x_rounded - adjusted_end_x) ** 2
+                        + (adjusted_end_y_rounded - adjusted_end_y) ** 2
+                    )
+
                     # Log correction details
-                    print(f"Arc corrected: radius_error={radius_error:.6f}mm, endpoint adjusted by {adjustment:.6f}mm")
-                    
+                    print(
+                        f"Arc corrected: radius_error={radius_error:.6f}mm, endpoint adjusted by {adjustment:.6f}mm"
+                    )
+
                     if adjustment > 0.05:
-                        print(f"WARNING: Arc correction {adjustment:.3f}mm exceeds 0.05mm threshold!")
+                        print(
+                            f"WARNING: Arc correction {adjustment:.3f}mm exceeds 0.05mm threshold!"
+                        )
 
         # Use corrected rounded values for output
         adjusted_end_x = adjusted_end_x_rounded
@@ -1938,16 +1954,12 @@ Vector Analysis:
             )
         if i_match:
             # Format with 4 decimals and strip trailing zeros
-            i_formatted = f"{new_i_offset:.4f}".rstrip('0').rstrip('.')
-            adjusted_line = re.sub(
-                r"I[+-]?\d+\.?\d*", f"I{i_formatted}", adjusted_line
-            )
+            i_formatted = f"{new_i_offset:.4f}".rstrip("0").rstrip(".")
+            adjusted_line = re.sub(r"I[+-]?\d+\.?\d*", f"I{i_formatted}", adjusted_line)
         if j_match:
             # Format with 4 decimals and strip trailing zeros
-            j_formatted = f"{new_j_offset:.4f}".rstrip('0').rstrip('.')
-            adjusted_line = re.sub(
-                r"J[+-]?\d+\.?\d*", f"J{j_formatted}", adjusted_line
-            )
+            j_formatted = f"{new_j_offset:.4f}".rstrip("0").rstrip(".")
+            adjusted_line = re.sub(r"J[+-]?\d+\.?\d*", f"J{j_formatted}", adjusted_line)
 
         return adjusted_line
 
@@ -1968,7 +1980,7 @@ Vector Analysis:
         """Connect or disconnect from the GRBL controller"""
         # Check button text for more reliable state (in case internal state is inconsistent)
         button_text = self.connect_button.cget("text")
-        
+
         if button_text == "Disconnect" or self.is_connected:
             self.disconnect_grbl()
         else:
@@ -2012,7 +2024,7 @@ Vector Analysis:
             self.status_label.config(text="Connected", foreground="green")
             self.grbl_state = "Connecting"
             self.update_state_display()
-            
+
             # Immediately query status to update GRBL state
             try:
                 self.serial_connection.write(b"?")
@@ -2391,7 +2403,7 @@ Vector Analysis:
         """Flush pending position display update (batched for performance)"""
         self.position_update_pending = False
         self.update_position_display()
-    
+
     def update_position_display(self):
         """Update position labels and laser marker on plot"""
         # Don't update plot during execution/streaming - huge performance win
@@ -2405,7 +2417,7 @@ Vector Analysis:
                 text=f"X: {self.machine_pos['x']:6.2f}  Y: {self.machine_pos['y']:6.2f}  Z: {self.machine_pos['z']:6.2f}"
             )
             return
-        
+
         # Slow path: update labels and plot (only when idle)
         self.work_pos_label.config(
             text=f"X: {self.work_pos['x']:6.2f}  Y: {self.work_pos['y']:6.2f}  Z: {self.work_pos['z']:6.2f}"
@@ -2452,10 +2464,14 @@ Vector Analysis:
             # Only redraw if needed (throttle to avoid excessive redraws)
             # Throttle: redraw at most every 500ms during execution, every 200ms when idle
             import time
+
             current_time = time.time()
             min_redraw_interval = 0.5 if self.is_executing else 0.2
-            
-            if need_redraw or (current_time - self._last_plot_update) > min_redraw_interval:
+
+            if (
+                need_redraw
+                or (current_time - self._last_plot_update) > min_redraw_interval
+            ):
                 self._last_plot_update = current_time
                 self.canvas.draw_idle()
 
@@ -2540,33 +2556,33 @@ Vector Analysis:
         """Buffer log entry for batched update (much faster than immediate update)"""
         # Add to buffer instead of immediate GUI update
         self.log_update_buffer.append(entry)
-        
+
         # Schedule batched update if not already scheduled
         if self.log_update_timer is None:
             self.log_update_timer = self.root.after(50, self.flush_log_buffer)
-    
+
     def flush_log_buffer(self):
         """Flush all buffered log entries to GUI in one batch"""
         self.log_update_timer = None
-        
+
         if not self.log_update_buffer:
             return
-        
+
         # Batch ALL updates in single state transition (MUCH faster)
         self.comm_log_text.config(state=tk.NORMAL)
-        
+
         # Trim old lines if widget gets too large (check once per batch)
-        line_count = int(self.comm_log_text.index('end-1c').split('.')[0])
+        line_count = int(self.comm_log_text.index("end-1c").split(".")[0])
         if line_count > self.comm_log_max_lines:
             # Delete oldest 20% of lines to avoid frequent trimming
             lines_to_delete = int(self.comm_log_max_lines * 0.2)
-            self.comm_log_text.delete('1.0', f'{lines_to_delete}.0')
-        
+            self.comm_log_text.delete("1.0", f"{lines_to_delete}.0")
+
         # Insert all buffered entries at once
         for entry in self.log_update_buffer:
             # Build the line to insert
             line_parts = []
-            
+
             # Add timestamp if enabled
             if self.log_timestamp_var.get():
                 line_parts.append((f"[{entry['time']}] ", "timestamp"))
@@ -2586,10 +2602,10 @@ Vector Analysis:
             # Insert all parts for this entry
             for text, tag in line_parts:
                 self.comm_log_text.insert(tk.END, text, tag)
-        
+
         # Clear buffer
         self.log_update_buffer.clear()
-        
+
         self.comm_log_text.config(state=tk.DISABLED)
 
         # Auto-scroll to bottom if enabled (once per batch)
@@ -2640,16 +2656,19 @@ Vector Analysis:
         # Check for invalid parameter combinations in arc commands
         # Use word boundary checks to avoid matching G20/G21
         import re
-        if re.search(r'\bG2\b', cmd) or re.search(r'\bG3\b', cmd):  # Arc commands
+
+        if re.search(r"\bG2\b", cmd) or re.search(r"\bG3\b", cmd):  # Arc commands
             # Note: F (feedrate) is modal in GRBL - it's NOT required on every arc command
             # Only the first arc needs F, subsequent arcs use the previous F value
-            
+
             # Arc commands should have I and J parameters (or R parameter)
-            has_ij = ("I" in cmd or "J" in cmd)
+            has_ij = "I" in cmd or "J" in cmd
             has_r = "R" in cmd
-            
+
             if not has_ij and not has_r:
-                print(f"Warning: G2/G3 arc command missing I/J or R parameters: {command}")
+                print(
+                    f"Warning: G2/G3 arc command missing I/J or R parameters: {command}"
+                )
                 # Don't reject - let GRBL decide if it's valid
 
         # Check for invalid feed rates
@@ -2701,6 +2720,7 @@ Vector Analysis:
 
         # Track command time for smart polling
         import time
+
         self.last_command_time = time.time()
 
         # Send the command
@@ -2735,6 +2755,7 @@ Vector Analysis:
 
             # Track command time for smart polling
             import time
+
             self.last_command_time = time.time()
 
             # Send the command directly (immediate, no delays)
@@ -2742,7 +2763,7 @@ Vector Analysis:
 
             # Track command count (simple and reliable)
             self.buffer_size += 1
-            
+
             # Track this command for ok matching
             self.command_queue.append(command)
 
@@ -2804,10 +2825,10 @@ Vector Analysis:
             # Start querying after a brief delay to let G10 process
             self.root.after(100, lambda: query_updated_position(0))
 
-            #messagebox.showinfo(
+            # messagebox.showinfo(
             #    "Success",
             #    "Work origin set to current position\n\nPosition display will update shortly.",
-            #)
+            # )
 
     def jog_move(self, x_dir, y_dir):
         """Jog move in X and Y direction"""
@@ -3343,7 +3364,7 @@ Vector Analysis:
             # Just reduce buffer count
             if self.buffer_size > 0:
                 self.buffer_size = max(0, self.buffer_size - 1)
-        
+
         # ALWAYS try streaming first (it checks self.streaming internally)
         # This ensures 'ok' responses during streaming always trigger more sends
         # BUT: Don't auto-send in single-step mode - wait for user to click Next
@@ -3358,18 +3379,18 @@ Vector Analysis:
         """Send as many commands as buffer allows (event-driven)"""
         if not self.streaming or not self.gcode_buffer:
             return
-        
+
         # Send multiple commands if buffer has space (simple command counting)
         while self.gcode_buffer and self.buffer_size < self.max_buffer_size:
             # Get next command
             line_data = self.gcode_buffer.pop(0)
             line = line_data["line"]
-            
+
             # Send it
             if not self._send_streaming_command(line):
                 self.stop_streaming()
                 return
-            
+
             # Update progress
             if hasattr(self, "progress_bar"):
                 self.sent_lines += 1
@@ -3378,7 +3399,7 @@ Vector Analysis:
                     self.status_label.config(
                         text=f"Sent {self.sent_lines}/{self.total_lines} (buf:{self.buffer_size})"
                     )
-        
+
         # Check if done
         if not self.gcode_buffer:
             self.check_streaming_complete()
@@ -3525,19 +3546,19 @@ Vector Analysis:
                 self.next_step_button.config(state="disabled")
             if hasattr(self, "step_next_button"):
                 self.step_next_button.config(state="disabled")
-            
+
             # Send the previewed command
             if self.gcode_buffer:
                 # Get and send the command (single-step doesn't need buffer check)
                 line_data = self.gcode_buffer.pop(0)
                 line = line_data["line"]
-                
+
                 try:
                     if not self._send_streaming_command(line):
                         print(f"Failed to send line: {line}")
                         self.stop_streaming()
                         return
-                    
+
                     # Update progress
                     if hasattr(self, "progress_bar"):
                         self.sent_lines += 1
@@ -3545,7 +3566,7 @@ Vector Analysis:
                         self.status_label.config(
                             text=f"Executing line {self.sent_lines} / {self.total_lines}: {line}"
                         )
-                    
+
                     # Preview next command or finish
                     if self.gcode_buffer:
                         # More commands - show next preview immediately
@@ -3556,7 +3577,7 @@ Vector Analysis:
                         # No more commands - wait for completion
                         print("Single-step: Last line sent, waiting for completion")
                         self.root.after(500, self.check_streaming_complete)
-                        
+
                 except Exception as e:
                     print(f"Error streaming line: {e}")
                     self.stop_streaming()
@@ -3631,8 +3652,16 @@ Vector Analysis:
 
             # Prepend modal units only if they exist in the original file
             if self.modal_units in ("G20", "G21"):
-                filtered_preview = [l.strip() for l in lines if l.strip() and not l.strip().startswith(";") and not l.strip().startswith("(")]
-                if not filtered_preview or not filtered_preview[0].upper().startswith(self.modal_units):
+                filtered_preview = [
+                    l.strip()
+                    for l in lines
+                    if l.strip()
+                    and not l.strip().startswith(";")
+                    and not l.strip().startswith("(")
+                ]
+                if not filtered_preview or not filtered_preview[0].upper().startswith(
+                    self.modal_units
+                ):
                     lines = [self.modal_units] + lines
 
             # Filter out empty lines and comments (preserving modal units if injected)

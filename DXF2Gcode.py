@@ -1671,15 +1671,13 @@ Colors:
                 closest_chain[-1][0], closest_chain[-1][1]
             )
 
-        # Flatten chains back to individual elements
-        flattened_optimized = []
-        for chain in optimized:
-            flattened_optimized.extend(chain)
-
+        # Return chains with chaining information instead of flattening
+        # This preserves the connection information for G-code generation
+        total_elements = sum(len(chain) for chain in optimized)
         print(
-            f"Graph-based optimization complete: {len(flattened_optimized)} elements in {len(optimized)} chains"
+            f"Graph-based optimization complete: {total_elements} elements in {len(optimized)} chains"
         )
-        return flattened_optimized
+        return optimized
 
     def are_points_connected(self, point1, point2, tolerance=1.0):
         """Check if two points are connected (within tolerance)"""
@@ -5005,46 +5003,72 @@ DXF Units: {self.dxf_units}"""
             optimized_elements = list(elements_by_id.items())
             print("Toolpath optimization disabled - using original element order")
 
-        # Generate G-code for each element in optimized order
-        print(f"Generating G-code for {len(optimized_elements)} optimized elements...")
+        # Generate G-code for each chain in optimized order
+        print(f"Generating G-code for {len(optimized_elements)} optimized chains...")
 
-        # Debug: Show first few elements to verify order
+        # Debug: Show first few chains to verify order
         if optimized_elements:
-            print("First 5 elements in optimized order:")
-            for i, (elem_id, elem_info) in enumerate(optimized_elements[:5]):
-                if elem_info["geom_type"] == "LINE" and "points" in elem_info:
-                    start_pt = elem_info["points"][0] if elem_info["points"] else (0, 0)
+            print("First 3 chains in optimized order:")
+            for i, chain in enumerate(optimized_elements[:3]):
+                print(f"  Chain {i+1}: {len(chain)} elements")
+                for j, (element_id, element_info) in enumerate(
+                    chain[:2]
+                ):  # Show first 2 elements
                     print(
-                        f"  {i+1}. ID:{elem_id} Type:{elem_info['geom_type']} Start:({start_pt[0]:.2f}, {start_pt[1]:.2f})"
+                        f"    {j+1}. Element {element_id} ({element_info['geom_type']})"
                     )
-                else:
-                    print(f"  {i+1}. ID:{elem_id} Type:{elem_info['geom_type']}")
+                if len(chain) > 2:
+                    print(f"    ... and {len(chain)-2} more elements")
+        else:
+            print("No chains to process")
 
-        element_count = 0
-        for i, (element_id, element_info) in enumerate(optimized_elements):
-            element_count += 1
-            # Only print for first few elements to reduce noise
-            if element_count <= 3:
-                print(
-                    f"  Processing element {element_count}/{len(optimized_elements)}: {element_id} ({element_info['geom_type']})"
+        # Process each chain
+        for chain_index, chain in enumerate(optimized_elements):
+            print(
+                f"\nProcessing chain {chain_index + 1}/{len(optimized_elements)} with {len(chain)} elements"
+            )
+
+            # Add G0 move to start of chain (except for first chain)
+            if chain_index > 0 and chain:
+                first_element_id, first_element_info = chain[0]
+                first_start = self.get_element_start_point(
+                    first_element_id, first_element_info
+                )
+                gcode.append(
+                    f"G0 X{first_start[0]:.3f} Y{first_start[1]:.3f} Z{self.gcode_settings['cutting_z']:.3f}"
+                )
+                print(f"  Added G0 move to start of chain {chain_index + 1}")
+
+            # Process each element in the chain
+            for i, (element_id, element_info) in enumerate(chain):
+                element_count = (
+                    sum(len(c) for c in optimized_elements[:chain_index]) + i + 1
                 )
 
-            # Check if this element is connected to the previous one
-            is_connected_to_previous = False
-            if i > 0:
-                prev_element_id, prev_element_info = optimized_elements[i - 1]
-                prev_end = self.get_element_end_point(
-                    prev_element_id, prev_element_info
-                )
-                current_start = self.get_element_start_point(element_id, element_info)
-                distance = self.calculate_distance(prev_end, current_start)
-                is_connected_to_previous = (
-                    distance < 2.0
-                )  # 2mm tolerance for connection
+                # Only print for first few elements to reduce noise
                 if element_count <= 3:
                     print(
-                        f"    Connection check: prev_end={prev_end}, current_start={current_start}, distance={distance:.3f}mm, connected={is_connected_to_previous}"
+                        f"  Processing element {element_count}: {element_id} ({element_info['geom_type']})"
                     )
+
+                # Check if this element is connected to the previous one within the same chain
+                is_connected_to_previous = False
+                if i > 0:  # Not the first element in the chain
+                    prev_element_id, prev_element_info = chain[i - 1]
+                    prev_end = self.get_element_end_point(
+                        prev_element_id, prev_element_info
+                    )
+                    current_start = self.get_element_start_point(
+                        element_id, element_info
+                    )
+                    distance = self.calculate_distance(prev_end, current_start)
+                    is_connected_to_previous = (
+                        distance < 2.0
+                    )  # 2mm tolerance for connection
+                    if element_count <= 3:
+                        print(
+                            f"    Connection check: prev_end={prev_end}, current_start={current_start}, distance={distance:.3f}mm, connected={is_connected_to_previous}"
+                        )
             geom_type = element_info["geom_type"]
             radius = element_info["radius"]
 

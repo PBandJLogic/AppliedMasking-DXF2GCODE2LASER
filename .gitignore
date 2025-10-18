@@ -42,6 +42,6 @@ Thumbs.db
 # Replit
 .replit.nix
 # Generated files
-# *.nc COMMENTED OUT FOR NOW
+# *.nc
 # G-code output files (but keep documentation .txt files)
 dxf_gcode_*.nc
