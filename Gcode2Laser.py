@@ -216,6 +216,10 @@ class GCodeAdjuster:
         self.machine_pos = {"x": 0.0, "y": 0.0, "z": 0.0}
         self.work_pos = {"x": 0.0, "y": 0.0, "z": 0.0}
         self.wco = {"x": 0.0, "y": 0.0, "z": 0.0}
+        
+        # Modal position tracking for arc conversion
+        self.current_modal_x = 0.0
+        self.current_modal_y = 0.0
 
         # GRBL state tracking
         self.grbl_state = "Disconnected"  # Tracks GRBL state (Idle, Run, Alarm, etc.)
@@ -1431,12 +1435,6 @@ class GCodeAdjuster:
             zorder=100,
         )[0]
 
-        # Add crosshair at current position
-        xlim = self.ax.get_xlim()
-        ylim = self.ax.get_ylim()
-        self.ax.plot([x, x], ylim, "r--", alpha=0.3, linewidth=1)
-        self.ax.plot(xlim, [y, y], "r--", alpha=0.3, linewidth=1)
-
         # Set plot properties
         self.ax.set_xlabel("X (mm)")
         self.ax.set_ylabel("Y (mm)")
@@ -1459,6 +1457,19 @@ class GCodeAdjuster:
         self.ax.autoscale_view()
 
         self.canvas.draw()
+
+    def update_laser_position_only(self):
+        """Efficiently update only the laser position marker on plot"""
+        if not hasattr(self, "laser_marker"):
+            return
+        
+        # Update laser marker position
+        x = self.work_pos["x"]
+        y = self.work_pos["y"]
+        self.laser_marker.set_data([x], [y])
+        
+        # Efficient redraw (no axis rescaling because we only update existing data)
+        self.canvas.draw_idle()
 
     def plot_gcode_toolpath(self, positioning_lines, engraving_lines, label_prefix, ax):
         """Plot G-code toolpath exactly like dxf2laser.py"""
@@ -2750,27 +2761,192 @@ Vector Analysis:
                 print(f"Invalid G-code command rejected: {command}")
                 return False
 
-            # Log the sent command
-            self.log_sent_command(command)
+            # Convert arc R-format to I/J-format before sending
+            converted_command = self.convert_arc_r_to_ij(
+                command,
+                self.current_modal_x,
+                self.current_modal_y
+            )
+
+            # Update modal position after conversion
+            self._update_modal_position(converted_command)
+
+            # Log the sent command (log the converted command)
+            self.log_sent_command(converted_command)
 
             # Track command time for smart polling
             import time
 
             self.last_command_time = time.time()
 
-            # Send the command directly (immediate, no delays)
-            self.serial_connection.write((command + "\n").encode())
+            # Send the converted command directly (immediate, no delays)
+            self.serial_connection.write((converted_command + "\n").encode())
 
             # Track command count (simple and reliable)
             self.buffer_size += 1
 
             # Track this command for ok matching
-            self.command_queue.append(command)
+            self.command_queue.append(converted_command)
 
             return True
         except Exception as e:
             print(f"Exception in _send_streaming_command: {e}")
             return False
+
+    def convert_arc_r_to_ij(self, command, current_x, current_y):
+        """Convert G2/G3 arc with R parameter to I/J format"""
+        import re
+        import math
+        
+        # Check if this is an arc command with R
+        command_upper = command.upper()
+        if not (re.search(r'\bG2\b', command_upper) or re.search(r'\bG3\b', command_upper)):
+            return command
+        
+        # Check if R parameter exists
+        r_match = re.search(r'\bR\s*(-?\d+\.?\d*)', command_upper, re.IGNORECASE)
+        if not r_match:
+            return command  # Already in I/J format or invalid
+        
+        # Determine if G2 or G3
+        is_g2 = bool(re.search(r'\bG2\b', command_upper))
+        
+        # Parse X and Y from command (use current position if not specified)
+        x_match = re.search(r'\bX\s*(-?\d+\.?\d*)', command_upper)
+        y_match = re.search(r'\bY\s*(-?\d+\.?\d*)', command_upper)
+        
+        end_x = float(x_match.group(1)) if x_match else current_x
+        end_y = float(y_match.group(1)) if y_match else current_y
+        
+        # Get radius
+        radius = float(r_match.group(1))
+        
+        # Calculate arc center using geometry
+        # Start point
+        x1, y1 = current_x, current_y
+        # End point
+        x2, y2 = end_x, end_y
+        
+        # Calculate chord length
+        dx = x2 - x1
+        dy = y2 - y1
+        chord_length = math.sqrt(dx**2 + dy**2)
+        
+        # Check if radius is valid (must be at least half the chord length)
+        if abs(radius) < chord_length / 2.0:
+            print(f"Warning: Invalid arc - radius {radius} too small for chord {chord_length}")
+            return command  # Return original command
+        
+        # Calculate distance from chord midpoint to arc center
+        # Using: h = sqrt(r^2 - (d/2)^2)
+        try:
+            h = math.sqrt(radius**2 - (chord_length / 2.0)**2)
+        except ValueError:
+            print(f"Warning: Cannot calculate arc center - math domain error")
+            return command
+        
+        # Find chord midpoint
+        mx = (x1 + x2) / 2.0
+        my = (y1 + y2) / 2.0
+        
+        # Calculate perpendicular direction (normalized)
+        if chord_length > 0:
+            # Perpendicular to chord: rotate chord 90° clockwise
+            # (dx, dy) -> (dy, -dx) normalized
+            perp_x = dy / chord_length
+            perp_y = -dx / chord_length
+        else:
+            # Start and end are same point - can't determine arc
+            print(f"Warning: Arc start and end points are identical")
+            return command
+        
+        # There are two possible arc centers, one on each side of the chord
+        # We need to choose the correct one based on arc direction and radius sign
+        
+        # Calculate both possible centers
+        center1_x = mx + h * perp_x
+        center1_y = my + h * perp_y
+        center2_x = mx - h * perp_x
+        center2_y = my - h * perp_y
+        
+        # Choose the correct center based on arc direction and radius
+        # For R > 0: choose shorter arc (≤ 180°)
+        # For R < 0: choose longer arc (> 180°)
+        
+        # Calculate which center gives the correct arc span
+        def calculate_arc_angle(center_x, center_y):
+            # Calculate angles from center to start and end points
+            start_angle = math.atan2(y1 - center_y, x1 - center_x)
+            end_angle = math.atan2(y2 - center_y, x2 - center_x)
+            
+            # Calculate arc span
+            if is_g2:  # Clockwise
+                if end_angle > start_angle:
+                    end_angle -= 2 * math.pi
+                span = start_angle - end_angle
+            else:  # Counter-clockwise
+                if end_angle < start_angle:
+                    end_angle += 2 * math.pi
+                span = end_angle - start_angle
+            
+            return span
+        
+        # Calculate arc spans for both centers
+        span1 = calculate_arc_angle(center1_x, center1_y)
+        span2 = calculate_arc_angle(center2_x, center2_y)
+        
+        # Choose center based on radius sign and arc span
+        if radius > 0:
+            # Choose shorter arc (smaller span)
+            if span1 < span2:
+                center_x, center_y = center1_x, center1_y
+            else:
+                center_x, center_y = center2_x, center2_y
+        else:
+            # Choose longer arc (larger span)
+            if span1 > span2:
+                center_x, center_y = center1_x, center1_y
+            else:
+                center_x, center_y = center2_x, center2_y
+        
+        # Calculate I and J (offsets from start point to center)
+        i_offset = center_x - x1
+        j_offset = center_y - y1
+        
+        # Build new command with I/J instead of R
+        # Preserve original case and format as much as possible
+        new_command = re.sub(r'\bR\s*-?\d+\.?\d*', '', command, flags=re.IGNORECASE).strip()
+        
+        # Find where to insert I and J (after X Y, before F or S or comment)
+        # Look for F, S, or semicolon
+        insert_pos = len(new_command)
+        for pattern in [r'\bF\s*\d+', r'\bS\s*\d+', r';']:
+            match = re.search(pattern, new_command, re.IGNORECASE)
+            if match:
+                insert_pos = min(insert_pos, match.start())
+        
+        # Insert I and J
+        ij_str = f" I{i_offset:.4f} J{j_offset:.4f}"
+        new_command = new_command[:insert_pos] + ij_str + new_command[insert_pos:]
+        
+        print(f"Arc conversion: {command.strip()} -> {new_command.strip()}")
+        return new_command
+
+    def _update_modal_position(self, command):
+        """Track modal X/Y position from G-code commands"""
+        import re
+        
+        # Parse movement commands (G0, G1, G2, G3)
+        command_upper = command.upper()
+        if re.search(r'\b(G0|G1|G2|G3)\b', command_upper):
+            # Extract X and Y if present
+            x_match = re.search(r'\bX\s*(-?\d+\.?\d*)', command_upper)
+            y_match = re.search(r'\bY\s*(-?\d+\.?\d*)', command_upper)
+            
+            if x_match:
+                self.current_modal_x = float(x_match.group(1))
+            if y_match:
+                self.current_modal_y = float(y_match.group(1))
 
     def toggle_laser(self):
         """Toggle laser on/off at low power"""
@@ -3365,6 +3541,10 @@ Vector Analysis:
             if self.buffer_size > 0:
                 self.buffer_size = max(0, self.buffer_size - 1)
 
+        # Update plot with current laser position in execution modes
+        if self.single_step_mode or (self.streaming and not self.single_step_mode):
+            self.update_laser_position_only()
+
         # ALWAYS try streaming first (it checks self.streaming internally)
         # This ensures 'ok' responses during streaming always trigger more sends
         # BUT: Don't auto-send in single-step mode - wait for user to click Next
@@ -3743,6 +3923,10 @@ Vector Analysis:
             # Initialize execution tracking
             self.is_executing = True
             self.execution_path = [(self.work_pos["x"], self.work_pos["y"])]
+            
+            # Initialize modal position tracking for arc conversion
+            self.current_modal_x = self.work_pos["x"]
+            self.current_modal_y = self.work_pos["y"]
 
             # Enable STOP button
             if hasattr(self, "stop_button"):
