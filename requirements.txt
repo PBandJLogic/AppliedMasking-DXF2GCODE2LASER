@@ -4,3 +4,4 @@ ezdxf
 Pillow
 pyserial
 shapely
+pyinstaller
