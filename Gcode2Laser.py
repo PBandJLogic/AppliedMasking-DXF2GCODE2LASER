@@ -604,7 +604,7 @@ class GCodeAdjuster:
         step_frame.pack()
 
         ttk.Label(step_frame, text="Step:").pack(side="left", padx=(0, 2))
-        self.jog_step_var = tk.StringVar(value="10")
+        self.jog_step_var = tk.StringVar(value="1")
         step_entry = ttk.Entry(
             step_frame,
             textvariable=self.jog_step_var,
