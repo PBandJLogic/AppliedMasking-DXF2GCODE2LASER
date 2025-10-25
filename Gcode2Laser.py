@@ -604,7 +604,7 @@ class GCodeAdjuster:
         max_power_frame = ttk.Frame(right_controls_frame)
         max_power_frame.pack(pady=(0, 5))
 
-        ttk.Label(max_power_frame, text="Max:").pack(side="left", padx=(0, 2))
+        ttk.Label(max_power_frame, text="  Max:").pack(side="left", padx=(0, 2))
         self.laser_power_max_var = tk.StringVar(value="10000")
         self.laser_power_max_entry = ttk.Entry(
             max_power_frame,
@@ -613,7 +613,6 @@ class GCodeAdjuster:
             justify="right",
         )
         self.laser_power_max_entry.pack(side="left", padx=(0, 2))
-        ttk.Label(max_power_frame, text="(full scale)").pack(side="left")
 
         # Bind Enter key to update max power level
         self.laser_power_max_entry.bind(
