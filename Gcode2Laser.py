@@ -257,6 +257,7 @@ class GCodeAdjuster:
         # Laser state
         self.laser_on = False
         self.laser_power = 30  # Default laser power level (0-100%)
+        self.laser_power_max = 10000  # Maximum laser power value (full scale)
 
         # GRBL settings
         self.grbl_settings = GRBLSettings()
@@ -599,6 +600,24 @@ class GCodeAdjuster:
         # Bind Enter key to update power level
         self.laser_power_entry.bind("<Return>", lambda e: self.update_laser_power())
 
+        # Laser max power input
+        max_power_frame = ttk.Frame(right_controls_frame)
+        max_power_frame.pack(pady=(0, 5))
+        
+        ttk.Label(max_power_frame, text="Max:").pack(side="left", padx=(0, 2))
+        self.laser_power_max_var = tk.StringVar(value="10000")
+        self.laser_power_max_entry = ttk.Entry(
+            max_power_frame,
+            textvariable=self.laser_power_max_var,
+            width=6,
+            justify="right",
+        )
+        self.laser_power_max_entry.pack(side="left", padx=(0, 2))
+        ttk.Label(max_power_frame, text="(full scale)").pack(side="left")
+        
+        # Bind Enter key to update max power level
+        self.laser_power_max_entry.bind("<Return>", lambda e: self.update_laser_power_max())
+
         # Step size below
         step_frame = ttk.Frame(right_controls_frame)
         step_frame.pack()
@@ -893,9 +912,9 @@ class GCodeAdjuster:
 
                 # If laser was on, turn it back on at low power (same as toggle_laser)
                 if was_laser_on:
-                    self.send_gcode_async(
-                        "M3 S10"
-                    )  # Turn on laser at 10% power (constant mode)
+                    # Turn on laser at configured power level (scaled)
+                    scaled_power = int((self.laser_power / 100.0) * self.laser_power_max)
+                    self.send_gcode_async(f"M3 S{scaled_power}")
                     self.send_gcode_async("G1 F100")  # Set feed rate for laser mode
                     self.laser_on = True
                     self.laser_button.config(text="Laser ON")
@@ -1533,7 +1552,11 @@ class GCodeAdjuster:
                             xy=(exp_x, exp_y),  # Arrow tip (expected point)
                             xytext=(exp_arrow_start_x, exp_arrow_start_y),  # Arrow tail
                             arrowprops=dict(
-                                arrowstyle="->", color="blue", lw=2, shrinkA=0, shrinkB=0
+                                arrowstyle="->",
+                                color="blue",
+                                lw=2,
+                                shrinkA=0,
+                                shrinkB=0,
                             ),
                             zorder=94,  # Below actual arrows
                         )
@@ -1559,7 +1582,11 @@ class GCodeAdjuster:
                             xy=(act_x, act_y),  # Arrow tip (actual point)
                             xytext=(act_arrow_start_x, act_arrow_start_y),  # Arrow tail
                             arrowprops=dict(
-                                arrowstyle="->", color="green", lw=2, shrinkA=0, shrinkB=0
+                                arrowstyle="->",
+                                color="green",
+                                lw=2,
+                                shrinkA=0,
+                                shrinkB=0,
                             ),
                             zorder=95,  # Above expected arrows but below current position
                         )
@@ -3263,9 +3290,11 @@ Accuracy Metrics:
             power = int(self.laser_power_var.get())
             if 0 <= power <= 100:
                 self.laser_power = power
+                # Calculate scaled power value
+                scaled_power = int((power / 100.0) * self.laser_power_max)
                 # If laser is currently on, update the power level
                 if self.laser_on:
-                    self.send_gcode_async(f"M3 S{power}")
+                    self.send_gcode_async(f"M3 S{scaled_power}")
             else:
                 messagebox.showwarning("Warning", "Power level must be between 0-100%")
                 self.laser_power_var.set(str(self.laser_power))
@@ -3274,6 +3303,25 @@ Accuracy Metrics:
                 "Warning", "Please enter a valid number for power level"
             )
             self.laser_power_var.set(str(self.laser_power))
+
+    def update_laser_power_max(self):
+        """Update maximum laser power value from input field"""
+        try:
+            max_power = int(self.laser_power_max_var.get())
+            if 1 <= max_power <= 65535:  # Reasonable range for laser power
+                self.laser_power_max = max_power
+                # If laser is currently on, update the power level with new scaling
+                if self.laser_on:
+                    scaled_power = int((self.laser_power / 100.0) * self.laser_power_max)
+                    self.send_gcode_async(f"M3 S{scaled_power}")
+            else:
+                messagebox.showwarning("Warning", "Max power must be between 1-65535")
+                self.laser_power_max_var.set(str(self.laser_power_max))
+        except ValueError:
+            messagebox.showwarning(
+                "Warning", "Please enter a valid number for max power"
+            )
+            self.laser_power_max_var.set(str(self.laser_power_max))
 
     def toggle_laser(self):
         """Toggle laser on/off at configurable power level"""
@@ -3290,8 +3338,9 @@ Accuracy Metrics:
             self.laser_on = False
             self.laser_button.config(text="Laser OFF")
         else:
-            # Turn laser on at configured power level
-            self.send_gcode_async(f"M3 S{self.laser_power}")
+            # Turn laser on at configured power level (scaled)
+            scaled_power = int((self.laser_power / 100.0) * self.laser_power_max)
+            self.send_gcode_async(f"M3 S{scaled_power}")
             self.send_gcode_async("G1 F100")
             self.laser_on = True
             self.laser_button.config(text="Laser ON")
