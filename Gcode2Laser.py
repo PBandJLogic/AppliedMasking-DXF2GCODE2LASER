@@ -15,7 +15,7 @@ Features:
 
 Note: Does not validate against laser table limits - use caution with G-code generation.
 """
-VERSION = 2.3
+VERSION = 2.4
 
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
