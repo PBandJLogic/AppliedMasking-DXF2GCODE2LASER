@@ -1467,6 +1467,9 @@ class GCodeAdjuster:
             zorder=100,
         )[0]
 
+        # Plot reference point arrows (upward facing green arrows)
+        self.plot_reference_point_arrows()
+
         # Set plot properties
         self.ax.set_xlabel("X (mm)")
         self.ax.set_ylabel("Y (mm)")
@@ -1489,6 +1492,63 @@ class GCodeAdjuster:
         self.ax.autoscale_view()
 
         self.canvas.draw()
+
+    def plot_reference_point_arrows(self):
+        """Plot upward facing green arrows at reference point locations"""
+        try:
+            # Get reference points from the GUI variables
+            if not hasattr(self, 'ref_point_actual_vars') or len(self.ref_point_actual_vars) < 3:
+                return
+            
+            for i in range(3):  # Plot arrows for all 3 reference points
+                try:
+                    # Get actual position from GUI
+                    act_x_var, act_y_var = self.ref_point_actual_vars[i]
+                    act_x = float(act_x_var.get())
+                    act_y = float(act_y_var.get())
+                    
+                    # Skip if point is at origin (likely not set)
+                    if act_x == 0.0 and act_y == 0.0:
+                        continue
+                    
+                    # Calculate arrow position (arrow points up to the reference point)
+                    arrow_length = 10  # 10mm arrow length
+                    arrow_start_x = act_x
+                    arrow_start_y = act_y - arrow_length
+                    
+                    # Plot upward facing green arrow
+                    self.ax.annotate(
+                        '',  # No text
+                        xy=(act_x, act_y),  # Arrow tip (reference point)
+                        xytext=(arrow_start_x, arrow_start_y),  # Arrow tail
+                        arrowprops=dict(
+                            arrowstyle='->',
+                            color='green',
+                            lw=2,
+                            shrinkA=0,
+                            shrinkB=0
+                        ),
+                        zorder=95  # Above toolpath but below current position
+                    )
+                    
+                    # Add point label
+                    self.ax.text(
+                        act_x + 2,  # Slightly offset to the right
+                        act_y + 2,  # Slightly offset up
+                        f'Pt{i+1}',
+                        color='green',
+                        fontweight='bold',
+                        fontsize=10,
+                        zorder=96
+                    )
+                    
+                except (ValueError, IndexError):
+                    # Skip if we can't parse the coordinates
+                    continue
+                    
+        except Exception as e:
+            # Silently fail if there's any issue - don't break the plot
+            pass
 
     def update_laser_position_only(self):
         """Efficiently update only the laser position marker on plot"""
