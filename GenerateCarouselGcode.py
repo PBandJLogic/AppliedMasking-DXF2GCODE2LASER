@@ -1,6 +1,6 @@
 # Generate Carousel G-code Program
 # Converted from LaserCleanCarousel.py - removes serial communication, adds JSON settings
-VERSION = 2.2
+VERSION = 2.3
 
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog

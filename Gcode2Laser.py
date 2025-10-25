@@ -15,6 +15,7 @@ Features:
 
 Note: Does not validate against laser table limits - use caution with G-code generation.
 """
+VERSION = 2.3
 
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
@@ -180,7 +181,9 @@ class GRBLSettings:
 class GCodeAdjuster:
     def __init__(self, root):
         self.root = root
-        self.root.title("Gcode2Laser - Precision G-code Alignment")
+        self.root.title(
+            f"Applied Masking - Gcode2Laser for Precision G-code Alignment v{VERSION}"
+        )
         self.root.geometry("1400x900")
 
         # Set window icon
