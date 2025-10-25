@@ -809,6 +809,8 @@ class GCodeAdjuster:
                             y_val = float(parts[1])
                             if idx < len(self.reference_points_expected):
                                 self.reference_points_expected[idx] = (x_val, y_val)
+                            # Refresh the plot to update arrows
+                            self.plot_toolpath()
                         except ValueError:
                             pass
                 except:
@@ -857,6 +859,8 @@ class GCodeAdjuster:
                             y_val = float(parts[1])
                             if idx < len(self.reference_points_actual):
                                 self.reference_points_actual[idx] = (x_val, y_val)
+                            # Refresh the plot to update arrows
+                            self.plot_toolpath()
                         except ValueError:
                             pass
                 except:
@@ -1494,58 +1498,87 @@ class GCodeAdjuster:
         self.canvas.draw()
 
     def plot_reference_point_arrows(self):
-        """Plot upward facing green arrows at reference point locations"""
+        """Plot upward facing arrows at reference point locations (expected and actual)"""
         try:
             # Get reference points from the GUI variables
-            if not hasattr(self, 'ref_point_actual_vars') or len(self.ref_point_actual_vars) < 3:
+            if (
+                not hasattr(self, "ref_point_actual_vars")
+                or len(self.ref_point_actual_vars) < 3
+                or not hasattr(self, "ref_point_expected_vars")
+                or len(self.ref_point_expected_vars) < 3
+            ):
                 return
-            
+
+            arrow_length = 10  # 10mm arrow length
+
             for i in range(3):  # Plot arrows for all 3 reference points
                 try:
+                    # Get expected position from GUI
+                    exp_x_var, exp_y_var = self.ref_point_expected_vars[i]
+                    exp_x = float(exp_x_var.get())
+                    exp_y = float(exp_y_var.get())
+
                     # Get actual position from GUI
                     act_x_var, act_y_var = self.ref_point_actual_vars[i]
                     act_x = float(act_x_var.get())
                     act_y = float(act_y_var.get())
-                    
-                    # Skip if point is at origin (likely not set)
-                    if act_x == 0.0 and act_y == 0.0:
-                        continue
-                    
-                    # Calculate arrow position (arrow points up to the reference point)
-                    arrow_length = 10  # 10mm arrow length
-                    arrow_start_x = act_x
-                    arrow_start_y = act_y - arrow_length
-                    
-                    # Plot upward facing green arrow
-                    self.ax.annotate(
-                        '',  # No text
-                        xy=(act_x, act_y),  # Arrow tip (reference point)
-                        xytext=(arrow_start_x, arrow_start_y),  # Arrow tail
-                        arrowprops=dict(
-                            arrowstyle='->',
-                            color='green',
-                            lw=2,
-                            shrinkA=0,
-                            shrinkB=0
-                        ),
-                        zorder=95  # Above toolpath but below current position
-                    )
-                    
-                    # Add point label
-                    self.ax.text(
-                        act_x + 2,  # Slightly offset to the right
-                        act_y + 2,  # Slightly offset up
-                        f'Pt{i+1}',
-                        color='green',
-                        fontweight='bold',
-                        fontsize=10,
-                        zorder=96
-                    )
-                    
+
+                    # Plot expected reference point (blue arrow)
+                    if not (exp_x == 0.0 and exp_y == 0.0):
+                        exp_arrow_start_x = exp_x
+                        exp_arrow_start_y = exp_y - arrow_length
+
+                        self.ax.annotate(
+                            "",  # No text
+                            xy=(exp_x, exp_y),  # Arrow tip (expected point)
+                            xytext=(exp_arrow_start_x, exp_arrow_start_y),  # Arrow tail
+                            arrowprops=dict(
+                                arrowstyle="->", color="blue", lw=2, shrinkA=0, shrinkB=0
+                            ),
+                            zorder=94,  # Below actual arrows
+                        )
+
+                        # Add expected point label
+                        self.ax.text(
+                            exp_x - 8,  # Offset to the left
+                            exp_y + 2,  # Slightly offset up
+                            f"E{i+1}",
+                            color="blue",
+                            fontweight="bold",
+                            fontsize=9,
+                            zorder=96,
+                        )
+
+                    # Plot actual reference point (green arrow)
+                    if not (act_x == 0.0 and act_y == 0.0):
+                        act_arrow_start_x = act_x
+                        act_arrow_start_y = act_y - arrow_length
+
+                        self.ax.annotate(
+                            "",  # No text
+                            xy=(act_x, act_y),  # Arrow tip (actual point)
+                            xytext=(act_arrow_start_x, act_arrow_start_y),  # Arrow tail
+                            arrowprops=dict(
+                                arrowstyle="->", color="green", lw=2, shrinkA=0, shrinkB=0
+                            ),
+                            zorder=95,  # Above expected arrows but below current position
+                        )
+
+                        # Add actual point label
+                        self.ax.text(
+                            act_x + 2,  # Slightly offset to the right
+                            act_y + 2,  # Slightly offset up
+                            f"A{i+1}",
+                            color="green",
+                            fontweight="bold",
+                            fontsize=9,
+                            zorder=96,
+                        )
+
                 except (ValueError, IndexError):
                     # Skip if we can't parse the coordinates
                     continue
-                    
+
         except Exception as e:
             # Silently fail if there's any issue - don't break the plot
             pass
