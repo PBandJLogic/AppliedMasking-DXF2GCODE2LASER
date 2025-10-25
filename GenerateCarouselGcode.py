@@ -1,6 +1,6 @@
 # Generate Carousel G-code Program
 # Converted from LaserCleanCarousel.py - removes serial communication, adds JSON settings
-VERSION = 2.1
+VERSION = 2.2
 
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
@@ -216,7 +216,6 @@ def get_default_settings():
             {"type": "G1", "X": 213.69, "Y": 7.62, "comment": ""},
             {"type": "G1", "X": 223.94, "Y": 7.62, "comment": "Linear pt4->pt1"},
         ],
-        "yaw_from_origin": yaw_from_origin,
     }
 
 
@@ -1404,7 +1403,6 @@ class GenerateCarouselGcodeApp:
                 "upper_right": table_upper_right,
             },
             "pad_gcode_template": pad_gcode_template,
-            "yaw_from_origin": yaw_from_origin,
         }
 
     def on_layout_section_change(self, event=None):
@@ -1511,11 +1509,11 @@ class GenerateCarouselGcodeApp:
 
         for pad_idx, pad_id in enumerate(pads):
             pad_id = pad_id.strip()
-            if not pad_id or pad_id not in settings["yaw_from_origin"]:
+            if not pad_id or pad_id not in yaw_from_origin:
                 print(f"Pad {pad_id} not found in yaw_from_origin")
                 continue
 
-            yaw_angle = settings["yaw_from_origin"][pad_id]
+            yaw_angle = yaw_from_origin[pad_id]
             feedrate = settings.get(
                 f"section_{section_name.replace('&', '_')}_feedrate", 1500
             )
@@ -1736,7 +1734,7 @@ class GenerateCarouselGcodeApp:
             self.section_2_ax,
             self.section_2_gcode_data["commands"],
             "Section 2",
-            "red",
+            "blue",
             is_layout_plot=True,
         )
         self.section_2_ax.set_title("Section 2 Layout")

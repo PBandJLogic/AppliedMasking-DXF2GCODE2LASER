@@ -4,7 +4,7 @@ G-code Adjuster - GUI application for adjusting G-code toolpaths
 based on actual vs expected reference point positions.
 
 Features:
-- Uses 2 reference points for translation and rotation correction
+- Uses 3 reference points for rigid transformation (rotation + translation)
 - Reference points can be embedded in G-code comments or entered manually
 - GRBL streaming protocol for smooth, continuous motion
 - Single-step mode for debugging
@@ -200,10 +200,10 @@ class GCodeAdjuster:
         self.adjusted_engraving_lines = []
 
         # Reference point data from G-code comments
-        self.num_reference_points = 2  # Always 2 points for translation + rotation
-        # Initialize with 2 zero points
-        self.reference_points_expected = [(0.0, 0.0), (0.0, 0.0)]
-        self.reference_points_actual = [(0.0, 0.0), (0.0, 0.0)]
+        self.num_reference_points = 3  # Use 3 points for rigid transform
+        # Initialize with 3 zero points
+        self.reference_points_expected = [(0.0, 0.0), (0.0, 0.0), (0.0, 0.0)]
+        self.reference_points_actual = [(0.0, 0.0), (0.0, 0.0), (0.0, 0.0)]
 
         # Serial connection
         self.serial_connection = None
@@ -216,7 +216,7 @@ class GCodeAdjuster:
         self.machine_pos = {"x": 0.0, "y": 0.0, "z": 0.0}
         self.work_pos = {"x": 0.0, "y": 0.0, "z": 0.0}
         self.wco = {"x": 0.0, "y": 0.0, "z": 0.0}
-        
+
         # Modal position tracking for arc conversion
         self.current_modal_x = 0.0
         self.current_modal_y = 0.0
@@ -253,6 +253,7 @@ class GCodeAdjuster:
 
         # Laser state
         self.laser_on = False
+        self.laser_power = 30  # Default laser power level (0-100%)
 
         # GRBL settings
         self.grbl_settings = GRBLSettings()
@@ -296,12 +297,12 @@ class GCodeAdjuster:
         main_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
         # Left panel container with scrollbar
-        left_container = ttk.Frame(main_frame, width=480)
+        left_container = ttk.Frame(main_frame, width=580)
         left_container.pack(side="left", fill="both", padx=(0, 10))
         left_container.pack_propagate(False)
 
         # Create canvas and scrollbar for left panel
-        left_canvas = tk.Canvas(left_container, width=460, highlightthickness=0)
+        left_canvas = tk.Canvas(left_container, width=560, highlightthickness=0)
         left_scrollbar = ttk.Scrollbar(
             left_container, orient="vertical", command=left_canvas.yview
         )
@@ -414,6 +415,15 @@ class GCodeAdjuster:
         )
         self.status_label.pack(side="left")
 
+        # GRBL State display (moved up for more space)
+        self.grbl_state_label = ttk.Label(
+            connect_row,
+            text="State: Disconnected",
+            font=("TkDefaultFont", 9, "bold"),
+            foreground="gray",
+        )
+        self.grbl_state_label.pack(side="left", padx=(10, 0))
+
         # Control buttons row (Home and Clear Errors)
         control_row = ttk.Frame(grbl_frame)
         control_row.pack(fill="x", pady=(5, 0))
@@ -432,15 +442,6 @@ class GCodeAdjuster:
             control_row, text="Reboot GRBL", command=self.reboot_grbl, width=12
         )
         self.soft_reset_button.pack(side="left")
-
-        # GRBL State display
-        self.grbl_state_label = ttk.Label(
-            control_row,
-            text="State: Disconnected",
-            font=("TkDefaultFont", 9, "bold"),
-            foreground="gray",
-        )
-        self.grbl_state_label.pack(side="left", padx=(10, 0))
 
         # Refresh COM ports on startup
         self.refresh_com_ports()
@@ -522,11 +523,19 @@ class GCodeAdjuster:
 
         self.set_origin_button = ttk.Button(
             origin_frame,
-            text="Set Origin (G10 L20 P1 X0 Y0 Z0)",
+            text="Set Origin",
             command=self.set_work_origin,
-            width=35,
+            width=15,
         )
-        self.set_origin_button.pack()
+        self.set_origin_button.pack(side="left", padx=(0, 5))
+
+        self.auto_origin_button = ttk.Button(
+            origin_frame,
+            text="Auto Origin",
+            command=self.auto_origin,
+            width=15,
+        )
+        self.auto_origin_button.pack(side="left")
 
         # G-code command entry
         gcode_cmd_frame = ttk.Frame(jog_frame)
@@ -568,6 +577,24 @@ class GCodeAdjuster:
             right_controls_frame, text="Laser OFF", command=self.toggle_laser, width=12
         )
         self.laser_button.pack(pady=(0, 5))
+
+        # Laser power level input
+        power_frame = ttk.Frame(right_controls_frame)
+        power_frame.pack(pady=(0, 5))
+
+        ttk.Label(power_frame, text="Power:").pack(side="left", padx=(0, 2))
+        self.laser_power_var = tk.StringVar(value="30")
+        self.laser_power_entry = ttk.Entry(
+            power_frame,
+            textvariable=self.laser_power_var,
+            width=6,
+            justify="right",
+        )
+        self.laser_power_entry.pack(side="left", padx=(0, 2))
+        ttk.Label(power_frame, text="%").pack(side="left")
+
+        # Bind Enter key to update power level
+        self.laser_power_entry.bind("<Return>", lambda e: self.update_laser_power())
 
         # Step size below
         step_frame = ttk.Frame(right_controls_frame)
@@ -711,8 +738,8 @@ class GCodeAdjuster:
             # Fallback if we can't find the button
             self.targets_container.pack(fill="x", pady=(0, 10))
 
-        # Always use 2 reference points
-        num_points = 2
+        # Always use 3 reference points
+        num_points = 3
 
         # Store entry variables for each point
         self.ref_point_expected_vars = []
@@ -1139,15 +1166,17 @@ class GCodeAdjuster:
             has_real_points = any(point != (0.0, 0.0) for point in expected_points)
 
             if expected_points and len(expected_points) >= 2 and has_real_points:
-                # Found reference points in comments - use first 2
-                self.reference_points_expected = expected_points[:2]
+                # Found reference points in comments - use first 3
+                self.reference_points_expected = expected_points[:3]
                 # Initialize actual points to match expected points
-                self.reference_points_actual = expected_points[:2].copy()
+                self.reference_points_actual = expected_points[:3].copy()
 
                 # Update the GUI to show these reference points
                 self.update_reference_points_display()
 
-                print(f"Loaded 2 reference points from G-code comments")
+                print(
+                    f"Loaded {min(len(expected_points), 3)} reference points from G-code comments"
+                )
             else:
                 print(
                     "No reference points found in G-code comments - using manual entry"
@@ -1188,7 +1217,7 @@ class GCodeAdjuster:
         ; reference_point1 = (-79.2465, -21.234)
         ; reference_point2 = ( 79.2465, -21.234)
 
-        Returns: (num_points, expected_points_list) - always returns 2 and first 2 points found
+        Returns: (num_points, expected_points_list) - always returns 3 and first 3 points found
         """
         lines = gcode.split("\n")
         expected_points = []
@@ -1209,16 +1238,16 @@ class GCodeAdjuster:
                     y = float(match.group(2))
                     expected_points.append((x, y))
 
-                    # Stop after finding 2 points
-                    if len(expected_points) >= 2:
+                    # Stop after finding 3 points
+                    if len(expected_points) >= 3:
                         break
 
-        # Always return 2 points (pad with zeros if needed)
-        while len(expected_points) < 2:
+        # Always return 3 points (pad with zeros if needed)
+        while len(expected_points) < 3:
             expected_points.append((0.0, 0.0))
 
-        # Always return exactly 2 points
-        return 2, expected_points[:2]
+        # Always return exactly 3 points
+        return 3, expected_points[:3]
 
     def parse_gcode_coordinates(self, gcode):
         """Parse G-code and extract line segments exactly like dxf2laser.py"""
@@ -1462,12 +1491,12 @@ class GCodeAdjuster:
         """Efficiently update only the laser position marker on plot"""
         if not hasattr(self, "laser_marker"):
             return
-        
+
         # Update laser marker position
         x = self.work_pos["x"]
         y = self.work_pos["y"]
         self.laser_marker.set_data([x], [y])
-        
+
         # Efficient redraw (no axis rescaling because we only update existing data)
         self.canvas.draw_idle()
 
@@ -1504,17 +1533,17 @@ class GCodeAdjuster:
             )
 
     def adjust_gcode(self):
-        """Calculate adjustments and modify G-code using 2-point transformation"""
+        """Calculate adjustments and modify G-code using 3-point rigid transformation"""
         try:
-            # Get 2 reference points from GUI
-            if len(self.ref_point_expected_vars) < 2:
-                messagebox.showerror("Error", "Need 2 reference points!")
+            # Get 3 reference points from GUI
+            if len(self.ref_point_expected_vars) < 3:
+                messagebox.showerror("Error", "Need 3 reference points!")
                 return
 
             expected_points = []
             actual_points = []
 
-            for i in range(2):  # Always use exactly 2 points
+            for i in range(3):  # Always use exactly 3 points
                 exp_x_var, exp_y_var = self.ref_point_expected_vars[i]
                 act_x_var, act_y_var = self.ref_point_actual_vars[i]
 
@@ -1526,8 +1555,8 @@ class GCodeAdjuster:
                 expected_points.append((exp_x, exp_y))
                 actual_points.append((act_x, act_y))
 
-            # Perform 2-point transformation
-            self._adjust_gcode_2point(expected_points, actual_points)
+            # Perform 3-point rigid transformation
+            self._adjust_gcode_3point_rigid(expected_points, actual_points)
 
         except ValueError as e:
             messagebox.showerror("Error", f"Invalid input values:\n{str(e)}")
@@ -1649,6 +1678,186 @@ Vector Analysis:
 
         # Update plot
         self.plot_toolpath()
+
+    def _adjust_gcode_3point_rigid(self, expected_points, actual_points):
+        """
+        Adjust G-code using 3-point rigid transformation (SVD-based least-squares)
+        Computes optimal rotation and translation using Procrustes analysis
+        """
+        # Convert to numpy arrays (Nx2)
+        P = np.array(expected_points)  # Expected (source) points
+        Q = np.array(actual_points)  # Actual (target) points
+
+        if not self.original_positioning_lines and not self.original_engraving_lines:
+            messagebox.showwarning("Warning", "Please load a G-code file first!")
+            return
+
+        # Validate points form a non-degenerate triangle
+        if not self._validate_triangle(P) or not self._validate_triangle(Q):
+            messagebox.showerror(
+                "Error",
+                "Reference points must form a valid triangle!\n"
+                "Points cannot be collinear or too close together.",
+            )
+            return
+
+        # Step 1: Center the point sets (compute centroids)
+        centroid_P = np.mean(P, axis=0)
+        centroid_Q = np.mean(Q, axis=0)
+
+        # Step 2: Center the points
+        P_centered = P - centroid_P
+        Q_centered = Q - centroid_Q
+
+        # Step 3: Compute rotation using SVD
+        # H = P_centered^T * Q_centered
+        H = P_centered.T @ Q_centered
+
+        # SVD decomposition
+        U, S, Vt = np.linalg.svd(H)
+
+        # Rotation matrix R = V * U^T
+        R = Vt.T @ U.T
+
+        # Handle reflection case (ensure proper rotation, not reflection)
+        if np.linalg.det(R) < 0:
+            Vt[-1, :] *= -1
+            R = Vt.T @ U.T
+
+        # Step 4: Compute translation
+        # t = centroid_Q - R * centroid_P
+        translation = centroid_Q - R @ centroid_P
+
+        # Step 5: Extract rotation angle from 2D rotation matrix
+        rotation_angle = np.arctan2(R[1, 0], R[0, 0])
+
+        # Step 6: Compute residual errors for each point
+        errors = []
+        error_details = []
+        for i, (p, q) in enumerate(zip(P, Q)):
+            # Transform expected point
+            transformed_p = R @ p + translation
+            # Calculate error
+            error_vec = transformed_p - q
+            error_x = error_vec[0]
+            error_y = error_vec[1]
+            error_dist = np.linalg.norm(error_vec)
+            errors.append(error_dist)
+            error_details.append(
+                {
+                    "index": i,
+                    "expected": p,
+                    "actual": q,
+                    "transformed": transformed_p,
+                    "error_x": error_x,
+                    "error_y": error_y,
+                    "error_dist": error_dist,
+                }
+            )
+
+        # Compute RMS error
+        rms_error = np.sqrt(np.mean(np.array(errors) ** 2))
+        max_error = np.max(errors)
+
+        # Apply transformations to line segments
+        actual_center = tuple(translation)
+        self.adjusted_positioning_lines = self.apply_transformations_to_lines(
+            self.original_positioning_lines, actual_center, rotation_angle
+        )
+        self.adjusted_engraving_lines = self.apply_transformations_to_lines(
+            self.original_engraving_lines, actual_center, rotation_angle
+        )
+
+        # Generate adjusted G-code
+        self.adjusted_gcode = self.generate_adjusted_gcode(
+            self.original_gcode, actual_center, rotation_angle
+        )
+
+        # Display results with error highlighting
+        results = f"""CALCULATION RESULTS (3-Point Rigid Transform - SVD)
+========================
+
+Transformation:
+  Translation: ({translation[0]:.4f}, {translation[1]:.4f}) mm
+  Rotation: {np.degrees(rotation_angle):.4f}°
+
+Reference Point Errors:
+"""
+
+        # Add error details for each point (with red highlighting for errors > 0.1mm)
+        for detail in error_details:
+            i = detail["index"]
+            p = detail["expected"]
+            q = detail["actual"]
+            error_x = detail["error_x"]
+            error_y = detail["error_y"]
+            error_dist = detail["error_dist"]
+
+            # Mark high errors
+            error_marker = " ⚠ HIGH ERROR" if error_dist > 0.1 else ""
+
+            results += f"""
+  Point {i+1}:
+    Expected:     ({p[0]:.4f}, {p[1]:.4f}) mm
+    Actual:       ({q[0]:.4f}, {q[1]:.4f}) mm
+    Error X:      {error_x:+.4f} mm
+    Error Y:      {error_y:+.4f} mm
+    Error Distance: {error_dist:.4f} mm{error_marker}
+"""
+
+        results += f"""
+Accuracy Metrics:
+  RMS Error: {rms_error:.4f} mm
+  Max Error: {max_error:.4f} mm
+  Status: {'✓ Excellent' if max_error <= 0.05 else '✓ Good' if max_error <= 0.1 else '✗ Poor - Check alignment'}
+"""
+
+        # Use tags for red text highlighting
+        self.results_text.delete(1.0, tk.END)
+        self.results_text.insert(1.0, results)
+
+        # Highlight high errors in red
+        content = self.results_text.get(1.0, tk.END)
+        lines = content.split("\n")
+        for line_num, line in enumerate(lines, 1):
+            if "⚠ HIGH ERROR" in line or (
+                "Error Distance:" in line
+                and any(f"{e:.4f}" in line for e in errors if e > 0.1)
+            ):
+                # Find and tag the error distance line
+                start_idx = f"{line_num}.0"
+                end_idx = f"{line_num}.end"
+                self.results_text.tag_add("high_error", start_idx, end_idx)
+
+        # Configure red text tag
+        self.results_text.tag_config("high_error", foreground="red")
+
+        # Update plot
+        self.plot_toolpath()
+
+    def _validate_triangle(self, points):
+        """Validate that 3 points form a valid non-degenerate triangle"""
+        if len(points) != 3:
+            return False
+
+        P = np.array(points)
+
+        # Check if points are too close together
+        for i in range(3):
+            for j in range(i + 1, 3):
+                dist = np.linalg.norm(P[i] - P[j])
+                if dist < 1.0:  # Points must be at least 1mm apart
+                    return False
+
+        # Check if points are collinear (triangle area too small)
+        # Area = 0.5 * |det([[x1, y1, 1], [x2, y2, 1], [x3, y3, 1]])|
+        area_matrix = np.column_stack([P, np.ones(3)])
+        area = 0.5 * abs(np.linalg.det(area_matrix))
+
+        if area < 10.0:  # Triangle area must be at least 10mm²
+            return False
+
+        return True
 
     def save_adjusted_gcode(self):
         """Save the adjusted G-code with updated reference points to a file"""
@@ -2763,9 +2972,7 @@ Vector Analysis:
 
             # Convert arc R-format to I/J-format before sending
             converted_command = self.convert_arc_r_to_ij(
-                command,
-                self.current_modal_x,
-                self.current_modal_y
+                command, self.current_modal_x, self.current_modal_y
             )
 
             # Update modal position after conversion
@@ -2797,58 +3004,62 @@ Vector Analysis:
         """Convert G2/G3 arc with R parameter to I/J format"""
         import re
         import math
-        
+
         # Check if this is an arc command with R
         command_upper = command.upper()
-        if not (re.search(r'\bG2\b', command_upper) or re.search(r'\bG3\b', command_upper)):
+        if not (
+            re.search(r"\bG2\b", command_upper) or re.search(r"\bG3\b", command_upper)
+        ):
             return command
-        
+
         # Check if R parameter exists
-        r_match = re.search(r'\bR\s*(-?\d+\.?\d*)', command_upper, re.IGNORECASE)
+        r_match = re.search(r"\bR\s*(-?\d+\.?\d*)", command_upper, re.IGNORECASE)
         if not r_match:
             return command  # Already in I/J format or invalid
-        
+
         # Determine if G2 or G3
-        is_g2 = bool(re.search(r'\bG2\b', command_upper))
-        
+        is_g2 = bool(re.search(r"\bG2\b", command_upper))
+
         # Parse X and Y from command (use current position if not specified)
-        x_match = re.search(r'\bX\s*(-?\d+\.?\d*)', command_upper)
-        y_match = re.search(r'\bY\s*(-?\d+\.?\d*)', command_upper)
-        
+        x_match = re.search(r"\bX\s*(-?\d+\.?\d*)", command_upper)
+        y_match = re.search(r"\bY\s*(-?\d+\.?\d*)", command_upper)
+
         end_x = float(x_match.group(1)) if x_match else current_x
         end_y = float(y_match.group(1)) if y_match else current_y
-        
+
         # Get radius
         radius = float(r_match.group(1))
-        
+
         # Calculate arc center using geometry
         # Start point
         x1, y1 = current_x, current_y
         # End point
         x2, y2 = end_x, end_y
-        
+
         # Calculate chord length
         dx = x2 - x1
         dy = y2 - y1
         chord_length = math.sqrt(dx**2 + dy**2)
-        
+
         # Check if radius is valid (must be at least half the chord length)
         if abs(radius) < chord_length / 2.0:
-            print(f"Warning: Invalid arc - radius {radius} too small for chord {chord_length}")
+            print(
+                f"Warning: Invalid arc - radius {radius} too small for chord {chord_length}"
+            )
             return command  # Return original command
-        
+
         # Calculate distance from chord midpoint to arc center
         # Using: h = sqrt(r^2 - (d/2)^2)
         try:
-            h = math.sqrt(radius**2 - (chord_length / 2.0)**2)
+            h = math.sqrt(radius**2 - (chord_length / 2.0) ** 2)
         except ValueError:
             print(f"Warning: Cannot calculate arc center - math domain error")
             return command
-        
+
         # Find chord midpoint
         mx = (x1 + x2) / 2.0
         my = (y1 + y2) / 2.0
-        
+
         # Calculate perpendicular direction (normalized)
         if chord_length > 0:
             # Perpendicular to chord: rotate chord 90° clockwise
@@ -2859,26 +3070,26 @@ Vector Analysis:
             # Start and end are same point - can't determine arc
             print(f"Warning: Arc start and end points are identical")
             return command
-        
+
         # There are two possible arc centers, one on each side of the chord
         # We need to choose the correct one based on arc direction and radius sign
-        
+
         # Calculate both possible centers
         center1_x = mx + h * perp_x
         center1_y = my + h * perp_y
         center2_x = mx - h * perp_x
         center2_y = my - h * perp_y
-        
+
         # Choose the correct center based on arc direction and radius
         # For R > 0: choose shorter arc (≤ 180°)
         # For R < 0: choose longer arc (> 180°)
-        
+
         # Calculate which center gives the correct arc span
         def calculate_arc_angle(center_x, center_y):
             # Calculate angles from center to start and end points
             start_angle = math.atan2(y1 - center_y, x1 - center_x)
             end_angle = math.atan2(y2 - center_y, x2 - center_x)
-            
+
             # Calculate arc span
             if is_g2:  # Clockwise
                 if end_angle > start_angle:
@@ -2888,13 +3099,13 @@ Vector Analysis:
                 if end_angle < start_angle:
                     end_angle += 2 * math.pi
                 span = end_angle - start_angle
-            
+
             return span
-        
+
         # Calculate arc spans for both centers
         span1 = calculate_arc_angle(center1_x, center1_y)
         span2 = calculate_arc_angle(center2_x, center2_y)
-        
+
         # Choose center based on radius sign and arc span
         if radius > 0:
             # Choose shorter arc (smaller span)
@@ -2908,51 +3119,74 @@ Vector Analysis:
                 center_x, center_y = center1_x, center1_y
             else:
                 center_x, center_y = center2_x, center2_y
-        
+
         # Calculate I and J (offsets from start point to center)
         i_offset = center_x - x1
         j_offset = center_y - y1
-        
+
         # Build new command with I/J instead of R
         # Preserve original case and format as much as possible
-        new_command = re.sub(r'\bR\s*-?\d+\.?\d*', '', command, flags=re.IGNORECASE).strip()
-        
+        new_command = re.sub(
+            r"\bR\s*-?\d+\.?\d*", "", command, flags=re.IGNORECASE
+        ).strip()
+
         # Find where to insert I and J (after X Y, before F or S or comment)
         # Look for F, S, or semicolon
         insert_pos = len(new_command)
-        for pattern in [r'\bF\s*\d+', r'\bS\s*\d+', r';']:
+        for pattern in [r"\bF\s*\d+", r"\bS\s*\d+", r";"]:
             match = re.search(pattern, new_command, re.IGNORECASE)
             if match:
                 insert_pos = min(insert_pos, match.start())
-        
+
         # Insert I and J
         ij_str = f" I{i_offset:.4f} J{j_offset:.4f}"
         new_command = new_command[:insert_pos] + ij_str + new_command[insert_pos:]
-        
+
         print(f"Arc conversion: {command.strip()} -> {new_command.strip()}")
         return new_command
 
     def _update_modal_position(self, command):
         """Track modal X/Y position from G-code commands"""
         import re
-        
+
         # Parse movement commands (G0, G1, G2, G3)
         command_upper = command.upper()
-        if re.search(r'\b(G0|G1|G2|G3)\b', command_upper):
+        if re.search(r"\b(G0|G1|G2|G3)\b", command_upper):
             # Extract X and Y if present
-            x_match = re.search(r'\bX\s*(-?\d+\.?\d*)', command_upper)
-            y_match = re.search(r'\bY\s*(-?\d+\.?\d*)', command_upper)
-            
+            x_match = re.search(r"\bX\s*(-?\d+\.?\d*)", command_upper)
+            y_match = re.search(r"\bY\s*(-?\d+\.?\d*)", command_upper)
+
             if x_match:
                 self.current_modal_x = float(x_match.group(1))
             if y_match:
                 self.current_modal_y = float(y_match.group(1))
 
+    def update_laser_power(self):
+        """Update laser power level from input field"""
+        try:
+            power = int(self.laser_power_var.get())
+            if 0 <= power <= 100:
+                self.laser_power = power
+                # If laser is currently on, update the power level
+                if self.laser_on:
+                    self.send_gcode_async(f"M3 S{power}")
+            else:
+                messagebox.showwarning("Warning", "Power level must be between 0-100%")
+                self.laser_power_var.set(str(self.laser_power))
+        except ValueError:
+            messagebox.showwarning(
+                "Warning", "Please enter a valid number for power level"
+            )
+            self.laser_power_var.set(str(self.laser_power))
+
     def toggle_laser(self):
-        """Toggle laser on/off at low power"""
+        """Toggle laser on/off at configurable power level"""
         if not self.is_connected:
             messagebox.showwarning("Warning", "Please connect to GRBL first!")
             return
+
+        # Update power level from input field before toggling
+        self.update_laser_power()
 
         if self.laser_on:
             # Turn laser off
@@ -2960,8 +3194,8 @@ Vector Analysis:
             self.laser_on = False
             self.laser_button.config(text="Laser OFF")
         else:
-            # Turn laser on at low power (S10 = 1% power for testing)
-            self.send_gcode_async("M3 S10")
+            # Turn laser on at configured power level
+            self.send_gcode_async(f"M3 S{self.laser_power}")
             self.send_gcode_async("G1 F100")
             self.laser_on = True
             self.laser_button.config(text="Laser ON")
@@ -3005,6 +3239,30 @@ Vector Analysis:
             #    "Success",
             #    "Work origin set to current position\n\nPosition display will update shortly.",
             # )
+
+    def auto_origin(self):
+        """Execute automatic origin setting sequence"""
+        if not self.is_connected:
+            messagebox.showwarning("Warning", "Please connect to GRBL first!")
+            return
+
+        # Confirm with user
+        response = messagebox.askyesno(
+            "Auto Origin",
+            "Execute automatic origin sequence?\n\n"
+            "This will:\n"
+            "1. Home the machine ($H)\n"
+            "2. Set origin at current position (G10 L20 P1 X0 Y0 Z0)\n"
+            "3. Move to X320 Y200 Z-60.1 (G0 X320 Y200 Z-60.1)\n"
+            "4. Set origin at current position (G10 L20 P1 X0 Y0 Z0)",
+        )
+
+        if response:
+            # Send commands in sequence - GRBL will execute them in order
+            self.send_gcode_async("$H")
+            self.send_gcode_async("G10 L20 P1 X0 Y0 Z0")
+            self.send_gcode_async("G0 X320 Y200 Z-60.1")
+            self.send_gcode_async("G10 L20 P1 X0 Y0 Z0")
 
     def jog_move(self, x_dir, y_dir):
         """Jog move in X and Y direction"""
@@ -3923,7 +4181,7 @@ Vector Analysis:
             # Initialize execution tracking
             self.is_executing = True
             self.execution_path = [(self.work_pos["x"], self.work_pos["y"])]
-            
+
             # Initialize modal position tracking for arc conversion
             self.current_modal_x = self.work_pos["x"]
             self.current_modal_y = self.work_pos["y"]
