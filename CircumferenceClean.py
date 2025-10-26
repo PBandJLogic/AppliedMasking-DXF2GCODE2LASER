@@ -120,23 +120,27 @@ class CircumferenceClean:
         self.actual_points = {"top": {}, "bottom": {}}
 
     def _compute_reference_points_from_angles(self):
-        """Compute X,Y reference points from angles on outer circumference, relative to circle centers"""
-        radius = self.outer_diameter / 2
+        """Compute X,Y reference points from angles on outer/inner circumferences, relative to circle centers"""
+        # Top reference points use outer diameter
+        top_radius = self.outer_diameter / 2
 
         # Convert top angles to X,Y points relative to top center
         self.top_reference_points = []
         for angle_deg in self.top_reference_angles:
             angle_rad = np.radians(angle_deg)
-            x = self.top_center[0] + radius * np.cos(angle_rad)
-            y = self.top_center[1] + radius * np.sin(angle_rad)
+            x = self.top_center[0] + top_radius * np.cos(angle_rad)
+            y = self.top_center[1] + top_radius * np.sin(angle_rad)
             self.top_reference_points.append((x, y))
+
+        # Bottom reference points use inner diameter
+        bottom_radius = self.inner_diameter / 2
 
         # Convert bottom angles to X,Y points relative to bottom center
         self.bottom_reference_points = []
         for angle_deg in self.bottom_reference_angles:
             angle_rad = np.radians(angle_deg)
-            x = self.bottom_center[0] + radius * np.cos(angle_rad)
-            y = self.bottom_center[1] + radius * np.sin(angle_rad)
+            x = self.bottom_center[0] + bottom_radius * np.cos(angle_rad)
+            y = self.bottom_center[1] + bottom_radius * np.sin(angle_rad)
             self.bottom_reference_points.append((x, y))
 
     def create_main_interface(self):
@@ -2413,7 +2417,7 @@ class CircumferenceClean:
         for point_id, coords in actual_dict.items():
             if "x" in coords and "y" in coords:
                 ref_points.append((coords["x"], coords["y"]))
-        
+
         # Debug: Print the points being used
         print(f"\nAdjusting G-code for {self.current_position} position")
         print(f"Using {len(ref_points)} reference points:")
@@ -2433,19 +2437,25 @@ class CircumferenceClean:
         try:
             if self.current_position == "top":
                 radius = self.outer_diameter / 2
-                print(f"Using outer diameter: {self.outer_diameter} mm (radius: {radius} mm)")
+                print(
+                    f"Using outer diameter: {self.outer_diameter} mm (radius: {radius} mm)"
+                )
                 print(f"Expected center: {self.top_center}")
             else:
                 radius = self.inner_diameter / 2
-                print(f"Using inner diameter: {self.inner_diameter} mm (radius: {radius} mm)")
+                print(
+                    f"Using inner diameter: {self.inner_diameter} mm (radius: {radius} mm)"
+                )
                 print(f"Expected center: {self.bottom_center}")
 
             self.fitted_center, self.circle_errors = self.fit_circle_fixed_radius(
                 ref_points, radius
             )
             self.fitted_radius = radius
-            
-            print(f"Fitted center: ({self.fitted_center[0]:.4f}, {self.fitted_center[1]:.4f}) mm")
+
+            print(
+                f"Fitted center: ({self.fitted_center[0]:.4f}, {self.fitted_center[1]:.4f}) mm"
+            )
 
             # Update circle center based on fitted center
             if self.current_position == "top":
