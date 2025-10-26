@@ -2408,18 +2408,24 @@ class CircumferenceClean:
             actual_dict = self.actual_points.get("top", {})
         else:
             actual_dict = self.actual_points.get("bottom", {})
-        
+
         ref_points = []
         for point_id, coords in actual_dict.items():
             if "x" in coords and "y" in coords:
                 ref_points.append((coords["x"], coords["y"]))
         
+        # Debug: Print the points being used
+        print(f"\nAdjusting G-code for {self.current_position} position")
+        print(f"Using {len(ref_points)} reference points:")
+        for i, (x, y) in enumerate(ref_points):
+            print(f"  Point {i+1}: ({x:.4f}, {y:.4f})")
+
         if len(ref_points) < 3:
             messagebox.showerror(
-                "Error", 
+                "Error",
                 f"Need at least 3 reference points!\n\n"
                 f"Currently have {len(ref_points)} point(s) captured.\n"
-                f"Use the 'Set' button to capture more reference points."
+                f"Use the 'Set' button to capture more reference points.",
             )
             return
 
@@ -2427,13 +2433,19 @@ class CircumferenceClean:
         try:
             if self.current_position == "top":
                 radius = self.outer_diameter / 2
+                print(f"Using outer diameter: {self.outer_diameter} mm (radius: {radius} mm)")
+                print(f"Expected center: {self.top_center}")
             else:
                 radius = self.inner_diameter / 2
+                print(f"Using inner diameter: {self.inner_diameter} mm (radius: {radius} mm)")
+                print(f"Expected center: {self.bottom_center}")
 
             self.fitted_center, self.circle_errors = self.fit_circle_fixed_radius(
                 ref_points, radius
             )
             self.fitted_radius = radius
+            
+            print(f"Fitted center: ({self.fitted_center[0]:.4f}, {self.fitted_center[1]:.4f}) mm")
 
             # Update circle center based on fitted center
             if self.current_position == "top":
