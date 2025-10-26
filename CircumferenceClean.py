@@ -1080,6 +1080,32 @@ class CircumferenceClean:
         )
         self.grbl_state_label.pack(anchor="w", pady=2)
 
+        # Position display frame
+        pos_display_frame = ttk.Frame(grbl_frame)
+        pos_display_frame.pack(anchor="w", pady=2)
+
+        # Work Position
+        wpos_row = ttk.Frame(pos_display_frame)
+        wpos_row.pack(side="top", anchor="w")
+        ttk.Label(wpos_row, text="WPos:", font=("TkDefaultFont", 9, "bold")).pack(
+            side="left", padx=(0, 5)
+        )
+        self.work_pos_label = ttk.Label(
+            wpos_row, text="X: 0.00  Y: 0.00  Z: 0.00", font=("Courier", 9)
+        )
+        self.work_pos_label.pack(side="left")
+
+        # Machine Position
+        mpos_row = ttk.Frame(pos_display_frame)
+        mpos_row.pack(side="top", anchor="w")
+        ttk.Label(mpos_row, text="MPos:", font=("TkDefaultFont", 9, "bold")).pack(
+            side="left", padx=(0, 5)
+        )
+        self.machine_pos_label = ttk.Label(
+            mpos_row, text="X: 0.00  Y: 0.00  Z: 0.00", font=("Courier", 9)
+        )
+        self.machine_pos_label.pack(side="left")
+
         # Control buttons row (Home, Clear Errors, Reboot)
         control_row = ttk.Frame(grbl_frame)
         control_row.pack(fill="x", pady=(5, 0))
@@ -1760,6 +1786,18 @@ class CircumferenceClean:
 
         # Clear position display
         try:
+            if hasattr(self, "work_pos_label"):
+                self.work_pos_label.config(text="X: 0.00  Y: 0.00  Z: 0.00")
+        except:
+            pass
+
+        try:
+            if hasattr(self, "machine_pos_label"):
+                self.machine_pos_label.config(text="X: 0.00  Y: 0.00  Z: 0.00")
+        except:
+            pass
+
+        try:
             if hasattr(self, "position_text"):
                 self.position_text.set_text("")
                 self.canvas.draw_idle()
@@ -1795,7 +1833,11 @@ class CircumferenceClean:
         while self.is_connected and self.serial_connection:
             try:
                 if self.serial_connection and self.serial_connection.in_waiting > 0:
-                    line = self.serial_connection.readline().decode("utf-8", errors="ignore").strip()
+                    line = (
+                        self.serial_connection.readline()
+                        .decode("utf-8", errors="ignore")
+                        .strip()
+                    )
                     if line:
                         # Log received response
                         self.log_comm_message(f"< {line}", "received")
@@ -1806,19 +1848,27 @@ class CircumferenceClean:
             except (OSError, serial.SerialException) as e:
                 # Check if this is a real disconnect error
                 error_str = str(e).lower()
-                is_disconnect = any([
-                    "access is denied" in error_str,
-                    "invalid handle" in error_str,
-                    "device not configured" in error_str,
-                    "device is not open" in error_str,
-                    "i/o error" in error_str,
-                    (not self.serial_connection.is_open if self.serial_connection else True),
-                ])
-                
+                is_disconnect = any(
+                    [
+                        "access is denied" in error_str,
+                        "invalid handle" in error_str,
+                        "device not configured" in error_str,
+                        "device is not open" in error_str,
+                        "i/o error" in error_str,
+                        (
+                            not self.serial_connection.is_open
+                            if self.serial_connection
+                            else True
+                        ),
+                    ]
+                )
+
                 if self.is_connected and is_disconnect:
                     consecutive_errors += 1
-                    print(f"Serial disconnect error (attempt {consecutive_errors}): {e}")
-                    
+                    print(
+                        f"Serial disconnect error (attempt {consecutive_errors}): {e}"
+                    )
+
                     # After 3 consecutive errors, trigger disconnect
                     if consecutive_errors >= 3:
                         print("USB disconnect detected!")
@@ -1829,27 +1879,27 @@ class CircumferenceClean:
             except Exception as e:
                 print(f"Unexpected error in serial reader: {e}")
                 break
-    
+
     def handle_usb_disconnect(self):
         """Handle unexpected USB disconnect"""
         # Prevent multiple simultaneous disconnect handlers
         if not self.is_connected:
             return
-        
+
         print("\n⚠️ USB DISCONNECT DETECTED ⚠️")
-        
+
         # Stop any ongoing operations
         if hasattr(self, "is_executing") and self.is_executing:
             print("Stopping execution due to disconnect...")
             self.stop_execution()
-        
+
         # Disconnect
         self.disconnect_grbl()
-        
+
         # Show user notification
         messagebox.showwarning(
             "USB Disconnected",
-            "Lost connection to GRBL controller!\n\nPlease check the USB cable and reconnect."
+            "Lost connection to GRBL controller!\n\nPlease check the USB cable and reconnect.",
         )
 
     def parse_grbl_response(self, line):
@@ -1892,9 +1942,15 @@ class CircumferenceClean:
 
     def update_position_display(self):
         """Update position display in UI"""
-        self.position_label.config(
-            text=f"Position: X{self.work_pos['x']:.2f} Y{self.work_pos['y']:.2f} Z{self.work_pos['z']:.2f}"
-        )
+        # Update position labels
+        if hasattr(self, "work_pos_label"):
+            self.work_pos_label.config(
+                text=f"X: {self.wpos['x']:6.2f}  Y: {self.wpos['y']:6.2f}  Z: {self.wpos['z']:6.2f}"
+            )
+        if hasattr(self, "machine_pos_label"):
+            self.machine_pos_label.config(
+                text=f"X: {self.mpos['x']:6.2f}  Y: {self.mpos['y']:6.2f}  Z: {self.mpos['z']:6.2f}"
+            )
 
     def update_position_display_text(self):
         """Update position display text on the plot"""
