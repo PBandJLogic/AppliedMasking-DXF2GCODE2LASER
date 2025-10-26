@@ -90,6 +90,7 @@ class CircumferenceClean:
         self.work_pos = {"x": 0.0, "y": 0.0, "z": 0.0}
         self.mpos = {"x": 0.0, "y": 0.0, "z": 0.0}  # Machine position
         self.wpos = {"x": 0.0, "y": 0.0, "z": 0.0}  # Work position
+        self.wco = {"x": 0.0, "y": 0.0, "z": 0.0}  # Work coordinate offset
 
         # Laser state
         self.laser_on = False
@@ -1981,14 +1982,38 @@ class CircumferenceClean:
                     "z": float(wpos_match.group(3)),
                 }
 
-            # Update position displays if we have both MPos and WPos
-            if mpos_match and wpos_match:
+            # Extract WCO (Work Coordinate Offset) from status report
+            wco_match = re.search(
+                r"WCO:([+-]?\d+\.?\d*),([+-]?\d+\.?\d*),([+-]?\d+\.?\d*)", line
+            )
+            if wco_match:
+                self.wco = {
+                    "x": float(wco_match.group(1)),
+                    "y": float(wco_match.group(2)),
+                    "z": float(wco_match.group(3)),
+                }
+
+            # Calculate missing positions (GRBL sends either MPos+WCO or MPos+WPos)
+            position_changed = False
+            if mpos_match and not wpos_match:
+                # Calculate WPos from MPos - WCO
+                self.wpos["x"] = self.mpos["x"] - self.wco["x"]
+                self.wpos["y"] = self.mpos["y"] - self.wco["y"]
+                self.wpos["z"] = self.mpos["z"] - self.wco["z"]
+                position_changed = True
+            elif wpos_match and not mpos_match:
+                # Calculate MPos from WPos + WCO
+                self.mpos["x"] = self.wpos["x"] + self.wco["x"]
+                self.mpos["y"] = self.wpos["y"] + self.wco["y"]
+                self.mpos["z"] = self.wpos["z"] + self.wco["z"]
+                position_changed = True
+            elif mpos_match and wpos_match:
+                position_changed = True
+
+            # Update position displays if position changed
+            if position_changed or mpos_match or wpos_match or wco_match:
                 # Debug: print position updates (can be removed later)
                 # print(f"Position update: MPos=({self.mpos['x']:.2f}, {self.mpos['y']:.2f}) WPos=({self.wpos['x']:.2f}, {self.wpos['y']:.2f})")
-                self.root.after(0, self.update_position_display)
-                self.root.after(0, self.update_position_display_text)
-            elif mpos_match or wpos_match:
-                # If we only got one, still update what we have
                 self.root.after(0, self.update_position_display)
                 self.root.after(0, self.update_position_display_text)
 
@@ -2303,7 +2328,7 @@ class CircumferenceClean:
                 self.serial_connection.write(b"?")
         except:
             pass
-        
+
         # Give a moment for the response to come back
         # Use after() to wait for position update
         self.root.after(50, self._complete_capture_position)
