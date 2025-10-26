@@ -1995,7 +1995,7 @@ class CircumferenceClean:
             self.machine_pos_label.config(
                 text=f"X: {self.mpos['x']:6.2f}  Y: {self.mpos['y']:6.2f}  Z: {self.mpos['z']:6.2f}"
             )
-        
+
         # Update laser marker position on plot
         if hasattr(self, "laser_marker") and hasattr(self, "canvas"):
             self.laser_marker.set_data([self.wpos["x"]], [self.wpos["y"]])
@@ -2616,16 +2616,30 @@ Status: {'✓ Excellent' if max_error <= 0.05 else '✓ Good' if max_error <= 0.
     def save_configuration(self):
         """Save configuration to file"""
         config = {
+            # Geometry parameters
             "outer_diameter": self.outer_diameter,
             "inner_diameter": self.inner_diameter,
             "outer_cleaning_offsets": self.outer_cleaning_offsets,
             "inner_cleaning_offsets": self.inner_cleaning_offsets,
-            "top_reference_points": self.top_reference_points,
-            "bottom_reference_points": self.bottom_reference_points,
+            
+            # Center points
             "top_center": self.top_center,
             "bottom_center": self.bottom_center,
+            
+            # Reference angles (stored instead of computed points)
+            "top_reference_angles": self.top_reference_angles,
+            "bottom_reference_angles": self.bottom_reference_angles,
+            
+            # Cleaning arc angles
+            "top_start_angle": self.top_start_angle,
+            "top_end_angle": self.top_end_angle,
+            "bottom_start_angle": self.bottom_start_angle,
+            "bottom_end_angle": self.bottom_end_angle,
+            
+            # Laser parameters
             "laser_power": self.laser_power,
             "laser_power_max": self.laser_power_max,
+            "targeting_power": self.targeting_power,
             "feed_rate": self.feed_rate,
         }
 
@@ -2637,6 +2651,7 @@ Status: {'✓ Excellent' if max_error <= 0.05 else '✓ Good' if max_error <= 0.
         if filename:
             with open(filename, "w") as f:
                 json.dump(config, f, indent=2)
+            messagebox.showinfo("Success", f"Configuration saved to:\n{filename}")
 
     def load_configuration(self):
         """Load configuration from file"""
@@ -2649,7 +2664,7 @@ Status: {'✓ Excellent' if max_error <= 0.05 else '✓ Good' if max_error <= 0.
                 with open(filename, "r") as f:
                     config = json.load(f)
 
-                # Update variables
+                # Update geometry variables
                 self.outer_diameter = config.get("outer_diameter", 100.0)
                 self.inner_diameter = config.get("inner_diameter", 50.0)
                 self.outer_cleaning_offsets = config.get(
@@ -2658,15 +2673,35 @@ Status: {'✓ Excellent' if max_error <= 0.05 else '✓ Good' if max_error <= 0.
                 self.inner_cleaning_offsets = config.get(
                     "inner_cleaning_offsets", [0, -1, -2, -3]
                 )
-                self.top_reference_points = config.get("top_reference_points", [])
-                self.bottom_reference_points = config.get("bottom_reference_points", [])
+                
+                # Update center points
                 self.top_center = config.get("top_center", [0, -50])
                 self.bottom_center = config.get("bottom_center", [0, 50])
+                
+                # Update reference angles
+                self.top_reference_angles = config.get(
+                    "top_reference_angles", [-30, 0, 45, 90, 135, 180, 210]
+                )
+                self.bottom_reference_angles = config.get(
+                    "bottom_reference_angles", [150, 180, 225, 270, 315, 0, 30]
+                )
+                
+                # Recompute reference points from angles
+                self._compute_reference_points_from_angles()
+                
+                # Update cleaning arc angles
+                self.top_start_angle = config.get("top_start_angle", 0)
+                self.top_end_angle = config.get("top_end_angle", 180)
+                self.bottom_start_angle = config.get("bottom_start_angle", 0)
+                self.bottom_end_angle = config.get("bottom_end_angle", -180)
+                
+                # Update laser parameters
                 self.laser_power = config.get("laser_power", 100)
                 self.laser_power_max = config.get("laser_power_max", 10000)
+                self.targeting_power = config.get("targeting_power", 3)
                 self.feed_rate = config.get("feed_rate", 500)
 
-                # Update UI
+                # Update UI - Geometry tab
                 self.outer_diameter_var.set(str(self.outer_diameter))
                 self.inner_diameter_var.set(str(self.inner_diameter))
                 self.outer_offsets_var.set(
@@ -2675,10 +2710,28 @@ Status: {'✓ Excellent' if max_error <= 0.05 else '✓ Good' if max_error <= 0.
                 self.inner_offsets_var.set(
                     ", ".join(map(str, self.inner_cleaning_offsets))
                 )
+                self.top_ref_angles_var.set(
+                    ", ".join(map(str, self.top_reference_angles))
+                )
+                self.bottom_ref_angles_var.set(
+                    ", ".join(map(str, self.bottom_reference_angles))
+                )
+                
+                # Update UI - Laser tab
+                if hasattr(self, "laser_power_var"):
+                    self.laser_power_var.set(str(self.laser_power))
+                if hasattr(self, "laser_power_max_var"):
+                    self.laser_power_max_var.set(str(self.laser_power_max))
+                if hasattr(self, "targeting_power_var"):
+                    self.targeting_power_var.set(str(self.targeting_power))
+                if hasattr(self, "feed_rate_var"):
+                    self.feed_rate_var.set(str(self.feed_rate))
 
-                # Update reference points display
+                # Update reference points display and plot
                 self.update_reference_display()
                 self.update_plot()
+                
+                messagebox.showinfo("Success", f"Configuration loaded from:\n{filename}")
 
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to load configuration: {str(e)}")
