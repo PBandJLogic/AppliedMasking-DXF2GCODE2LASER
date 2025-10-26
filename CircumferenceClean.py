@@ -2301,8 +2301,10 @@ class CircumferenceClean:
         values[3] = f"{actual_x:.2f}"
         values[4] = f"{actual_y:.2f}"
         self.ref_tree.item(selection[0], values=values)
-        
-        print(f"Captured position for point {point_id}: X={actual_x:.2f}, Y={actual_y:.2f}")
+
+        print(
+            f"Captured position for point {point_id}: X={actual_x:.2f}, Y={actual_y:.2f}"
+        )
 
     def goto_position(self):
         """Move to selected reference point"""
@@ -2584,7 +2586,7 @@ Status: {'✓ Excellent' if max_error <= 0.05 else '✓ Good' if max_error <= 0.
             # Not really done yet, check again
             self.root.after(100, self.check_execution_complete)
             return
-        
+
         self.is_executing = False
 
         # Clear buffers
@@ -2746,6 +2748,9 @@ Status: {'✓ Excellent' if max_error <= 0.05 else '✓ Good' if max_error <= 0.
                 # Update reference points display and plot
                 self.update_reference_display()
                 self.update_plot()
+                
+                # Regenerate G-code with new parameters
+                self.update_gcode_from_geometry()
 
                 messagebox.showinfo(
                     "Success", f"Configuration loaded from:\n{filename}"
