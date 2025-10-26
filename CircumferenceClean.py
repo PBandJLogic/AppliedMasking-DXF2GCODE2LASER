@@ -101,6 +101,12 @@ class CircumferenceClean:
 
         # G-code generation (will be added back for execution control)
         self.is_executing = False
+        
+        # Buffer management for G-code streaming
+        self.gcode_buffer = []  # Queue of G-code lines to send
+        self.buffer_size = 0  # Current commands in GRBL's buffer
+        self.max_buffer_size = 4  # Conservative buffer size
+        self.command_queue = []  # Track sent commands for ok matching
 
         # Current position selection
         self.current_position = "bottom"  # "top" or "bottom"
@@ -1904,6 +1910,18 @@ class CircumferenceClean:
 
     def parse_grbl_response(self, line):
         """Parse GRBL response and update position and state"""
+        # Handle "ok" responses - command completed
+        if line.strip().lower() == "ok":
+            self.handle_grbl_ok()
+            return
+        
+        # Handle error responses
+        if "error" in line.lower():
+            print(f"GRBL Error: {line}")
+            self.grbl_state = "Error"
+            self.update_state_display()
+            return
+        
         # Parse position updates and state
         if line.startswith("<"):
             # Extract GRBL state (first part before |)
@@ -1939,6 +1957,21 @@ class CircumferenceClean:
             if mpos_match and wpos_match:
                 self.root.after(0, self.update_position_display)
                 self.root.after(0, self.update_position_display_text)
+
+    def handle_grbl_ok(self):
+        """Handle GRBL 'ok' response - command completed"""
+        # Command completed, reduce buffer count
+        if self.command_queue:
+            self.command_queue.pop(0)  # Remove completed command
+            self.buffer_size = max(0, self.buffer_size - 1)
+        else:
+            # Safety: command_queue empty but got 'ok'
+            if self.buffer_size > 0:
+                self.buffer_size = max(0, self.buffer_size - 1)
+        
+        # If executing, try to send more commands
+        if self.is_executing:
+            self.stream_next_commands()
 
     def update_position_display(self):
         """Update position display in UI"""
@@ -2395,7 +2428,7 @@ Status: {'✓ Excellent' if max_error <= 0.05 else '✓ Good' if max_error <= 0.
         self.calc_text.insert(1.0, results)
 
     def run_cleaning(self):
-        """Run the cleaning G-code"""
+        """Run the cleaning G-code with proper buffer management"""
         if not self.is_connected:
             messagebox.showwarning("Warning", "Please connect to GRBL first!")
             return
@@ -2426,9 +2459,21 @@ Status: {'✓ Excellent' if max_error <= 0.05 else '✓ Good' if max_error <= 0.
         if postscript:
             combined_gcode.extend(postscript.split("\n"))
 
-        if not combined_gcode or not any(line.strip() for line in combined_gcode):
+        # Filter out empty lines and comments
+        filtered_gcode = []
+        for line in combined_gcode:
+            line = line.strip()
+            if line and not line.startswith(";"):
+                filtered_gcode.append(line)
+
+        if not filtered_gcode:
             messagebox.showwarning("Warning", "No G-code to execute!")
             return
+
+        # Clear buffers
+        self.gcode_buffer = filtered_gcode.copy()
+        self.command_queue.clear()
+        self.buffer_size = 0
 
         # Set execution flag
         self.is_executing = True
@@ -2437,30 +2482,109 @@ Status: {'✓ Excellent' if max_error <= 0.05 else '✓ Good' if max_error <= 0.
         if hasattr(self, "execution_status_label"):
             self.execution_status_label.config(text="Running", foreground="orange")
 
+        print(f"Starting execution of {len(filtered_gcode)} G-code commands")
+        
+        # Start streaming
+        self.stream_next_commands()
+
+    def stream_next_commands(self):
+        """Send as many commands as buffer allows (event-driven)"""
+        if not self.is_executing or not self.gcode_buffer:
+            # Check if execution is complete
+            if self.is_executing and not self.gcode_buffer and self.buffer_size == 0:
+                self.finish_execution()
+            return
+
+        # Send multiple commands if buffer has space
+        while self.gcode_buffer and self.buffer_size < self.max_buffer_size:
+            # Get next command
+            line = self.gcode_buffer.pop(0)
+            
+            # Send it
+            if not self.send_gcode_buffered(line):
+                self.stop_execution()
+                return
+
+        # Check if done sending (but buffer may still have commands executing)
+        if not self.gcode_buffer:
+            # Schedule a check for completion
+            self.root.after(100, self.check_execution_complete)
+
+    def send_gcode_buffered(self, command):
+        """Send G-code command with buffer tracking"""
+        if not self.serial_connection or not self.is_connected:
+            return False
+
         try:
-            # Send G-code line by line
-            for line in combined_gcode:
-                if not self.is_executing:  # Check if stopped
-                    break
-                line = line.strip()
-                if line and not line.startswith(";"):
-                    self.send_gcode(line)
-                    time.sleep(0.1)  # Small delay between commands
+            # Send command
+            self.serial_connection.write(f"{command}\n".encode())
+            
+            # Log sent command
+            self.log_comm_message(f"> {command}", "sent")
+            
+            # Track command in buffer
+            self.buffer_size += 1
+            self.command_queue.append(command)
+            
+            return True
         except Exception as e:
-            messagebox.showerror("Error", f"Execution error: {str(e)}")
-        finally:
-            self.is_executing = False
-            # Update status indicator
-            if hasattr(self, "execution_status_label"):
-                self.execution_status_label.config(text="Ready", foreground="green")
+            print(f"Error sending command: {e}")
+            return False
+
+    def check_execution_complete(self):
+        """Check if execution is complete (buffer empty)"""
+        if not self.is_executing:
+            return
+        
+        # If buffer is empty, we're done
+        if self.buffer_size <= 0 and not self.gcode_buffer:
+            self.finish_execution()
+        else:
+            # Check again in 100ms
+            self.root.after(100, self.check_execution_complete)
+
+    def finish_execution(self):
+        """Complete the execution process"""
+        self.is_executing = False
+        
+        # Clear buffers
+        self.gcode_buffer.clear()
+        self.command_queue.clear()
+        self.buffer_size = 0
+        
+        # Update status indicator
+        if hasattr(self, "execution_status_label"):
+            self.execution_status_label.config(text="Complete", foreground="green")
+        
+        print("Execution complete!")
+        messagebox.showinfo("Complete", "G-code execution completed successfully!")
 
     def stop_execution(self):
         """Stop G-code execution"""
         if self.is_connected:
+            # Set flag to stop sending more commands
             self.is_executing = False
-            self.send_gcode("!")  # Feed hold
-            self.send_gcode("$X")  # Unlock
-            messagebox.showinfo("Info", "Execution stopped")
+
+            # Clear pending commands
+            self.gcode_buffer.clear()
+
+            # Send feed hold (pause)
+            if self.serial_connection:
+                try:
+                    self.serial_connection.write(b"!")
+                except:
+                    pass
+
+            # Clear alarm
+            self.send_gcode("$X")
+
+            # Clear buffers
+            self.command_queue.clear()
+            self.buffer_size = 0
+
+            # Display message
+            messagebox.showinfo("Execution Stopped", "G-code execution has been stopped.")
+
             # Update status indicator
             if hasattr(self, "execution_status_label"):
                 self.execution_status_label.config(text="Stopped", foreground="red")
