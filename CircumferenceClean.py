@@ -888,8 +888,8 @@ class CircumferenceClean:
         toolbar_frame = ttk.Frame(plot_top_frame)
         toolbar_frame.pack(fill="x", pady=(0, 5))
 
-        # Create figure and axes
-        self.fig = Figure(figsize=(8, 6), dpi=100)
+        # Create figure and axes (smaller size for better layout)
+        self.fig = Figure(figsize=(6, 4), dpi=100)
         self.ax = self.fig.add_subplot(111)
 
         # Add position display text in upper right corner
@@ -1554,6 +1554,18 @@ class CircumferenceClean:
         # Set axis limits
         self.ax.set_xlim(-400, 400)
         self.ax.set_ylim(-200, 200)
+
+        # Re-add laser position marker after clearing (it was removed by ax.clear())
+        self.laser_marker = self.ax.plot(
+            [self.wpos["x"]],
+            [self.wpos["y"]],
+            marker="+",
+            color="green",
+            markersize=15,
+            markeredgewidth=2,
+            linestyle="None",
+            label="Laser Position"
+        )[0]
 
         self.canvas.draw()
 
@@ -2276,11 +2288,11 @@ class CircumferenceClean:
 
         # Query current position to ensure we have fresh data
         self.send_gcode("?")
-        
+
         # Give a moment for the response to come back
         # Use after() to wait for position update
         self.root.after(50, self._complete_capture_position)
-    
+
     def _complete_capture_position(self):
         """Complete the position capture after position query response"""
         # Initialize actual points storage if not exists
@@ -2300,7 +2312,7 @@ class CircumferenceClean:
         # Store actual position using correct wpos variable
         actual_x = self.wpos["x"]
         actual_y = self.wpos["y"]
-        
+
         # Warn if position seems invalid (still at origin)
         if actual_x == 0.0 and actual_y == 0.0:
             response = messagebox.askyesno(
