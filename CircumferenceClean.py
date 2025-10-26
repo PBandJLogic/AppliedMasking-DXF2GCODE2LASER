@@ -2288,19 +2288,21 @@ class CircumferenceClean:
         values = list(item["values"])
         point_id = values[0]
 
-        # Store actual position
-        actual_x = self.work_pos["x"]
-        actual_y = self.work_pos["y"]
+        # Store actual position using correct wpos variable
+        actual_x = self.wpos["x"]
+        actual_y = self.wpos["y"]
 
         if self.current_position == "top":
             self.actual_points["top"][point_id] = {"x": actual_x, "y": actual_y}
         else:
             self.actual_points["bottom"][point_id] = {"x": actual_x, "y": actual_y}
 
-        # Update table display
+        # Update table display with current position
         values[3] = f"{actual_x:.2f}"
         values[4] = f"{actual_y:.2f}"
         self.ref_tree.item(selection[0], values=values)
+        
+        print(f"Captured position for point {point_id}: X={actual_x:.2f}, Y={actual_y:.2f}")
 
     def goto_position(self):
         """Move to selected reference point"""
@@ -2563,15 +2565,26 @@ Status: {'✓ Excellent' if max_error <= 0.05 else '✓ Good' if max_error <= 0.
         if not self.is_executing:
             return
 
-        # If buffer is empty, we're done
+        # If buffer is empty and all commands sent, wait for machine to finish moving
         if self.buffer_size <= 0 and not self.gcode_buffer:
-            self.finish_execution()
+            # Wait a bit longer to ensure machine has stopped moving
+            # Query position to get final state
+            if self.is_connected:
+                self.send_gcode("?")
+            # Schedule final completion after delay
+            self.root.after(500, self.finish_execution)
         else:
             # Check again in 100ms
             self.root.after(100, self.check_execution_complete)
 
     def finish_execution(self):
         """Complete the execution process"""
+        # Double-check buffer is really empty and we're still executing
+        if self.buffer_size > 0 or self.gcode_buffer:
+            # Not really done yet, check again
+            self.root.after(100, self.check_execution_complete)
+            return
+        
         self.is_executing = False
 
         # Clear buffers
