@@ -1564,7 +1564,7 @@ class CircumferenceClean:
             markersize=15,
             markeredgewidth=2,
             linestyle="None",
-            label="Laser Position"
+            label="Laser Position",
         )[0]
 
         self.canvas.draw()
@@ -1978,6 +1978,12 @@ class CircumferenceClean:
 
             # Update position displays if we have both MPos and WPos
             if mpos_match and wpos_match:
+                # Debug: print position updates (can be removed later)
+                # print(f"Position update: MPos=({self.mpos['x']:.2f}, {self.mpos['y']:.2f}) WPos=({self.wpos['x']:.2f}, {self.wpos['y']:.2f})")
+                self.root.after(0, self.update_position_display)
+                self.root.after(0, self.update_position_display_text)
+            elif mpos_match or wpos_match:
+                # If we only got one, still update what we have
                 self.root.after(0, self.update_position_display)
                 self.root.after(0, self.update_position_display_text)
 
@@ -2015,8 +2021,8 @@ class CircumferenceClean:
                 selected_tab = self.notebook.index(self.notebook.select())
                 if selected_tab == 1:  # Laser Control tab is index 1
                     self.laser_marker.set_data([self.wpos["x"]], [self.wpos["y"]])
-                    # Use draw() instead of draw_idle() for immediate update
-                    self.canvas.draw()
+                    # Use draw_idle() to avoid blocking - it updates when GUI is idle
+                    self.canvas.draw_idle()
             except:
                 pass
 
