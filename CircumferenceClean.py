@@ -908,6 +908,17 @@ class CircumferenceClean:
         self.canvas = FigureCanvasTkAgg(self.fig, plot_top_frame)
         self.canvas.get_tk_widget().pack(fill="both", expand=True)
 
+        # Add laser position marker (green crosshair)
+        self.laser_marker = self.ax.plot(
+            [self.wpos["x"]],
+            [self.wpos["y"]],
+            marker="+",
+            color="green",
+            markersize=15,
+            markeredgewidth=2,
+            linestyle="None",
+        )[0]
+
         # Initialize position display
         self.update_position_display_text()
 
@@ -1984,6 +1995,11 @@ class CircumferenceClean:
             self.machine_pos_label.config(
                 text=f"X: {self.mpos['x']:6.2f}  Y: {self.mpos['y']:6.2f}  Z: {self.mpos['z']:6.2f}"
             )
+        
+        # Update laser marker position on plot
+        if hasattr(self, "laser_marker") and hasattr(self, "canvas"):
+            self.laser_marker.set_data([self.wpos["x"]], [self.wpos["y"]])
+            self.canvas.draw_idle()
 
     def update_position_display_text(self):
         """Update position display text on the plot"""
@@ -2189,9 +2205,13 @@ class CircumferenceClean:
                     self.laser_on = True
                     self.laser_button.config(text="Laser ON")
             else:
-                messagebox.showwarning("Warning", "Targeting power must be between 0-100%")
+                messagebox.showwarning(
+                    "Warning", "Targeting power must be between 0-100%"
+                )
         except ValueError:
-            messagebox.showwarning("Warning", "Please enter valid targeting power value")
+            messagebox.showwarning(
+                "Warning", "Please enter valid targeting power value"
+            )
 
     def execute_manual_gcode(self):
         """Execute a manually entered G-code command"""
