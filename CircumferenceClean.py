@@ -1845,7 +1845,12 @@ class CircumferenceClean:
     def query_status(self):
         """Send status query to GRBL"""
         if self.is_connected and self.status_query_active:
-            self.send_gcode("?")
+            # Send status query directly without logging (like Gcode2Laser.py does)
+            try:
+                if self.serial_connection:
+                    self.serial_connection.write(b"?")
+            except:
+                pass
             # Schedule next query in 100ms
             self.root.after(100, self.query_status)
 
@@ -2292,9 +2297,13 @@ class CircumferenceClean:
             messagebox.showwarning("Warning", "Please connect to GRBL first!")
             return
 
-        # Query current position to ensure we have fresh data
-        self.send_gcode("?")
-
+        # Query current position to ensure we have fresh data (send directly)
+        try:
+            if self.serial_connection:
+                self.serial_connection.write(b"?")
+        except:
+            pass
+        
         # Give a moment for the response to come back
         # Use after() to wait for position update
         self.root.after(50, self._complete_capture_position)
@@ -2608,9 +2617,13 @@ Status: {'✓ Excellent' if max_error <= 0.05 else '✓ Good' if max_error <= 0.
         # If buffer is empty and all commands sent, wait for machine to finish moving
         if self.buffer_size <= 0 and not self.gcode_buffer:
             # Wait a bit longer to ensure machine has stopped moving
-            # Query position to get final state
+            # Query position to get final state (send directly)
             if self.is_connected:
-                self.send_gcode("?")
+                try:
+                    if self.serial_connection:
+                        self.serial_connection.write(b"?")
+                except:
+                    pass
             # Schedule final completion after delay
             self.root.after(500, self.finish_execution)
         else:
