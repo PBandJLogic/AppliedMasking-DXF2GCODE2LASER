@@ -2402,20 +2402,25 @@ class CircumferenceClean:
 
     def adjust_gcode(self):
         """Perform circle fitting and generate G-code"""
-        # Get reference points from table
+        # Get captured reference points from actual_points dictionary
+        # This is more reliable than checking for (0,0) in the table
+        if self.current_position == "top":
+            actual_dict = self.actual_points.get("top", {})
+        else:
+            actual_dict = self.actual_points.get("bottom", {})
+        
         ref_points = []
-        for item in self.ref_tree.get_children():
-            values = self.ref_tree.item(item)["values"]
-            try:
-                x = float(values[3])  # Actual X
-                y = float(values[4])  # Actual Y
-                if x != 0.0 or y != 0.0:  # Skip unset points
-                    ref_points.append((x, y))
-            except ValueError:
-                continue
-
+        for point_id, coords in actual_dict.items():
+            if "x" in coords and "y" in coords:
+                ref_points.append((coords["x"], coords["y"]))
+        
         if len(ref_points) < 3:
-            messagebox.showerror("Error", "Need at least 3 reference points!")
+            messagebox.showerror(
+                "Error", 
+                f"Need at least 3 reference points!\n\n"
+                f"Currently have {len(ref_points)} point(s) captured.\n"
+                f"Use the 'Set' button to capture more reference points."
+            )
             return
 
         # Perform circle fitting
