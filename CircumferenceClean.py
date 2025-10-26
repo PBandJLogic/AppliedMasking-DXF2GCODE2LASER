@@ -120,27 +120,26 @@ class CircumferenceClean:
         self.actual_points = {"top": {}, "bottom": {}}
 
     def _compute_reference_points_from_angles(self):
-        """Compute X,Y reference points from angles on outer/inner circumferences, relative to circle centers"""
-        # Top reference points use outer diameter
-        top_radius = self.outer_diameter / 2
+        """Compute X,Y reference points from angles on outer circumference, relative to circle centers"""
+        # BOTH top and bottom reference points use OUTER diameter
+        # (Operators have trouble seeing inner diameter, so all alignment uses outer)
+        radius = self.outer_diameter / 2
 
         # Convert top angles to X,Y points relative to top center
         self.top_reference_points = []
         for angle_deg in self.top_reference_angles:
             angle_rad = np.radians(angle_deg)
-            x = self.top_center[0] + top_radius * np.cos(angle_rad)
-            y = self.top_center[1] + top_radius * np.sin(angle_rad)
+            x = self.top_center[0] + radius * np.cos(angle_rad)
+            y = self.top_center[1] + radius * np.sin(angle_rad)
             self.top_reference_points.append((x, y))
 
-        # Bottom reference points use inner diameter
-        bottom_radius = self.inner_diameter / 2
-
         # Convert bottom angles to X,Y points relative to bottom center
+        # NOTE: Uses same OUTER radius for alignment visibility
         self.bottom_reference_points = []
         for angle_deg in self.bottom_reference_angles:
             angle_rad = np.radians(angle_deg)
-            x = self.bottom_center[0] + bottom_radius * np.cos(angle_rad)
-            y = self.bottom_center[1] + bottom_radius * np.sin(angle_rad)
+            x = self.bottom_center[0] + radius * np.cos(angle_rad)
+            y = self.bottom_center[1] + radius * np.sin(angle_rad)
             self.bottom_reference_points.append((x, y))
 
     def create_main_interface(self):
@@ -2435,16 +2434,18 @@ class CircumferenceClean:
 
         # Perform circle fitting
         try:
+            # BOTH top and bottom use OUTER diameter for reference points
+            # (Inner diameter is only for cleaning passes, not alignment)
+            radius = self.outer_diameter / 2
+            
             if self.current_position == "top":
-                radius = self.outer_diameter / 2
                 print(
                     f"Using outer diameter: {self.outer_diameter} mm (radius: {radius} mm)"
                 )
                 print(f"Expected center: {self.top_center}")
             else:
-                radius = self.inner_diameter / 2
                 print(
-                    f"Using inner diameter: {self.inner_diameter} mm (radius: {radius} mm)"
+                    f"Using outer diameter: {self.outer_diameter} mm (radius: {radius} mm)"
                 )
                 print(f"Expected center: {self.bottom_center}")
 
