@@ -101,7 +101,7 @@ class CircumferenceClean:
 
         # G-code generation (will be added back for execution control)
         self.is_executing = False
-        
+
         # Buffer management for G-code streaming
         self.gcode_buffer = []  # Queue of G-code lines to send
         self.buffer_size = 0  # Current commands in GRBL's buffer
@@ -1914,14 +1914,14 @@ class CircumferenceClean:
         if line.strip().lower() == "ok":
             self.handle_grbl_ok()
             return
-        
+
         # Handle error responses
         if "error" in line.lower():
             print(f"GRBL Error: {line}")
             self.grbl_state = "Error"
             self.update_state_display()
             return
-        
+
         # Parse position updates and state
         if line.startswith("<"):
             # Extract GRBL state (first part before |)
@@ -1968,7 +1968,7 @@ class CircumferenceClean:
             # Safety: command_queue empty but got 'ok'
             if self.buffer_size > 0:
                 self.buffer_size = max(0, self.buffer_size - 1)
-        
+
         # If executing, try to send more commands
         if self.is_executing:
             self.stream_next_commands()
@@ -2165,18 +2165,18 @@ class CircumferenceClean:
             self.send_gcode("G10 L20 P1 X0 Y0 Z0")
 
     def toggle_laser(self):
-        """Toggle laser on/off"""
+        """Toggle laser on/off using targeting power"""
         if not self.is_connected:
             messagebox.showwarning("Warning", "Please connect to GRBL first!")
             return
 
         try:
-            # Use laser tab variables, not geometry tab variables
-            power = float(self.laser_power_var.get())
+            # Use targeting power for laser toggle (not full cleaning power)
+            power = float(self.targeting_power_var.get())
             max_power = float(self.laser_power_max_var.get())
 
             if 0 <= power <= 100:
-                self.laser_power = power
+                self.targeting_power = power
                 scaled_power = int((power / 100.0) * max_power)
 
                 if self.laser_on:
@@ -2189,9 +2189,9 @@ class CircumferenceClean:
                     self.laser_on = True
                     self.laser_button.config(text="Laser ON")
             else:
-                messagebox.showwarning("Warning", "Power level must be between 0-100%")
+                messagebox.showwarning("Warning", "Targeting power must be between 0-100%")
         except ValueError:
-            messagebox.showwarning("Warning", "Please enter valid power values")
+            messagebox.showwarning("Warning", "Please enter valid targeting power value")
 
     def execute_manual_gcode(self):
         """Execute a manually entered G-code command"""
@@ -2483,7 +2483,7 @@ Status: {'✓ Excellent' if max_error <= 0.05 else '✓ Good' if max_error <= 0.
             self.execution_status_label.config(text="Running", foreground="orange")
 
         print(f"Starting execution of {len(filtered_gcode)} G-code commands")
-        
+
         # Start streaming
         self.stream_next_commands()
 
@@ -2499,7 +2499,7 @@ Status: {'✓ Excellent' if max_error <= 0.05 else '✓ Good' if max_error <= 0.
         while self.gcode_buffer and self.buffer_size < self.max_buffer_size:
             # Get next command
             line = self.gcode_buffer.pop(0)
-            
+
             # Send it
             if not self.send_gcode_buffered(line):
                 self.stop_execution()
@@ -2518,14 +2518,14 @@ Status: {'✓ Excellent' if max_error <= 0.05 else '✓ Good' if max_error <= 0.
         try:
             # Send command
             self.serial_connection.write(f"{command}\n".encode())
-            
+
             # Log sent command
             self.log_comm_message(f"> {command}", "sent")
-            
+
             # Track command in buffer
             self.buffer_size += 1
             self.command_queue.append(command)
-            
+
             return True
         except Exception as e:
             print(f"Error sending command: {e}")
@@ -2535,7 +2535,7 @@ Status: {'✓ Excellent' if max_error <= 0.05 else '✓ Good' if max_error <= 0.
         """Check if execution is complete (buffer empty)"""
         if not self.is_executing:
             return
-        
+
         # If buffer is empty, we're done
         if self.buffer_size <= 0 and not self.gcode_buffer:
             self.finish_execution()
@@ -2546,16 +2546,16 @@ Status: {'✓ Excellent' if max_error <= 0.05 else '✓ Good' if max_error <= 0.
     def finish_execution(self):
         """Complete the execution process"""
         self.is_executing = False
-        
+
         # Clear buffers
         self.gcode_buffer.clear()
         self.command_queue.clear()
         self.buffer_size = 0
-        
+
         # Update status indicator
         if hasattr(self, "execution_status_label"):
             self.execution_status_label.config(text="Complete", foreground="green")
-        
+
         print("Execution complete!")
         messagebox.showinfo("Complete", "G-code execution completed successfully!")
 
@@ -2583,7 +2583,9 @@ Status: {'✓ Excellent' if max_error <= 0.05 else '✓ Good' if max_error <= 0.
             self.buffer_size = 0
 
             # Display message
-            messagebox.showinfo("Execution Stopped", "G-code execution has been stopped.")
+            messagebox.showinfo(
+                "Execution Stopped", "G-code execution has been stopped."
+            )
 
             # Update status indicator
             if hasattr(self, "execution_status_label"):
