@@ -1,0 +1,431 @@
+{
+  "section_1_3_origin": [
+    0.0,
+    -50.0
+  ],
+  "section_2_origin": [
+    0.0,
+    50.0
+  ],
+  "section_1_3_pads": "3-1, 3-2, 3-3, 3-4, 3-5, 3-6, 3-7, 3-8, 3-9, 3-10, 3-11, 3-12, 3-13, 3-14, 3-15, 3-16, 1-1, 1-2, 1-3, 1-4, 1-5, 1-6, 1-7, 1-8, 1-9, 1-10, 1-11, 1-12, 1-13, 1-14, 1-15, 1-16",
+  "section_2_pads": "2-1, 2-2, 2-3, 2-4, 2-5, 2-6, 2-7, 2-8, 2-9, 2-10, 2-11, 2-12, 2-13, 2-14, 2-15, 2-16",
+  "section_1_3_preamble": "; Cleaning G-code for Carousel - top: sections 1 and 3\n; Reference points are:\n;   pt1 the left bottom outside corner of S3 pad 1\n;   pt2 the left top corner of the S1 pad 1\n;   pt3 the right bottom outside corner of S21 pad 16\n; reference_point1 = (-199.2901 ,-152.4163)\n; reference_point2 = (10.95 ,173.7984)\n; reference_point3 = (199.2901,-152.4163)\nG90 ; absolute coordinates\nG21 ; metric units\nG17 ; arcs in XY plane",
+  "section_2_preamble": "; Cleaning G-code for Carousel - bottom: section 2\n; Reference points are:\n;   pt1 the left bottom outside corner of S2 pad 16\n;   pt2 the left bottom corner of the S2 pad 8\n;   pt3 the right bottom outside corner of S2 pad 1\n; reference_point1 = (-179.6534, -83.904)\n; reference_point2 = (7.0425, -173.9554)\n; reference_point3 = (179.6534, -83.904)\nG90 ; absolute coordinates\nG21 ; metric units\nG17 ; arcs in XY plane",
+  "section_1_3_postscript": "M5\nG0 X0 Y0 Z0",
+  "section_2_postscript": "M5\nG0 X0 Y0 Z0",
+  "section_1_3_laser_power": 10000,
+  "section_2_laser_power": 10000,
+  "section_1_3_feedrate": 500,
+  "section_2_feedrate": 500,
+  "cleaning_pass_spacings": [
+    0.1,
+    0.18,
+    0.26,
+    0.34,
+    0.42
+  ],
+  "calculated_cleaning_passes": [
+    {
+      "offset": 0.1,
+      "gcode": [
+        {
+          "type": "G1",
+          "X": 224.19,
+          "Y": 3.987,
+          "comment": "arch to point 2"
+        },
+        {
+          "type": "G1",
+          "X": 224.225,
+          "Y": 0.0,
+          "comment": "arch to point 2"
+        },
+        {
+          "type": "G1",
+          "X": 224.19,
+          "Y": -3.987,
+          "comment": "arch to point 2"
+        },
+        {
+          "type": "G1",
+          "X": 224.08,
+          "Y": -8.069,
+          "comment": "arch to point 2"
+        },
+        {
+          "type": "G1",
+          "X": 213.519,
+          "Y": -8.069,
+          "comment": "side move pt 2 to pt 3"
+        },
+        {
+          "type": "G1",
+          "X": 213.634,
+          "Y": -3.983,
+          "comment": "arch to pt 4"
+        },
+        {
+          "type": "G1",
+          "X": 213.671,
+          "Y": 0.0,
+          "comment": "arch to pt 4"
+        },
+        {
+          "type": "G1",
+          "X": 213.634,
+          "Y": 3.983,
+          "comment": "arch to pt 4"
+        },
+        {
+          "type": "G1",
+          "X": 213.519,
+          "Y": 8.069,
+          "comment": "arch to pt 4"
+        },
+        {
+          "type": "G1",
+          "X": 224.08,
+          "Y": 8.069,
+          "comment": "move to pt1"
+        }
+      ]
+    },
+    {
+      "offset": 0.18,
+      "gcode": [
+        {
+          "type": "G1",
+          "X": 224.27,
+          "Y": 3.988,
+          "comment": "arch to point 2"
+        },
+        {
+          "type": "G1",
+          "X": 224.305,
+          "Y": 0.0,
+          "comment": "arch to point 2"
+        },
+        {
+          "type": "G1",
+          "X": 224.27,
+          "Y": -3.988,
+          "comment": "arch to point 2"
+        },
+        {
+          "type": "G1",
+          "X": 224.158,
+          "Y": -8.149,
+          "comment": "arch to point 2"
+        },
+        {
+          "type": "G1",
+          "X": 213.437,
+          "Y": -8.149,
+          "comment": "side move pt 2 to pt 3"
+        },
+        {
+          "type": "G1",
+          "X": 213.554,
+          "Y": -3.982,
+          "comment": "arch to pt 4"
+        },
+        {
+          "type": "G1",
+          "X": 213.591,
+          "Y": 0.0,
+          "comment": "arch to pt 4"
+        },
+        {
+          "type": "G1",
+          "X": 213.554,
+          "Y": 3.982,
+          "comment": "arch to pt 4"
+        },
+        {
+          "type": "G1",
+          "X": 213.437,
+          "Y": 8.149,
+          "comment": "arch to pt 4"
+        },
+        {
+          "type": "G1",
+          "X": 224.158,
+          "Y": 8.149,
+          "comment": "move to pt1"
+        }
+      ]
+    },
+    {
+      "offset": 0.26,
+      "gcode": [
+        {
+          "type": "G1",
+          "X": 224.35,
+          "Y": 3.99,
+          "comment": "arch to point 2"
+        },
+        {
+          "type": "G1",
+          "X": 224.385,
+          "Y": 0.0,
+          "comment": "arch to point 2"
+        },
+        {
+          "type": "G1",
+          "X": 224.35,
+          "Y": -3.99,
+          "comment": "arch to point 2"
+        },
+        {
+          "type": "G1",
+          "X": 224.236,
+          "Y": -8.229,
+          "comment": "arch to point 2"
+        },
+        {
+          "type": "G1",
+          "X": 213.355,
+          "Y": -8.229,
+          "comment": "side move pt 2 to pt 3"
+        },
+        {
+          "type": "G1",
+          "X": 213.474,
+          "Y": -3.98,
+          "comment": "arch to pt 4"
+        },
+        {
+          "type": "G1",
+          "X": 213.511,
+          "Y": 0.0,
+          "comment": "arch to pt 4"
+        },
+        {
+          "type": "G1",
+          "X": 213.474,
+          "Y": 3.98,
+          "comment": "arch to pt 4"
+        },
+        {
+          "type": "G1",
+          "X": 213.355,
+          "Y": 8.229,
+          "comment": "arch to pt 4"
+        },
+        {
+          "type": "G1",
+          "X": 224.236,
+          "Y": 8.229,
+          "comment": "move to pt1"
+        }
+      ]
+    },
+    {
+      "offset": 0.34,
+      "gcode": [
+        {
+          "type": "G1",
+          "X": 224.43,
+          "Y": 3.991,
+          "comment": "arch to point 2"
+        },
+        {
+          "type": "G1",
+          "X": 224.465,
+          "Y": 0.0,
+          "comment": "arch to point 2"
+        },
+        {
+          "type": "G1",
+          "X": 224.43,
+          "Y": -3.991,
+          "comment": "arch to point 2"
+        },
+        {
+          "type": "G1",
+          "X": 224.314,
+          "Y": -8.309,
+          "comment": "arch to point 2"
+        },
+        {
+          "type": "G1",
+          "X": 213.272,
+          "Y": -8.309,
+          "comment": "side move pt 2 to pt 3"
+        },
+        {
+          "type": "G1",
+          "X": 213.394,
+          "Y": -3.979,
+          "comment": "arch to pt 4"
+        },
+        {
+          "type": "G1",
+          "X": 213.431,
+          "Y": 0.0,
+          "comment": "arch to pt 4"
+        },
+        {
+          "type": "G1",
+          "X": 213.394,
+          "Y": 3.979,
+          "comment": "arch to pt 4"
+        },
+        {
+          "type": "G1",
+          "X": 213.272,
+          "Y": 8.309,
+          "comment": "arch to pt 4"
+        },
+        {
+          "type": "G1",
+          "X": 224.314,
+          "Y": 8.309,
+          "comment": "move to pt1"
+        }
+      ]
+    },
+    {
+      "offset": 0.42,
+      "gcode": [
+        {
+          "type": "G1",
+          "X": 224.51,
+          "Y": 3.992,
+          "comment": "arch to point 2"
+        },
+        {
+          "type": "G1",
+          "X": 224.545,
+          "Y": 0.0,
+          "comment": "arch to point 2"
+        },
+        {
+          "type": "G1",
+          "X": 224.51,
+          "Y": -3.992,
+          "comment": "arch to point 2"
+        },
+        {
+          "type": "G1",
+          "X": 224.392,
+          "Y": -8.389,
+          "comment": "arch to point 2"
+        },
+        {
+          "type": "G1",
+          "X": 213.19,
+          "Y": -8.389,
+          "comment": "side move pt 2 to pt 3"
+        },
+        {
+          "type": "G1",
+          "X": 213.314,
+          "Y": -3.977,
+          "comment": "arch to pt 4"
+        },
+        {
+          "type": "G1",
+          "X": 213.351,
+          "Y": 0.0,
+          "comment": "arch to pt 4"
+        },
+        {
+          "type": "G1",
+          "X": 213.314,
+          "Y": 3.977,
+          "comment": "arch to pt 4"
+        },
+        {
+          "type": "G1",
+          "X": 213.19,
+          "Y": 8.389,
+          "comment": "arch to pt 4"
+        },
+        {
+          "type": "G1",
+          "X": 224.392,
+          "Y": 8.389,
+          "comment": "move to pt1"
+        }
+      ]
+    }
+  ],
+  "zlaser": 0.0,
+  "center": [
+    300,
+    100
+  ],
+  "table_dimensions": {
+    "lower_left": [
+      -400.0,
+      -200.0
+    ],
+    "upper_right": [
+      400.0,
+      200.0
+    ]
+  },
+  "pad_gcode_template": [
+    {
+      "type": "G1",
+      "X": 224.09,
+      "Y": 3.985,
+      "comment": "arch to point 2"
+    },
+    {
+      "type": "G1",
+      "X": 224.125,
+      "Y": 0.0,
+      "comment": "arch to point 2"
+    },
+    {
+      "type": "G1",
+      "X": 224.09,
+      "Y": -3.985,
+      "comment": "arch to point 2"
+    },
+    {
+      "type": "G1",
+      "X": 223.983,
+      "Y": -7.969,
+      "comment": "arch to point 2"
+    },
+    {
+      "type": "G1",
+      "X": 213.622,
+      "Y": -7.969,
+      "comment": "side move pt 2 to pt 3"
+    },
+    {
+      "type": "G1",
+      "X": 213.734,
+      "Y": -3.985,
+      "comment": "arch to pt 4"
+    },
+    {
+      "type": "G1",
+      "X": 213.771,
+      "Y": 0.0,
+      "comment": "arch to pt 4"
+    },
+    {
+      "type": "G1",
+      "X": 213.734,
+      "Y": 3.985,
+      "comment": "arch to pt 4"
+    },
+    {
+      "type": "G1",
+      "X": 213.622,
+      "Y": 7.969,
+      "comment": "arch to pt 4"
+    },
+    {
+      "type": "G1",
+      "X": 223.983,
+      "Y": 7.969,
+      "comment": "move to pt1"
+    }
+  ]
+}

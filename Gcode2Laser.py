@@ -203,10 +203,15 @@ class GCodeAdjuster:
         self.adjusted_engraving_lines = []
 
         # Reference point data from G-code comments
-        self.num_reference_points = 3  # Use 3 points for rigid transform
-        # Initialize with 3 zero points
-        self.reference_points_expected = [(0.0, 0.0), (0.0, 0.0), (0.0, 0.0)]
-        self.reference_points_actual = [(0.0, 0.0), (0.0, 0.0), (0.0, 0.0)]
+        self.num_reference_points = 4  # Use 4 points for rigid transform
+        # Initialize with 4 zero points
+        self.reference_points_expected = [
+            (0.0, 0.0),
+            (0.0, 0.0),
+            (0.0, 0.0),
+            (0.0, 0.0),
+        ]
+        self.reference_points_actual = [(0.0, 0.0), (0.0, 0.0), (0.0, 0.0), (0.0, 0.0)]
 
         # Serial connection
         self.serial_connection = None
@@ -765,8 +770,8 @@ class GCodeAdjuster:
             # Fallback if we can't find the button
             self.targets_container.pack(fill="x", pady=(0, 10))
 
-        # Always use 3 reference points
-        num_points = 3
+        # Always use 4 reference points
+        num_points = 4
 
         # Store entry variables for each point
         self.ref_point_expected_vars = []
@@ -1199,16 +1204,16 @@ class GCodeAdjuster:
             has_real_points = any(point != (0.0, 0.0) for point in expected_points)
 
             if expected_points and len(expected_points) >= 2 and has_real_points:
-                # Found reference points in comments - use first 3
-                self.reference_points_expected = expected_points[:3]
+                # Found reference points in comments - use first 4
+                self.reference_points_expected = expected_points[:4]
                 # Initialize actual points to match expected points
-                self.reference_points_actual = expected_points[:3].copy()
+                self.reference_points_actual = expected_points[:4].copy()
 
                 # Update the GUI to show these reference points
                 self.update_reference_points_display()
 
                 print(
-                    f"Loaded {min(len(expected_points), 3)} reference points from G-code comments"
+                    f"Loaded {min(len(expected_points), 4)} reference points from G-code comments"
                 )
             else:
                 print(
@@ -1250,7 +1255,7 @@ class GCodeAdjuster:
         ; reference_point1 = (-79.2465, -21.234)
         ; reference_point2 = ( 79.2465, -21.234)
 
-        Returns: (num_points, expected_points_list) - always returns 3 and first 3 points found
+        Returns: (num_points, expected_points_list) - always returns 4 and first 4 points found
         """
         lines = gcode.split("\n")
         expected_points = []
@@ -1271,16 +1276,16 @@ class GCodeAdjuster:
                     y = float(match.group(2))
                     expected_points.append((x, y))
 
-                    # Stop after finding 3 points
-                    if len(expected_points) >= 3:
+                    # Stop after finding 4 points
+                    if len(expected_points) >= 4:
                         break
 
-        # Always return 3 points (pad with zeros if needed)
-        while len(expected_points) < 3:
+        # Always return 4 points (pad with zeros if needed)
+        while len(expected_points) < 4:
             expected_points.append((0.0, 0.0))
 
-        # Always return exactly 3 points
-        return 3, expected_points[:3]
+        # Always return exactly 4 points
+        return 4, expected_points[:4]
 
     def parse_gcode_coordinates(self, gcode):
         """Parse G-code and extract line segments exactly like dxf2laser.py"""
@@ -1529,15 +1534,15 @@ class GCodeAdjuster:
             # Get reference points from the GUI variables
             if (
                 not hasattr(self, "ref_point_actual_vars")
-                or len(self.ref_point_actual_vars) < 3
+                or len(self.ref_point_actual_vars) < 4
                 or not hasattr(self, "ref_point_expected_vars")
-                or len(self.ref_point_expected_vars) < 3
+                or len(self.ref_point_expected_vars) < 4
             ):
                 return
 
             arrow_length = 10  # 10mm arrow length
 
-            for i in range(3):  # Plot arrows for all 3 reference points
+            for i in range(4):  # Plot arrows for all 4 reference points
                 try:
                     # Get expected position from GUI
                     exp_x_var, exp_y_var = self.ref_point_expected_vars[i]
@@ -1663,17 +1668,17 @@ class GCodeAdjuster:
             )
 
     def adjust_gcode(self):
-        """Calculate adjustments and modify G-code using 3-point rigid transformation"""
+        """Calculate adjustments and modify G-code using 4-point rigid transformation"""
         try:
-            # Get 3 reference points from GUI
-            if len(self.ref_point_expected_vars) < 3:
-                messagebox.showerror("Error", "Need 3 reference points!")
+            # Get 4 reference points from GUI
+            if len(self.ref_point_expected_vars) < 4:
+                messagebox.showerror("Error", "Need 4 reference points!")
                 return
 
             expected_points = []
             actual_points = []
 
-            for i in range(3):  # Always use exactly 3 points
+            for i in range(4):  # Always use exactly 4 points
                 exp_x_var, exp_y_var = self.ref_point_expected_vars[i]
                 act_x_var, act_y_var = self.ref_point_actual_vars[i]
 
@@ -1685,8 +1690,8 @@ class GCodeAdjuster:
                 expected_points.append((exp_x, exp_y))
                 actual_points.append((act_x, act_y))
 
-            # Perform 3-point rigid transformation
-            self._adjust_gcode_3point_rigid(expected_points, actual_points)
+            # Perform 4-point rigid transformation
+            self._adjust_gcode_4point_rigid(expected_points, actual_points)
 
         except ValueError as e:
             messagebox.showerror("Error", f"Invalid input values:\n{str(e)}")
@@ -1965,6 +1970,162 @@ Accuracy Metrics:
         # Update plot
         self.plot_toolpath()
 
+    def _adjust_gcode_4point_rigid(self, expected_points, actual_points):
+        """
+        Adjust G-code using 4-point rigid transformation (SVD-based least-squares)
+        Computes optimal rotation and translation using Procrustes analysis
+        """
+        # Convert to numpy arrays (Nx2)
+        P = np.array(expected_points)  # Expected (source) points
+        Q = np.array(actual_points)  # Actual (target) points
+
+        if not self.original_positioning_lines and not self.original_engraving_lines:
+            messagebox.showwarning("Warning", "Please load a G-code file first!")
+            return
+
+        # Validate points form a non-degenerate quadrilateral
+        if not self._validate_quadrilateral(P) or not self._validate_quadrilateral(Q):
+            messagebox.showerror(
+                "Error",
+                "Reference points must form a valid quadrilateral!\n"
+                "Points cannot be collinear or too close together.",
+            )
+            return
+
+        # Step 1: Center the point sets (compute centroids)
+        centroid_P = np.mean(P, axis=0)
+        centroid_Q = np.mean(Q, axis=0)
+
+        # Step 2: Center the points
+        P_centered = P - centroid_P
+        Q_centered = Q - centroid_Q
+
+        # Step 3: Compute rotation using SVD
+        # H = P_centered^T * Q_centered
+        H = P_centered.T @ Q_centered
+
+        # SVD decomposition
+        U, S, Vt = np.linalg.svd(H)
+
+        # Rotation matrix R = V * U^T
+        R = Vt.T @ U.T
+
+        # Handle reflection case (ensure proper rotation, not reflection)
+        if np.linalg.det(R) < 0:
+            Vt[-1, :] *= -1
+            R = Vt.T @ U.T
+
+        # Step 4: Compute translation
+        # t = centroid_Q - R * centroid_P
+        translation = centroid_Q - R @ centroid_P
+
+        # Step 5: Extract rotation angle from 2D rotation matrix
+        rotation_angle = np.arctan2(R[1, 0], R[0, 0])
+
+        # Step 6: Compute residual errors for each point
+        errors = []
+        error_details = []
+
+        for i, (p, q) in enumerate(zip(P, Q)):
+            # Transform expected point using computed transformation
+            transformed_p = R @ p + translation
+            error_vec = q - transformed_p
+            error_x = error_vec[0]
+            error_y = error_vec[1]
+            error_dist = np.linalg.norm(error_vec)
+            errors.append(error_dist)
+            error_details.append(
+                {
+                    "index": i,
+                    "expected": p,
+                    "actual": q,
+                    "transformed": transformed_p,
+                    "error_x": error_x,
+                    "error_y": error_y,
+                    "error_dist": error_dist,
+                }
+            )
+
+        # Compute RMS error
+        rms_error = np.sqrt(np.mean(np.array(errors) ** 2))
+        max_error = np.max(errors)
+
+        # Apply transformations to line segments
+        actual_center = tuple(translation)
+        self.adjusted_positioning_lines = self.apply_transformations_to_lines(
+            self.original_positioning_lines, actual_center, rotation_angle
+        )
+        self.adjusted_engraving_lines = self.apply_transformations_to_lines(
+            self.original_engraving_lines, actual_center, rotation_angle
+        )
+
+        # Generate adjusted G-code
+        self.adjusted_gcode = self.generate_adjusted_gcode(
+            self.original_gcode, actual_center, rotation_angle
+        )
+
+        # Display results with error highlighting
+        results = f"""CALCULATION RESULTS (4-Point Rigid Transform - SVD)
+========================
+
+Transformation:
+  Translation: ({translation[0]:.4f}, {translation[1]:.4f}) mm
+  Rotation: {np.degrees(rotation_angle):.4f}°
+
+Reference Point Errors:
+"""
+
+        # Add error details for each point (with red highlighting for errors > 0.1mm)
+        for detail in error_details:
+            i = detail["index"]
+            p = detail["expected"]
+            q = detail["actual"]
+            error_x = detail["error_x"]
+            error_y = detail["error_y"]
+            error_dist = detail["error_dist"]
+
+            # Mark high errors
+            error_marker = " ⚠ HIGH ERROR" if error_dist > 0.1 else ""
+
+            results += f"""
+  Point {i+1}:
+    Expected:     ({p[0]:.4f}, {p[1]:.4f}) mm
+    Actual:       ({q[0]:.4f}, {q[1]:.4f}) mm
+    Error X:      {error_x:+.4f} mm
+    Error Y:      {error_y:+.4f} mm
+    Error Distance: {error_dist:.4f} mm{error_marker}
+"""
+
+        results += f"""
+Accuracy Metrics:
+  RMS Error: {rms_error:.4f} mm
+  Max Error: {max_error:.4f} mm
+  Status: {'✓ Excellent' if max_error <= 0.05 else '✓ Good' if max_error <= 0.1 else '✗ Poor - Check alignment'}
+"""
+
+        # Use tags for red text highlighting
+        self.results_text.delete(1.0, tk.END)
+        self.results_text.insert(1.0, results)
+
+        # Highlight high errors in red
+        content = self.results_text.get(1.0, tk.END)
+        lines = content.split("\n")
+        for line_num, line in enumerate(lines, 1):
+            if "⚠ HIGH ERROR" in line or (
+                "Error Distance:" in line
+                and any(f"{e:.4f}" in line for e in errors if e > 0.1)
+            ):
+                # Find and tag the error distance line
+                start_idx = f"{line_num}.0"
+                end_idx = f"{line_num}.end"
+                self.results_text.tag_add("high_error", start_idx, end_idx)
+
+        # Configure red text tag
+        self.results_text.tag_config("high_error", foreground="red")
+
+        # Update plot
+        self.plot_toolpath()
+
     def _validate_triangle(self, points):
         """Validate that 3 points form a valid non-degenerate triangle"""
         if len(points) != 3:
@@ -1985,6 +2146,34 @@ Accuracy Metrics:
         area = 0.5 * abs(np.linalg.det(area_matrix))
 
         if area < 10.0:  # Triangle area must be at least 10mm²
+            return False
+
+        return True
+
+    def _validate_quadrilateral(self, points):
+        """Validate that 4 points form a valid non-degenerate quadrilateral"""
+        if len(points) != 4:
+            return False
+
+        P = np.array(points)
+
+        # Check if points are too close together
+        for i in range(4):
+            for j in range(i + 1, 4):
+                dist = np.linalg.norm(P[i] - P[j])
+                if dist < 1.0:  # Points must be at least 1mm apart
+                    return False
+
+        # Check if points are collinear (quadrilateral area too small)
+        # Use the shoelace formula for polygon area
+        # Area = 0.5 * |sum(xi*yi+1 - xi+1*yi)| for i=0 to n-1
+        x = P[:, 0]
+        y = P[:, 1]
+        area = 0.5 * abs(
+            sum(x[i] * y[(i + 1) % 4] - x[(i + 1) % 4] * y[i] for i in range(4))
+        )
+
+        if area < 20.0:  # Quadrilateral area must be at least 20mm²
             return False
 
         return True
@@ -2046,7 +2235,9 @@ Accuracy Metrics:
                 f"Adjusted G-code saved to:\n{file_path}\n\n"
                 f"Reference points updated to actual values:\n"
                 f"Point 1: ({actual_points[0][0]:.4f}, {actual_points[0][1]:.4f})\n"
-                f"Point 2: ({actual_points[1][0]:.4f}, {actual_points[1][1]:.4f})",
+                f"Point 2: ({actual_points[1][0]:.4f}, {actual_points[1][1]:.4f})\n"
+                f"Point 3: ({actual_points[2][0]:.4f}, {actual_points[2][1]:.4f})\n"
+                f"Point 4: ({actual_points[3][0]:.4f}, {actual_points[3][1]:.4f})",
             )
 
         except Exception as e:
@@ -2059,6 +2250,8 @@ Accuracy Metrics:
 
         ref1_updated = False
         ref2_updated = False
+        ref3_updated = False
+        ref4_updated = False
 
         for line in lines:
             line_stripped = line.strip()
@@ -2077,6 +2270,16 @@ Accuracy Metrics:
                     new_line = f"; reference_point2 = ({actual_points[1][0]:.4f}, {actual_points[1][1]:.4f})"
                     updated_lines.append(new_line)
                     ref2_updated = True
+                elif "reference_point3" in line_lower:
+                    # Update point 3
+                    new_line = f"; reference_point3 = ({actual_points[2][0]:.4f}, {actual_points[2][1]:.4f})"
+                    updated_lines.append(new_line)
+                    ref3_updated = True
+                elif "reference_point4" in line_lower:
+                    # Update point 4
+                    new_line = f"; reference_point4 = ({actual_points[3][0]:.4f}, {actual_points[3][1]:.4f})"
+                    updated_lines.append(new_line)
+                    ref4_updated = True
                 else:
                     # Keep other reference point comments as-is
                     updated_lines.append(line)

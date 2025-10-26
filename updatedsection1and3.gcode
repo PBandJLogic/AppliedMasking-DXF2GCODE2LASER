@@ -1,0 +1,1775 @@
+; Cleaning G-code for Carousel - top: sections 1 and 3
+; Reference points are:
+;   pt1 the left bottom outside corner of S3 pad 1
+;   pt2 the left top corner of the S1 pad 1
+;   pt3 the right bottom outside corner of S21 pad 16
+; reference_point1 = (-199.2901 ,-152.4163)
+; reference_point2 = (10.95 ,173.7984)
+; reference_point3 = (199.2901,-152.4163)
+G90 ; absolute coordinates
+G21 ; metric units
+G17 ; arcs in XY plane
+M4 S10000
+G0 X0.0000 Y0.0000 Z0.0000
+G0 X-199.2280 Y-152.8840
+G1 X-201.0690 Y-149.2390 F500 ; pad 3-1, offset 0.1
+G1 X-202.8010 Y-145.6470 F500 ; arch to point 2
+G1 X-204.4710 Y-142.0260 F500 ; arch to point 2
+G1 X-206.1120 Y-138.2870 F500 ; arch to point 2
+G1 X-196.5600 Y-133.7820 F500 ; side move pt 2 to pt 3
+G1 X-194.9210 Y-137.5270 F500 ; arch to pt 4
+G1 X-193.2560 Y-141.1450 F500 ; arch to pt 4
+G1 X-191.5230 Y-144.7320 F500 ; arch to pt 4
+G1 X-189.6760 Y-148.3790 F500 ; arch to pt 4
+G1 X-199.2280 Y-152.8840 F500 ; move to pt1
+G0 X-199.2650 Y-152.9890
+G1 X-201.1410 Y-149.2740 F500 ; pad 3-1, offset 0.18
+G1 X-202.8740 Y-145.6820 F500 ; arch to point 2
+G1 X-204.5430 Y-142.0600 F500 ; arch to point 2
+G1 X-206.2170 Y-138.2480 F500 ; arch to point 2
+G1 X-196.5200 Y-133.6750 F500 ; side move pt 2 to pt 3
+G1 X-194.8490 Y-137.4940 F500 ; arch to pt 4
+G1 X-193.1830 Y-141.1110 F500 ; arch to pt 4
+G1 X-191.4510 Y-144.6970 F500 ; arch to pt 4
+G1 X-189.5680 Y-148.4160 F500 ; arch to pt 4
+G1 X-199.2650 Y-152.9890 F500 ; move to pt1
+G0 X-199.3010 Y-153.0950
+G1 X-201.2130 Y-149.3090 F500 ; pad 3-1, offset 0.26
+G1 X-202.9460 Y-145.7160 F500 ; arch to point 2
+G1 X-204.6170 Y-142.0920 F500 ; arch to point 2
+G1 X-206.3220 Y-138.2090 F500 ; arch to point 2
+G1 X-196.4800 Y-133.5680 F500 ; side move pt 2 to pt 3
+G1 X-194.7750 Y-137.4620 F500 ; arch to pt 4
+G1 X-193.1110 Y-141.0770 F500 ; arch to pt 4
+G1 X-191.3800 Y-144.6610 F500 ; arch to pt 4
+G1 X-189.4600 Y-148.4530 F500 ; arch to pt 4
+G1 X-199.3010 Y-153.0950 F500 ; move to pt1
+G0 X-199.3380 Y-153.2000
+G1 X-201.2840 Y-149.3450 F500 ; pad 3-1, offset 0.34
+G1 X-203.0190 Y-145.7500 F500 ; arch to point 2
+G1 X-204.6890 Y-142.1250 F500 ; arch to point 2
+G1 X-206.4260 Y-138.1700 F500 ; arch to point 2
+G1 X-196.4390 Y-133.4600 F500 ; side move pt 2 to pt 3
+G1 X-194.7030 Y-137.4280 F500 ; arch to pt 4
+G1 X-193.0390 Y-141.0430 F500 ; arch to pt 4
+G1 X-191.3080 Y-144.6260 F500 ; arch to pt 4
+G1 X-189.3510 Y-148.4900 F500 ; arch to pt 4
+G1 X-199.3380 Y-153.2000 F500 ; move to pt1
+G0 X-199.3740 Y-153.3060
+G1 X-201.3560 Y-149.3800 F500 ; pad 3-1, offset 0.42
+G1 X-203.0910 Y-145.7840 F500 ; arch to point 2
+G1 X-204.7620 Y-142.1580 F500 ; arch to point 2
+G1 X-206.5310 Y-138.1310 F500 ; arch to point 2
+G1 X-196.3990 Y-133.3530 F500 ; side move pt 2 to pt 3
+G1 X-194.6290 Y-137.3960 F500 ; arch to pt 4
+G1 X-192.9660 Y-141.0090 F500 ; arch to pt 4
+G1 X-191.2360 Y-144.5900 F500 ; arch to pt 4
+G1 X-189.2420 Y-148.5280 F500 ; arch to pt 4
+G1 X-199.3740 Y-153.3060 F500 ; move to pt1
+G0 X-209.5940 Y-129.6690
+G1 X-211.0110 Y-125.8390 F500 ; pad 3-2, offset 0.1
+G1 X-212.3250 Y-122.0750 F500 ; arch to point 2
+G1 X-213.5740 Y-118.2880 F500 ; arch to point 2
+G1 X-214.7820 Y-114.3870 F500 ; arch to point 2
+G1 X-204.7810 Y-110.9930 F500 ; side move pt 2 to pt 3
+G1 X-203.5770 Y-114.8990 F500 ; arch to pt 4
+G1 X-202.3320 Y-118.6820 F500 ; arch to pt 4
+G1 X-201.0160 Y-122.4420 F500 ; arch to pt 4
+G1 X-199.5940 Y-126.2740 F500 ; arch to pt 4
+G1 X-209.5940 Y-129.6690 F500 ; move to pt1
+G0 X-209.6430 Y-129.7700
+G1 X-211.0860 Y-125.8660 F500 ; pad 3-2, offset 0.18
+G1 X-212.4010 Y-122.1000 F500 ; arch to point 2
+G1 X-213.6500 Y-118.3130 F500 ; arch to point 2
+G1 X-214.8810 Y-114.3370 F500 ; arch to point 2
+G1 X-204.7290 Y-110.8910 F500 ; side move pt 2 to pt 3
+G1 X-203.5010 Y-114.8740 F500 ; arch to pt 4
+G1 X-202.2560 Y-118.6570 F500 ; arch to pt 4
+G1 X-200.9410 Y-122.4150 F500 ; arch to pt 4
+G1 X-199.4910 Y-126.3240 F500 ; arch to pt 4
+G1 X-209.6430 Y-129.7700 F500 ; move to pt1
+G0 X-209.6910 Y-129.8710
+G1 X-211.1610 Y-125.8930 F500 ; pad 3-2, offset 0.26
+G1 X-212.4770 Y-122.1260 F500 ; arch to point 2
+G1 X-213.7260 Y-118.3370 F500 ; arch to point 2
+G1 X-214.9810 Y-114.2860 F500 ; arch to point 2
+G1 X-204.6770 Y-110.7880 F500 ; side move pt 2 to pt 3
+G1 X-203.4240 Y-114.8500 F500 ; arch to pt 4
+G1 X-202.1800 Y-118.6310 F500 ; arch to pt 4
+G1 X-200.8660 Y-122.3880 F500 ; arch to pt 4
+G1 X-199.3870 Y-126.3730 F500 ; arch to pt 4
+G1 X-209.6910 Y-129.8710 F500 ; move to pt1
+G0 X-209.7390 Y-129.9710
+G1 X-211.2370 Y-125.9200 F500 ; pad 3-2, offset 0.34
+G1 X-212.5530 Y-122.1520 F500 ; arch to point 2
+G1 X-213.8020 Y-118.3610 F500 ; arch to point 2
+G1 X-215.0810 Y-114.2350 F500 ; arch to point 2
+G1 X-204.6250 Y-110.6860 F500 ; side move pt 2 to pt 3
+G1 X-203.3480 Y-114.8250 F500 ; arch to pt 4
+G1 X-202.1040 Y-118.6050 F500 ; arch to pt 4
+G1 X-200.7900 Y-122.3610 F500 ; arch to pt 4
+G1 X-199.2830 Y-126.4220 F500 ; arch to pt 4
+G1 X-209.7390 Y-129.9710 F500 ; move to pt1
+G0 X-209.7870 Y-130.0720
+G1 X-211.3120 Y-125.9470 F500 ; pad 3-2, offset 0.42
+G1 X-212.6280 Y-122.1780 F500 ; arch to point 2
+G1 X-213.8780 Y-118.3860 F500 ; arch to point 2
+G1 X-215.1800 Y-114.1850 F500 ; arch to point 2
+G1 X-204.5730 Y-110.5840 F500 ; side move pt 2 to pt 3
+G1 X-203.2720 Y-114.8020 F500 ; arch to pt 4
+G1 X-202.0280 Y-118.5790 F500 ; arch to pt 4
+G1 X-200.7150 Y-122.3330 F500 ; arch to pt 4
+G1 X-199.1790 Y-126.4710 F500 ; arch to pt 4
+G1 X-209.7870 Y-130.0720 F500 ; move to pt1
+G0 X-218.2000 Y-101.6300
+G1 X-219.1040 Y-97.6480 F500 ; pad 3-3, offset 0.1
+G1 X-219.9170 Y-93.7440 F500 ; arch to point 2
+G1 X-220.6600 Y-89.8270 F500 ; arch to point 2
+G1 X-221.3490 Y-85.8020 F500 ; arch to point 2
+G1 X-210.9900 Y-83.7420 F500 ; side move pt 2 to pt 3
+G1 X-210.3060 Y-87.7710 F500 ; arch to pt 4
+G1 X-209.5650 Y-91.6850 F500 ; arch to pt 4
+G1 X-208.7520 Y-95.5840 F500 ; arch to pt 4
+G1 X-207.8420 Y-99.5690 F500 ; arch to pt 4
+G1 X-218.2000 Y-101.6300 F500 ; move to pt1
+G0 X-218.2610 Y-101.7230
+G1 X-219.1830 Y-97.6640 F500 ; pad 3-3, offset 0.18
+G1 X-219.9950 Y-93.7600 F500 ; arch to point 2
+G1 X-220.7390 Y-89.8420 F500 ; arch to point 2
+G1 X-221.4410 Y-85.7390 F500 ; arch to point 2
+G1 X-210.9260 Y-83.6470 F500 ; side move pt 2 to pt 3
+G1 X-210.2270 Y-87.7570 F500 ; arch to pt 4
+G1 X-209.4870 Y-91.6700 F500 ; arch to pt 4
+G1 X-208.6740 Y-95.5680 F500 ; arch to pt 4
+G1 X-207.7460 Y-99.6320 F500 ; arch to pt 4
+G1 X-218.2610 Y-101.7230 F500 ; move to pt1
+G0 X-218.3220 Y-101.8170
+G1 X-219.2610 Y-97.6820 F500 ; pad 3-3, offset 0.26
+G1 X-220.0740 Y-93.7750 F500 ; arch to point 2
+G1 X-220.8180 Y-89.8550 F500 ; arch to point 2
+G1 X-221.5330 Y-85.6750 F500 ; arch to point 2
+G1 X-210.8610 Y-83.5530 F500 ; side move pt 2 to pt 3
+G1 X-210.1490 Y-87.7430 F500 ; arch to pt 4
+G1 X-209.4080 Y-91.6540 F500 ; arch to pt 4
+G1 X-208.5960 Y-95.5500 F500 ; arch to pt 4
+G1 X-207.6500 Y-99.6940 F500 ; arch to pt 4
+G1 X-218.3220 Y-101.8170 F500 ; move to pt1
+G0 X-218.3830 Y-101.9110
+G1 X-219.3390 Y-97.6980 F500 ; pad 3-3, offset 0.34
+G1 X-220.1520 Y-93.7910 F500 ; arch to point 2
+G1 X-220.8960 Y-89.8700 F500 ; arch to point 2
+G1 X-221.6250 Y-85.6120 F500 ; arch to point 2
+G1 X-210.7950 Y-83.4580 F500 ; side move pt 2 to pt 3
+G1 X-210.0700 Y-87.7290 F500 ; arch to pt 4
+G1 X-209.3300 Y-91.6380 F500 ; arch to pt 4
+G1 X-208.5170 Y-95.5340 F500 ; arch to pt 4
+G1 X-207.5530 Y-99.7570 F500 ; arch to pt 4
+G1 X-218.3830 Y-101.9110 F500 ; move to pt1
+G0 X-218.4440 Y-102.0050
+G1 X-219.4170 Y-97.7150 F500 ; pad 3-3, offset 0.42
+G1 X-220.2300 Y-93.8070 F500 ; arch to point 2
+G1 X-220.9750 Y-89.8840 F500 ; arch to point 2
+G1 X-221.7170 Y-85.5490 F500 ; arch to point 2
+G1 X-210.7300 Y-83.3630 F500 ; side move pt 2 to pt 3
+G1 X-209.9910 Y-87.7150 F500 ; arch to pt 4
+G1 X-209.2520 Y-91.6230 F500 ; arch to pt 4
+G1 X-208.4390 Y-95.5160 F500 ; arch to pt 4
+G1 X-207.4570 Y-99.8190 F500 ; arch to pt 4
+G1 X-218.4440 Y-102.0050 F500 ; move to pt1
+G0 X-223.0720 Y-72.7070
+G1 X-223.4490 Y-68.6410 F500 ; pad 3-4, offset 0.1
+G1 X-223.7450 Y-64.6650 F500 ; arch to point 2
+G1 X-223.9710 Y-60.6840 F500 ; arch to point 2
+G1 X-224.1280 Y-56.6040 F500 ; arch to point 2
+G1 X-213.5900 Y-55.9130 F500 ; side move pt 2 to pt 3
+G1 X-213.4370 Y-59.9980 F500 ; arch to pt 4
+G1 X-213.2140 Y-63.9750 F500 ; arch to pt 4
+G1 X-212.9160 Y-67.9470 F500 ; arch to pt 4
+G1 X-212.5340 Y-72.0170 F500 ; arch to pt 4
+G1 X-223.0720 Y-72.7070 F500 ; move to pt1
+G0 X-223.1450 Y-72.7920
+G1 X-223.5290 Y-68.6470 F500 ; pad 3-4, offset 0.18
+G1 X-223.8250 Y-64.6700 F500 ; arch to point 2
+G1 X-224.0510 Y-60.6880 F500 ; arch to point 2
+G1 X-224.2110 Y-56.5290 F500 ; arch to point 2
+G1 X-213.5130 Y-55.8280 F500 ; side move pt 2 to pt 3
+G1 X-213.3570 Y-59.9940 F500 ; arch to pt 4
+G1 X-213.1340 Y-63.9700 F500 ; arch to pt 4
+G1 X-212.8360 Y-67.9410 F500 ; arch to pt 4
+G1 X-212.4470 Y-72.0910 F500 ; arch to pt 4
+G1 X-223.1450 Y-72.7920 F500 ; move to pt1
+G0 X-223.2180 Y-72.8770
+G1 X-223.6090 Y-68.6550 F500 ; pad 3-4, offset 0.26
+G1 X-223.9050 Y-64.6750 F500 ; arch to point 2
+G1 X-224.1310 Y-60.6920 F500 ; arch to point 2
+G1 X-224.2940 Y-56.4540 F500 ; arch to point 2
+G1 X-213.4360 Y-55.7430 F500 ; side move pt 2 to pt 3
+G1 X-213.2770 Y-59.9900 F500 ; arch to pt 4
+G1 X-213.0540 Y-63.9640 F500 ; arch to pt 4
+G1 X-212.7570 Y-67.9330 F500 ; arch to pt 4
+G1 X-212.3600 Y-72.1650 F500 ; arch to pt 4
+G1 X-223.2180 Y-72.8770 F500 ; move to pt1
+G0 X-223.2900 Y-72.9620
+G1 X-223.6880 Y-68.6610 F500 ; pad 3-4, offset 0.34
+G1 X-223.9840 Y-64.6810 F500 ; arch to point 2
+G1 X-224.2110 Y-60.6960 F500 ; arch to point 2
+G1 X-224.3770 Y-56.3800 F500 ; arch to point 2
+G1 X-213.3590 Y-55.6570 F500 ; side move pt 2 to pt 3
+G1 X-213.1970 Y-59.9860 F500 ; arch to pt 4
+G1 X-212.9740 Y-63.9590 F500 ; arch to pt 4
+G1 X-212.6770 Y-67.9270 F500 ; arch to pt 4
+G1 X-212.2720 Y-72.2400 F500 ; arch to pt 4
+G1 X-223.2900 Y-72.9620 F500 ; move to pt1
+G0 X-223.3630 Y-73.0470
+G1 X-223.7680 Y-68.6670 F500 ; pad 3-4, offset 0.42
+G1 X-224.0640 Y-64.6860 F500 ; arch to point 2
+G1 X-224.2900 Y-60.7000 F500 ; arch to point 2
+G1 X-224.4600 Y-56.3050 F500 ; arch to point 2
+G1 X-213.2820 Y-55.5720 F500 ; side move pt 2 to pt 3
+G1 X-213.1170 Y-59.9830 F500 ; arch to pt 4
+G1 X-212.8940 Y-63.9540 F500 ; arch to pt 4
+G1 X-212.5970 Y-67.9200 F500 ; arch to pt 4
+G1 X-212.1850 Y-72.3140 F500 ; arch to pt 4
+G1 X-223.3630 Y-73.0470 F500 ; move to pt1
+G0 X-224.1280 Y-43.3960
+G1 X-223.9710 Y-39.3160 F500 ; pad 3-5, offset 0.1
+G1 X-223.7450 Y-35.3350 F500 ; arch to point 2
+G1 X-223.4490 Y-31.3590 F500 ; arch to point 2
+G1 X-223.0720 Y-27.2930 F500 ; arch to point 2
+G1 X-212.5340 Y-27.9830 F500 ; side move pt 2 to pt 3
+G1 X-212.9160 Y-32.0530 F500 ; arch to pt 4
+G1 X-213.2140 Y-36.0250 F500 ; arch to pt 4
+G1 X-213.4370 Y-40.0020 F500 ; arch to pt 4
+G1 X-213.5900 Y-44.0870 F500 ; arch to pt 4
+G1 X-224.1280 Y-43.3960 F500 ; move to pt1
+G0 X-224.2110 Y-43.4710
+G1 X-224.0510 Y-39.3120 F500 ; pad 3-5, offset 0.18
+G1 X-223.8250 Y-35.3300 F500 ; arch to point 2
+G1 X-223.5290 Y-31.3530 F500 ; arch to point 2
+G1 X-223.1450 Y-27.2080 F500 ; arch to point 2
+G1 X-212.4470 Y-27.9090 F500 ; side move pt 2 to pt 3
+G1 X-212.8360 Y-32.0590 F500 ; arch to pt 4
+G1 X-213.1340 Y-36.0300 F500 ; arch to pt 4
+G1 X-213.3570 Y-40.0060 F500 ; arch to pt 4
+G1 X-213.5130 Y-44.1720 F500 ; arch to pt 4
+G1 X-224.2110 Y-43.4710 F500 ; move to pt1
+G0 X-224.2940 Y-43.5460
+G1 X-224.1310 Y-39.3080 F500 ; pad 3-5, offset 0.26
+G1 X-223.9050 Y-35.3250 F500 ; arch to point 2
+G1 X-223.6090 Y-31.3450 F500 ; arch to point 2
+G1 X-223.2180 Y-27.1230 F500 ; arch to point 2
+G1 X-212.3600 Y-27.8350 F500 ; side move pt 2 to pt 3
+G1 X-212.7570 Y-32.0670 F500 ; arch to pt 4
+G1 X-213.0540 Y-36.0360 F500 ; arch to pt 4
+G1 X-213.2770 Y-40.0100 F500 ; arch to pt 4
+G1 X-213.4360 Y-44.2570 F500 ; arch to pt 4
+G1 X-224.2940 Y-43.5460 F500 ; move to pt1
+G0 X-224.3770 Y-43.6200
+G1 X-224.2110 Y-39.3040 F500 ; pad 3-5, offset 0.34
+G1 X-223.9840 Y-35.3190 F500 ; arch to point 2
+G1 X-223.6880 Y-31.3390 F500 ; arch to point 2
+G1 X-223.2900 Y-27.0380 F500 ; arch to point 2
+G1 X-212.2720 Y-27.7600 F500 ; side move pt 2 to pt 3
+G1 X-212.6770 Y-32.0730 F500 ; arch to pt 4
+G1 X-212.9740 Y-36.0410 F500 ; arch to pt 4
+G1 X-213.1970 Y-40.0140 F500 ; arch to pt 4
+G1 X-213.3590 Y-44.3430 F500 ; arch to pt 4
+G1 X-224.3770 Y-43.6200 F500 ; move to pt1
+G0 X-224.4600 Y-43.6950
+G1 X-224.2900 Y-39.3000 F500 ; pad 3-5, offset 0.42
+G1 X-224.0640 Y-35.3140 F500 ; arch to point 2
+G1 X-223.7680 Y-31.3330 F500 ; arch to point 2
+G1 X-223.3630 Y-26.9530 F500 ; arch to point 2
+G1 X-212.1850 Y-27.6860 F500 ; side move pt 2 to pt 3
+G1 X-212.5970 Y-32.0800 F500 ; arch to pt 4
+G1 X-212.8940 Y-36.0460 F500 ; arch to pt 4
+G1 X-213.1170 Y-40.0170 F500 ; arch to pt 4
+G1 X-213.2820 Y-44.4280 F500 ; arch to pt 4
+G1 X-224.4600 Y-43.6950 F500 ; move to pt1
+G0 X-221.3490 Y-14.1980
+G1 X-220.6600 Y-10.1730 F500 ; pad 3-6, offset 0.1
+G1 X-219.9170 Y-6.2560 F500 ; arch to point 2
+G1 X-219.1040 Y-2.3520 F500 ; arch to point 2
+G1 X-218.2000 Y1.6300 F500 ; arch to point 2
+G1 X-207.8420 Y-0.4310 F500 ; side move pt 2 to pt 3
+G1 X-208.7520 Y-4.4160 F500 ; arch to pt 4
+G1 X-209.5650 Y-8.3150 F500 ; arch to pt 4
+G1 X-210.3060 Y-12.2290 F500 ; arch to pt 4
+G1 X-210.9900 Y-16.2580 F500 ; arch to pt 4
+G1 X-221.3490 Y-14.1980 F500 ; move to pt1
+G0 X-221.4410 Y-14.2610
+G1 X-220.7390 Y-10.1580 F500 ; pad 3-6, offset 0.18
+G1 X-219.9950 Y-6.2400 F500 ; arch to point 2
+G1 X-219.1830 Y-2.3360 F500 ; arch to point 2
+G1 X-218.2610 Y1.7230 F500 ; arch to point 2
+G1 X-207.7460 Y-0.3680 F500 ; side move pt 2 to pt 3
+G1 X-208.6740 Y-4.4320 F500 ; arch to pt 4
+G1 X-209.4870 Y-8.3300 F500 ; arch to pt 4
+G1 X-210.2270 Y-12.2430 F500 ; arch to pt 4
+G1 X-210.9260 Y-16.3530 F500 ; arch to pt 4
+G1 X-221.4410 Y-14.2610 F500 ; move to pt1
+G0 X-221.5330 Y-14.3250
+G1 X-220.8180 Y-10.1450 F500 ; pad 3-6, offset 0.26
+G1 X-220.0740 Y-6.2250 F500 ; arch to point 2
+G1 X-219.2610 Y-2.3180 F500 ; arch to point 2
+G1 X-218.3220 Y1.8170 F500 ; arch to point 2
+G1 X-207.6500 Y-0.3060 F500 ; side move pt 2 to pt 3
+G1 X-208.5960 Y-4.4500 F500 ; arch to pt 4
+G1 X-209.4080 Y-8.3460 F500 ; arch to pt 4
+G1 X-210.1490 Y-12.2570 F500 ; arch to pt 4
+G1 X-210.8610 Y-16.4470 F500 ; arch to pt 4
+G1 X-221.5330 Y-14.3250 F500 ; move to pt1
+G0 X-221.6250 Y-14.3880
+G1 X-220.8960 Y-10.1300 F500 ; pad 3-6, offset 0.34
+G1 X-220.1520 Y-6.2090 F500 ; arch to point 2
+G1 X-219.3390 Y-2.3020 F500 ; arch to point 2
+G1 X-218.3830 Y1.9110 F500 ; arch to point 2
+G1 X-207.5530 Y-0.2430 F500 ; side move pt 2 to pt 3
+G1 X-208.5170 Y-4.4660 F500 ; arch to pt 4
+G1 X-209.3300 Y-8.3620 F500 ; arch to pt 4
+G1 X-210.0700 Y-12.2710 F500 ; arch to pt 4
+G1 X-210.7950 Y-16.5420 F500 ; arch to pt 4
+G1 X-221.6250 Y-14.3880 F500 ; move to pt1
+G0 X-221.7170 Y-14.4510
+G1 X-220.9750 Y-10.1160 F500 ; pad 3-6, offset 0.42
+G1 X-220.2300 Y-6.1930 F500 ; arch to point 2
+G1 X-219.4170 Y-2.2850 F500 ; arch to point 2
+G1 X-218.4440 Y2.0050 F500 ; arch to point 2
+G1 X-207.4570 Y-0.1810 F500 ; side move pt 2 to pt 3
+G1 X-208.4390 Y-4.4840 F500 ; arch to pt 4
+G1 X-209.2520 Y-8.3770 F500 ; arch to pt 4
+G1 X-209.9910 Y-12.2850 F500 ; arch to pt 4
+G1 X-210.7300 Y-16.6370 F500 ; arch to pt 4
+G1 X-221.7170 Y-14.4510 F500 ; move to pt1
+G0 X-214.7820 Y14.3870
+G1 X-213.5740 Y18.2880 F500 ; pad 3-7, offset 0.1
+G1 X-212.3250 Y22.0750 F500 ; arch to point 2
+G1 X-211.0110 Y25.8390 F500 ; arch to point 2
+G1 X-209.5940 Y29.6690 F500 ; arch to point 2
+G1 X-199.5940 Y26.2740 F500 ; side move pt 2 to pt 3
+G1 X-201.0160 Y22.4420 F500 ; arch to pt 4
+G1 X-202.3320 Y18.6820 F500 ; arch to pt 4
+G1 X-203.5770 Y14.8990 F500 ; arch to pt 4
+G1 X-204.7810 Y10.9930 F500 ; arch to pt 4
+G1 X-214.7820 Y14.3870 F500 ; move to pt1
+G0 X-214.8810 Y14.3370
+G1 X-213.6500 Y18.3130 F500 ; pad 3-7, offset 0.18
+G1 X-212.4010 Y22.1000 F500 ; arch to point 2
+G1 X-211.0860 Y25.8660 F500 ; arch to point 2
+G1 X-209.6430 Y29.7700 F500 ; arch to point 2
+G1 X-199.4910 Y26.3240 F500 ; side move pt 2 to pt 3
+G1 X-200.9410 Y22.4150 F500 ; arch to pt 4
+G1 X-202.2560 Y18.6570 F500 ; arch to pt 4
+G1 X-203.5010 Y14.8740 F500 ; arch to pt 4
+G1 X-204.7290 Y10.8910 F500 ; arch to pt 4
+G1 X-214.8810 Y14.3370 F500 ; move to pt1
+G0 X-214.9810 Y14.2860
+G1 X-213.7260 Y18.3370 F500 ; pad 3-7, offset 0.26
+G1 X-212.4770 Y22.1260 F500 ; arch to point 2
+G1 X-211.1610 Y25.8930 F500 ; arch to point 2
+G1 X-209.6910 Y29.8710 F500 ; arch to point 2
+G1 X-199.3870 Y26.3730 F500 ; side move pt 2 to pt 3
+G1 X-200.8660 Y22.3880 F500 ; arch to pt 4
+G1 X-202.1800 Y18.6310 F500 ; arch to pt 4
+G1 X-203.4240 Y14.8500 F500 ; arch to pt 4
+G1 X-204.6770 Y10.7880 F500 ; arch to pt 4
+G1 X-214.9810 Y14.2860 F500 ; move to pt1
+G0 X-215.0810 Y14.2350
+G1 X-213.8020 Y18.3610 F500 ; pad 3-7, offset 0.34
+G1 X-212.5530 Y22.1520 F500 ; arch to point 2
+G1 X-211.2370 Y25.9200 F500 ; arch to point 2
+G1 X-209.7390 Y29.9710 F500 ; arch to point 2
+G1 X-199.2830 Y26.4220 F500 ; side move pt 2 to pt 3
+G1 X-200.7900 Y22.3610 F500 ; arch to pt 4
+G1 X-202.1040 Y18.6050 F500 ; arch to pt 4
+G1 X-203.3480 Y14.8250 F500 ; arch to pt 4
+G1 X-204.6250 Y10.6860 F500 ; arch to pt 4
+G1 X-215.0810 Y14.2350 F500 ; move to pt1
+G0 X-215.1800 Y14.1850
+G1 X-213.8780 Y18.3860 F500 ; pad 3-7, offset 0.42
+G1 X-212.6280 Y22.1780 F500 ; arch to point 2
+G1 X-211.3120 Y25.9470 F500 ; arch to point 2
+G1 X-209.7870 Y30.0720 F500 ; arch to point 2
+G1 X-199.1790 Y26.4710 F500 ; side move pt 2 to pt 3
+G1 X-200.7150 Y22.3330 F500 ; arch to pt 4
+G1 X-202.0280 Y18.5790 F500 ; arch to pt 4
+G1 X-203.2720 Y14.8020 F500 ; arch to pt 4
+G1 X-204.5730 Y10.5840 F500 ; arch to pt 4
+G1 X-215.1800 Y14.1850 F500 ; move to pt1
+G0 X-204.5400 Y41.8710
+G1 X-202.8330 Y45.5810 F500 ; pad 3-8, offset 0.1
+G1 X-201.1010 Y49.1720 F500 ; arch to point 2
+G1 X-199.3060 Y52.7330 F500 ; arch to point 2
+G1 X-197.4020 Y56.3450 F500 ; arch to point 2
+G1 X-187.9310 Y51.6740 F500 ; side move pt 2 to pt 3
+G1 X-189.8410 Y48.0600 F500 ; arch to pt 4
+G1 X-191.6360 Y44.5040 F500 ; arch to pt 4
+G1 X-193.3640 Y40.9160 F500 ; arch to pt 4
+G1 X-195.0680 Y37.2000 F500 ; arch to pt 4
+G1 X-204.5400 Y41.8710 F500 ; move to pt1
+G0 X-204.6450 Y41.8340
+G1 X-202.9050 Y45.6150 F500 ; pad 3-8, offset 0.18
+G1 X-201.1730 Y49.2080 F500 ; arch to point 2
+G1 X-199.3780 Y52.7690 F500 ; arch to point 2
+G1 X-197.4370 Y56.4510 F500 ; arch to point 2
+G1 X-187.8220 Y51.7090 F500 ; side move pt 2 to pt 3
+G1 X-189.7700 Y48.0240 F500 ; arch to pt 4
+G1 X-191.5640 Y44.4690 F500 ; arch to pt 4
+G1 X-193.2920 Y40.8810 F500 ; arch to pt 4
+G1 X-195.0300 Y37.0920 F500 ; arch to pt 4
+G1 X-204.6450 Y41.8340 F500 ; move to pt1
+G0 X-204.7510 Y41.7970
+G1 X-202.9780 Y45.6490 F500 ; pad 3-8, offset 0.26
+G1 X-201.2450 Y49.2430 F500 ; arch to point 2
+G1 X-199.4490 Y52.8060 F500 ; arch to point 2
+G1 X-197.4720 Y56.5570 F500 ; arch to point 2
+G1 X-187.7130 Y51.7450 F500 ; side move pt 2 to pt 3
+G1 X-189.6990 Y47.9870 F500 ; arch to pt 4
+G1 X-191.4920 Y44.4340 F500 ; arch to pt 4
+G1 X-193.2190 Y40.8480 F500 ; arch to pt 4
+G1 X-194.9920 Y36.9840 F500 ; arch to pt 4
+G1 X-204.7510 Y41.7970 F500 ; move to pt1
+G0 X-204.8560 Y41.7590
+G1 X-203.0500 Y45.6830 F500 ; pad 3-8, offset 0.34
+G1 X-201.3170 Y49.2780 F500 ; arch to point 2
+G1 X-199.5200 Y52.8420 F500 ; arch to point 2
+G1 X-197.5060 Y56.6640 F500 ; arch to point 2
+G1 X-187.6030 Y51.7800 F500 ; side move pt 2 to pt 3
+G1 X-189.6270 Y47.9500 F500 ; arch to pt 4
+G1 X-191.4200 Y44.3980 F500 ; arch to pt 4
+G1 X-193.1470 Y40.8130 F500 ; arch to pt 4
+G1 X-194.9530 Y36.8760 F500 ; arch to pt 4
+G1 X-204.8560 Y41.7590 F500 ; move to pt1
+G0 X-204.9610 Y41.7220
+G1 X-203.1230 Y45.7180 F500 ; pad 3-8, offset 0.42
+G1 X-201.3880 Y49.3140 F500 ; arch to point 2
+G1 X-199.5910 Y52.8790 F500 ; arch to point 2
+G1 X-197.5410 Y56.7700 F500 ; arch to point 2
+G1 X-187.4940 Y51.8150 F500 ; side move pt 2 to pt 3
+G1 X-189.5570 Y47.9130 F500 ; arch to pt 4
+G1 X-191.3490 Y44.3630 F500 ; arch to pt 4
+G1 X-193.0740 Y40.7800 F500 ; arch to pt 4
+G1 X-194.9150 Y36.7680 F500 ; arch to pt 4
+G1 X-204.9610 Y41.7220 F500 ; move to pt1
+G0 X-190.7990 Y67.7830
+G1 X-188.6220 Y71.2380 F500 ; pad 3-9, offset 0.1
+G1 X-186.4360 Y74.5730 F500 ; arch to point 2
+G1 X-184.1920 Y77.8680 F500 ; arch to point 2
+G1 X-181.8330 Y81.2010 F500 ; arch to point 2
+G1 X-173.0520 Y75.3340 F500 ; side move pt 2 to pt 3
+G1 X-175.4170 Y72.0000 F500 ; arch to pt 4
+G1 X-177.6610 Y68.7090 F500 ; arch to pt 4
+G1 X-179.8430 Y65.3770 F500 ; arch to pt 4
+G1 X-182.0170 Y61.9160 F500 ; arch to pt 4
+G1 X-190.7990 Y67.7830 F500 ; move to pt1
+G0 X-190.9080 Y67.7600
+G1 X-188.6890 Y71.2820 F500 ; pad 3-9, offset 0.18
+G1 X-186.5030 Y74.6170 F500 ; arch to point 2
+G1 X-184.2580 Y77.9140 F500 ; arch to point 2
+G1 X-181.8530 Y81.3110 F500 ; arch to point 2
+G1 X-172.9390 Y75.3550 F500 ; side move pt 2 to pt 3
+G1 X-175.3510 Y71.9550 F500 ; arch to pt 4
+G1 X-177.5940 Y68.6650 F500 ; arch to pt 4
+G1 X-179.7760 Y65.3330 F500 ; arch to pt 4
+G1 X-181.9940 Y61.8040 F500 ; arch to pt 4
+G1 X-190.9080 Y67.7600 F500 ; move to pt1
+G0 X-191.0170 Y67.7370
+G1 X-188.7570 Y71.3250 F500 ; pad 3-9, offset 0.26
+G1 X-186.5690 Y74.6620 F500 ; arch to point 2
+G1 X-184.3230 Y77.9600 F500 ; arch to point 2
+G1 X-181.8740 Y81.4210 F500 ; arch to point 2
+G1 X-172.8260 Y75.3760 F500 ; side move pt 2 to pt 3
+G1 X-175.2860 Y71.9090 F500 ; arch to pt 4
+G1 X-177.5280 Y68.6200 F500 ; arch to pt 4
+G1 X-179.7080 Y65.2910 F500 ; arch to pt 4
+G1 X-181.9700 Y61.6920 F500 ; arch to pt 4
+G1 X-191.0170 Y67.7370 F500 ; move to pt1
+G0 X-191.1270 Y67.7140
+G1 X-188.8240 Y71.3680 F500 ; pad 3-9, offset 0.34
+G1 X-186.6360 Y74.7060 F500 ; arch to point 2
+G1 X-184.3890 Y78.0050 F500 ; arch to point 2
+G1 X-181.8940 Y81.5310 F500 ; arch to point 2
+G1 X-172.7130 Y75.3960 F500 ; side move pt 2 to pt 3
+G1 X-175.2200 Y71.8640 F500 ; arch to pt 4
+G1 X-177.4610 Y68.5760 F500 ; arch to pt 4
+G1 X-179.6410 Y65.2470 F500 ; arch to pt 4
+G1 X-181.9450 Y61.5790 F500 ; arch to pt 4
+G1 X-191.1270 Y67.7140 F500 ; move to pt1
+G0 X-191.2360 Y67.6900
+G1 X-188.8910 Y71.4120 F500 ; pad 3-9, offset 0.42
+G1 X-186.7020 Y74.7510 F500 ; arch to point 2
+G1 X-184.4550 Y78.0500 F500 ; arch to point 2
+G1 X-181.9140 Y81.6410 F500 ; arch to point 2
+G1 X-172.6000 Y75.4170 F500 ; side move pt 2 to pt 3
+G1 X-175.1550 Y71.8180 F500 ; arch to pt 4
+G1 X-177.3950 Y68.5310 F500 ; arch to pt 4
+G1 X-179.5740 Y65.2040 F500 ; arch to pt 4
+G1 X-181.9220 Y61.4670 F500 ; arch to pt 4
+G1 X-191.2360 Y67.6900 F500 ; move to pt1
+G0 X-173.7930 Y91.6800
+G1 X-171.1840 Y94.8210 F500 ; pad 3-10, offset 0.1
+G1 X-168.5810 Y97.8420 F500 ; arch to point 2
+G1 X-165.9260 Y100.8160 F500 ; arch to point 2
+G1 X-163.1520 Y103.8130 F500 ; arch to point 2
+G1 X-155.2120 Y96.8490 F500 ; side move pt 2 to pt 3
+G1 X-157.9920 Y93.8530 F500 ; arch to pt 4
+G1 X-160.6460 Y90.8830 F500 ; arch to pt 4
+G1 X-163.2450 Y87.8640 F500 ; arch to pt 4
+G1 X-165.8520 Y84.7160 F500 ; arch to pt 4
+G1 X-173.7930 Y91.6800 F500 ; move to pt1
+G0 X-173.9040 Y91.6710
+G1 X-171.2450 Y94.8730 F500 ; pad 3-10, offset 0.18
+G1 X-168.6410 Y97.8950 F500 ; arch to point 2
+G1 X-165.9860 Y100.8700 F500 ; arch to point 2
+G1 X-163.1580 Y103.9240 F500 ; arch to point 2
+G1 X-155.0970 Y96.8560 F500 ; side move pt 2 to pt 3
+G1 X-157.9330 Y93.8000 F500 ; arch to pt 4
+G1 X-160.5860 Y90.8300 F500 ; arch to pt 4
+G1 X-163.1840 Y87.8120 F500 ; arch to pt 4
+G1 X-165.8430 Y84.6020 F500 ; arch to pt 4
+G1 X-173.9040 Y91.6710 F500 ; move to pt1
+G0 X-174.0150 Y91.6620
+G1 X-171.3060 Y94.9240 F500 ; pad 3-10, offset 0.26
+G1 X-168.7020 Y97.9470 F500 ; arch to point 2
+G1 X-166.0440 Y100.9240 F500 ; arch to point 2
+G1 X-163.1640 Y104.0360 F500 ; arch to point 2
+G1 X-154.9830 Y96.8620 F500 ; side move pt 2 to pt 3
+G1 X-157.8740 Y93.7460 F500 ; arch to pt 4
+G1 X-160.5260 Y90.7780 F500 ; arch to pt 4
+G1 X-163.1220 Y87.7610 F500 ; arch to pt 4
+G1 X-165.8350 Y84.4880 F500 ; arch to pt 4
+G1 X-174.0150 Y91.6620 F500 ; move to pt1
+G0 X-174.1270 Y91.6530
+G1 X-171.3670 Y94.9760 F500 ; pad 3-10, offset 0.34
+G1 X-168.7620 Y98.0000 F500 ; arch to point 2
+G1 X-166.1040 Y100.9780 F500 ; arch to point 2
+G1 X-163.1700 Y104.1480 F500 ; arch to point 2
+G1 X-154.8680 Y96.8670 F500 ; side move pt 2 to pt 3
+G1 X-157.8150 Y93.6920 F500 ; arch to pt 4
+G1 X-160.4660 Y90.7250 F500 ; arch to pt 4
+G1 X-163.0620 Y87.7090 F500 ; arch to pt 4
+G1 X-165.8250 Y84.3730 F500 ; arch to pt 4
+G1 X-174.1270 Y91.6530 F500 ; move to pt1
+G0 X-174.2380 Y91.6450
+G1 X-171.4280 Y95.0280 F500 ; pad 3-10, offset 0.42
+G1 X-168.8220 Y98.0530 F500 ; arch to point 2
+G1 X-166.1630 Y101.0310 F500 ; arch to point 2
+G1 X-163.1760 Y104.2590 F500 ; arch to point 2
+G1 X-154.7530 Y96.8730 F500 ; side move pt 2 to pt 3
+G1 X-157.7560 Y93.6380 F500 ; arch to pt 4
+G1 X-160.4060 Y90.6720 F500 ; arch to pt 4
+G1 X-163.0000 Y87.6580 F500 ; arch to pt 4
+G1 X-165.8160 Y84.2590 F500 ; arch to pt 4
+G1 X-174.2380 Y91.6450 F500 ; move to pt1
+G0 X-153.8130 Y113.1520
+G1 X-150.8160 Y115.9260 F500 ; pad 3-11, offset 0.1
+G1 X-147.8420 Y118.5810 F500 ; arch to point 2
+G1 X-144.8210 Y121.1840 F500 ; arch to point 2
+G1 X-141.6800 Y123.7930 F500 ; arch to point 2
+G1 X-134.7160 Y115.8520 F500 ; side move pt 2 to pt 3
+G1 X-137.8640 Y113.2450 F500 ; arch to pt 4
+G1 X-140.8830 Y110.6460 F500 ; arch to pt 4
+G1 X-143.8530 Y107.9920 F500 ; arch to pt 4
+G1 X-146.8490 Y105.2120 F500 ; arch to pt 4
+G1 X-153.8130 Y113.1520 F500 ; move to pt1
+G0 X-153.9240 Y113.1580
+G1 X-150.8700 Y115.9860 F500 ; pad 3-11, offset 0.18
+G1 X-147.8950 Y118.6410 F500 ; arch to point 2
+G1 X-144.8730 Y121.2450 F500 ; arch to point 2
+G1 X-141.6710 Y123.9040 F500 ; arch to point 2
+G1 X-134.6020 Y115.8430 F500 ; side move pt 2 to pt 3
+G1 X-137.8120 Y113.1840 F500 ; arch to pt 4
+G1 X-140.8300 Y110.5860 F500 ; arch to pt 4
+G1 X-143.8000 Y107.9330 F500 ; arch to pt 4
+G1 X-146.8560 Y105.0970 F500 ; arch to pt 4
+G1 X-153.9240 Y113.1580 F500 ; move to pt1
+G0 X-154.0360 Y113.1640
+G1 X-150.9240 Y116.0440 F500 ; pad 3-11, offset 0.26
+G1 X-147.9470 Y118.7020 F500 ; arch to point 2
+G1 X-144.9240 Y121.3060 F500 ; arch to point 2
+G1 X-141.6620 Y124.0150 F500 ; arch to point 2
+G1 X-134.4880 Y115.8350 F500 ; side move pt 2 to pt 3
+G1 X-137.7610 Y113.1220 F500 ; arch to pt 4
+G1 X-140.7780 Y110.5260 F500 ; arch to pt 4
+G1 X-143.7460 Y107.8740 F500 ; arch to pt 4
+G1 X-146.8620 Y104.9830 F500 ; arch to pt 4
+G1 X-154.0360 Y113.1640 F500 ; move to pt1
+G0 X-154.1480 Y113.1700
+G1 X-150.9780 Y116.1040 F500 ; pad 3-11, offset 0.34
+G1 X-148.0000 Y118.7620 F500 ; arch to point 2
+G1 X-144.9760 Y121.3670 F500 ; arch to point 2
+G1 X-141.6530 Y124.1270 F500 ; arch to point 2
+G1 X-134.3730 Y115.8250 F500 ; side move pt 2 to pt 3
+G1 X-137.7090 Y113.0620 F500 ; arch to pt 4
+G1 X-140.7250 Y110.4660 F500 ; arch to pt 4
+G1 X-143.6920 Y107.8150 F500 ; arch to pt 4
+G1 X-146.8670 Y104.8680 F500 ; arch to pt 4
+G1 X-154.1480 Y113.1700 F500 ; move to pt1
+G0 X-154.2590 Y113.1760
+G1 X-151.0310 Y116.1630 F500 ; pad 3-11, offset 0.42
+G1 X-148.0530 Y118.8220 F500 ; arch to point 2
+G1 X-145.0280 Y121.4280 F500 ; arch to point 2
+G1 X-141.6450 Y124.2380 F500 ; arch to point 2
+G1 X-134.2590 Y115.8160 F500 ; side move pt 2 to pt 3
+G1 X-137.6580 Y113.0000 F500 ; arch to pt 4
+G1 X-140.6720 Y110.4060 F500 ; arch to pt 4
+G1 X-143.6380 Y107.7560 F500 ; arch to pt 4
+G1 X-146.8730 Y104.7530 F500 ; arch to pt 4
+G1 X-154.2590 Y113.1760 F500 ; move to pt1
+G0 X-131.2010 Y131.8330
+G1 X-127.8680 Y134.1920 F500 ; pad 3-12, offset 0.1
+G1 X-124.5730 Y136.4360 F500 ; arch to point 2
+G1 X-121.2380 Y138.6220 F500 ; arch to point 2
+G1 X-117.7830 Y140.7990 F500 ; arch to point 2
+G1 X-111.9160 Y132.0170 F500 ; side move pt 2 to pt 3
+G1 X-115.3770 Y129.8430 F500 ; arch to pt 4
+G1 X-118.7090 Y127.6610 F500 ; arch to pt 4
+G1 X-122.0000 Y125.4170 F500 ; arch to pt 4
+G1 X-125.3340 Y123.0520 F500 ; arch to pt 4
+G1 X-131.2010 Y131.8330 F500 ; move to pt1
+G0 X-131.3110 Y131.8530
+G1 X-127.9140 Y134.2580 F500 ; pad 3-12, offset 0.18
+G1 X-124.6170 Y136.5030 F500 ; arch to point 2
+G1 X-121.2820 Y138.6890 F500 ; arch to point 2
+G1 X-117.7600 Y140.9080 F500 ; arch to point 2
+G1 X-111.8040 Y131.9940 F500 ; side move pt 2 to pt 3
+G1 X-115.3330 Y129.7760 F500 ; arch to pt 4
+G1 X-118.6650 Y127.5940 F500 ; arch to pt 4
+G1 X-121.9550 Y125.3510 F500 ; arch to pt 4
+G1 X-125.3550 Y122.9390 F500 ; arch to pt 4
+G1 X-131.3110 Y131.8530 F500 ; move to pt1
+G0 X-131.4210 Y131.8740
+G1 X-127.9600 Y134.3230 F500 ; pad 3-12, offset 0.26
+G1 X-124.6620 Y136.5690 F500 ; arch to point 2
+G1 X-121.3250 Y138.7570 F500 ; arch to point 2
+G1 X-117.7370 Y141.0170 F500 ; arch to point 2
+G1 X-111.6920 Y131.9700 F500 ; side move pt 2 to pt 3
+G1 X-115.2910 Y129.7080 F500 ; arch to pt 4
+G1 X-118.6200 Y127.5280 F500 ; arch to pt 4
+G1 X-121.9090 Y125.2860 F500 ; arch to pt 4
+G1 X-125.3760 Y122.8260 F500 ; arch to pt 4
+G1 X-131.4210 Y131.8740 F500 ; move to pt1
+G0 X-131.5310 Y131.8940
+G1 X-128.0050 Y134.3890 F500 ; pad 3-12, offset 0.34
+G1 X-124.7060 Y136.6360 F500 ; arch to point 2
+G1 X-121.3680 Y138.8240 F500 ; arch to point 2
+G1 X-117.7140 Y141.1270 F500 ; arch to point 2
+G1 X-111.5790 Y131.9450 F500 ; side move pt 2 to pt 3
+G1 X-115.2470 Y129.6410 F500 ; arch to pt 4
+G1 X-118.5760 Y127.4610 F500 ; arch to pt 4
+G1 X-121.8640 Y125.2200 F500 ; arch to pt 4
+G1 X-125.3960 Y122.7130 F500 ; arch to pt 4
+G1 X-131.5310 Y131.8940 F500 ; move to pt1
+G0 X-131.6410 Y131.9140
+G1 X-128.0500 Y134.4550 F500 ; pad 3-12, offset 0.42
+G1 X-124.7510 Y136.7020 F500 ; arch to point 2
+G1 X-121.4120 Y138.8910 F500 ; arch to point 2
+G1 X-117.6900 Y141.2360 F500 ; arch to point 2
+G1 X-111.4670 Y131.9220 F500 ; side move pt 2 to pt 3
+G1 X-115.2040 Y129.5740 F500 ; arch to pt 4
+G1 X-118.5310 Y127.3950 F500 ; arch to pt 4
+G1 X-121.8180 Y125.1550 F500 ; arch to pt 4
+G1 X-125.4170 Y122.6000 F500 ; arch to pt 4
+G1 X-131.6410 Y131.9140 F500 ; move to pt1
+G0 X-106.3450 Y147.4020
+G1 X-102.7330 Y149.3060 F500 ; pad 3-13, offset 0.1
+G1 X-99.1720 Y151.1010 F500 ; arch to point 2
+G1 X-95.5810 Y152.8330 F500 ; arch to point 2
+G1 X-91.8710 Y154.5400 F500 ; arch to point 2
+G1 X-87.2000 Y145.0680 F500 ; side move pt 2 to pt 3
+G1 X-90.9160 Y143.3640 F500 ; arch to pt 4
+G1 X-94.5040 Y141.6360 F500 ; arch to pt 4
+G1 X-98.0600 Y139.8410 F500 ; arch to pt 4
+G1 X-101.6740 Y137.9310 F500 ; arch to pt 4
+G1 X-106.3450 Y147.4020 F500 ; move to pt1
+G0 X-106.4510 Y147.4370
+G1 X-102.7690 Y149.3780 F500 ; pad 3-13, offset 0.18
+G1 X-99.2080 Y151.1730 F500 ; arch to point 2
+G1 X-95.6150 Y152.9050 F500 ; arch to point 2
+G1 X-91.8340 Y154.6450 F500 ; arch to point 2
+G1 X-87.0920 Y145.0300 F500 ; side move pt 2 to pt 3
+G1 X-90.8810 Y143.2920 F500 ; arch to pt 4
+G1 X-94.4690 Y141.5640 F500 ; arch to pt 4
+G1 X-98.0240 Y139.7700 F500 ; arch to pt 4
+G1 X-101.7090 Y137.8220 F500 ; arch to pt 4
+G1 X-106.4510 Y147.4370 F500 ; move to pt1
+G0 X-106.5570 Y147.4720
+G1 X-102.8060 Y149.4490 F500 ; pad 3-13, offset 0.26
+G1 X-99.2430 Y151.2450 F500 ; arch to point 2
+G1 X-95.6490 Y152.9780 F500 ; arch to point 2
+G1 X-91.7970 Y154.7510 F500 ; arch to point 2
+G1 X-86.9840 Y144.9920 F500 ; side move pt 2 to pt 3
+G1 X-90.8480 Y143.2190 F500 ; arch to pt 4
+G1 X-94.4340 Y141.4920 F500 ; arch to pt 4
+G1 X-97.9870 Y139.6990 F500 ; arch to pt 4
+G1 X-101.7450 Y137.7130 F500 ; arch to pt 4
+G1 X-106.5570 Y147.4720 F500 ; move to pt1
+G0 X-106.6640 Y147.5060
+G1 X-102.8420 Y149.5200 F500 ; pad 3-13, offset 0.34
+G1 X-99.2780 Y151.3170 F500 ; arch to point 2
+G1 X-95.6830 Y153.0500 F500 ; arch to point 2
+G1 X-91.7590 Y154.8560 F500 ; arch to point 2
+G1 X-86.8760 Y144.9530 F500 ; side move pt 2 to pt 3
+G1 X-90.8130 Y143.1470 F500 ; arch to pt 4
+G1 X-94.3980 Y141.4200 F500 ; arch to pt 4
+G1 X-97.9500 Y139.6270 F500 ; arch to pt 4
+G1 X-101.7800 Y137.6030 F500 ; arch to pt 4
+G1 X-106.6640 Y147.5060 F500 ; move to pt1
+G0 X-106.7700 Y147.5410
+G1 X-102.8790 Y149.5910 F500 ; pad 3-13, offset 0.42
+G1 X-99.3140 Y151.3880 F500 ; arch to point 2
+G1 X-95.7180 Y153.1230 F500 ; arch to point 2
+G1 X-91.7220 Y154.9610 F500 ; arch to point 2
+G1 X-86.7680 Y144.9150 F500 ; side move pt 2 to pt 3
+G1 X-90.7800 Y143.0740 F500 ; arch to pt 4
+G1 X-94.3630 Y141.3490 F500 ; arch to pt 4
+G1 X-97.9130 Y139.5570 F500 ; arch to pt 4
+G1 X-101.8150 Y137.4940 F500 ; arch to pt 4
+G1 X-106.7700 Y147.5410 F500 ; move to pt1
+G0 X-79.6690 Y159.5940
+G1 X-75.8390 Y161.0110 F500 ; pad 3-14, offset 0.1
+G1 X-72.0750 Y162.3250 F500 ; arch to point 2
+G1 X-68.2880 Y163.5740 F500 ; arch to point 2
+G1 X-64.3870 Y164.7820 F500 ; arch to point 2
+G1 X-60.9930 Y154.7810 F500 ; side move pt 2 to pt 3
+G1 X-64.8990 Y153.5770 F500 ; arch to pt 4
+G1 X-68.6820 Y152.3320 F500 ; arch to pt 4
+G1 X-72.4420 Y151.0160 F500 ; arch to pt 4
+G1 X-76.2740 Y149.5940 F500 ; arch to pt 4
+G1 X-79.6690 Y159.5940 F500 ; move to pt1
+G0 X-79.7700 Y159.6430
+G1 X-75.8660 Y161.0860 F500 ; pad 3-14, offset 0.18
+G1 X-72.1000 Y162.4010 F500 ; arch to point 2
+G1 X-68.3130 Y163.6500 F500 ; arch to point 2
+G1 X-64.3370 Y164.8810 F500 ; arch to point 2
+G1 X-60.8910 Y154.7290 F500 ; side move pt 2 to pt 3
+G1 X-64.8740 Y153.5010 F500 ; arch to pt 4
+G1 X-68.6570 Y152.2560 F500 ; arch to pt 4
+G1 X-72.4150 Y150.9410 F500 ; arch to pt 4
+G1 X-76.3240 Y149.4910 F500 ; arch to pt 4
+G1 X-79.7700 Y159.6430 F500 ; move to pt1
+G0 X-79.8710 Y159.6910
+G1 X-75.8930 Y161.1610 F500 ; pad 3-14, offset 0.26
+G1 X-72.1260 Y162.4770 F500 ; arch to point 2
+G1 X-68.3370 Y163.7260 F500 ; arch to point 2
+G1 X-64.2860 Y164.9810 F500 ; arch to point 2
+G1 X-60.7880 Y154.6770 F500 ; side move pt 2 to pt 3
+G1 X-64.8500 Y153.4240 F500 ; arch to pt 4
+G1 X-68.6310 Y152.1800 F500 ; arch to pt 4
+G1 X-72.3880 Y150.8660 F500 ; arch to pt 4
+G1 X-76.3730 Y149.3870 F500 ; arch to pt 4
+G1 X-79.8710 Y159.6910 F500 ; move to pt1
+G0 X-79.9710 Y159.7390
+G1 X-75.9200 Y161.2370 F500 ; pad 3-14, offset 0.34
+G1 X-72.1520 Y162.5530 F500 ; arch to point 2
+G1 X-68.3610 Y163.8020 F500 ; arch to point 2
+G1 X-64.2350 Y165.0810 F500 ; arch to point 2
+G1 X-60.6860 Y154.6250 F500 ; side move pt 2 to pt 3
+G1 X-64.8250 Y153.3480 F500 ; arch to pt 4
+G1 X-68.6050 Y152.1040 F500 ; arch to pt 4
+G1 X-72.3610 Y150.7900 F500 ; arch to pt 4
+G1 X-76.4220 Y149.2830 F500 ; arch to pt 4
+G1 X-79.9710 Y159.7390 F500 ; move to pt1
+G0 X-80.0720 Y159.7870
+G1 X-75.9470 Y161.3120 F500 ; pad 3-14, offset 0.42
+G1 X-72.1780 Y162.6280 F500 ; arch to point 2
+G1 X-68.3860 Y163.8780 F500 ; arch to point 2
+G1 X-64.1850 Y165.1800 F500 ; arch to point 2
+G1 X-60.5840 Y154.5730 F500 ; side move pt 2 to pt 3
+G1 X-64.8020 Y153.2720 F500 ; arch to pt 4
+G1 X-68.5790 Y152.0280 F500 ; arch to pt 4
+G1 X-72.3330 Y150.7150 F500 ; arch to pt 4
+G1 X-76.4710 Y149.1790 F500 ; arch to pt 4
+G1 X-80.0720 Y159.7870 F500 ; move to pt1
+G0 X-51.6300 Y168.2000
+G1 X-47.6480 Y169.1040 F500 ; pad 3-15, offset 0.1
+G1 X-43.7440 Y169.9170 F500 ; arch to point 2
+G1 X-39.8270 Y170.6600 F500 ; arch to point 2
+G1 X-35.8020 Y171.3490 F500 ; arch to point 2
+G1 X-33.7420 Y160.9900 F500 ; side move pt 2 to pt 3
+G1 X-37.7710 Y160.3060 F500 ; arch to pt 4
+G1 X-41.6850 Y159.5650 F500 ; arch to pt 4
+G1 X-45.5840 Y158.7520 F500 ; arch to pt 4
+G1 X-49.5690 Y157.8420 F500 ; arch to pt 4
+G1 X-51.6300 Y168.2000 F500 ; move to pt1
+G0 X-51.7230 Y168.2610
+G1 X-47.6640 Y169.1830 F500 ; pad 3-15, offset 0.18
+G1 X-43.7600 Y169.9950 F500 ; arch to point 2
+G1 X-39.8420 Y170.7390 F500 ; arch to point 2
+G1 X-35.7390 Y171.4410 F500 ; arch to point 2
+G1 X-33.6470 Y160.9260 F500 ; side move pt 2 to pt 3
+G1 X-37.7570 Y160.2270 F500 ; arch to pt 4
+G1 X-41.6700 Y159.4870 F500 ; arch to pt 4
+G1 X-45.5680 Y158.6740 F500 ; arch to pt 4
+G1 X-49.6320 Y157.7460 F500 ; arch to pt 4
+G1 X-51.7230 Y168.2610 F500 ; move to pt1
+G0 X-51.8170 Y168.3220
+G1 X-47.6820 Y169.2610 F500 ; pad 3-15, offset 0.26
+G1 X-43.7750 Y170.0740 F500 ; arch to point 2
+G1 X-39.8550 Y170.8180 F500 ; arch to point 2
+G1 X-35.6750 Y171.5330 F500 ; arch to point 2
+G1 X-33.5530 Y160.8610 F500 ; side move pt 2 to pt 3
+G1 X-37.7430 Y160.1490 F500 ; arch to pt 4
+G1 X-41.6540 Y159.4080 F500 ; arch to pt 4
+G1 X-45.5500 Y158.5960 F500 ; arch to pt 4
+G1 X-49.6940 Y157.6500 F500 ; arch to pt 4
+G1 X-51.8170 Y168.3220 F500 ; move to pt1
+G0 X-51.9110 Y168.3830
+G1 X-47.6980 Y169.3390 F500 ; pad 3-15, offset 0.34
+G1 X-43.7910 Y170.1520 F500 ; arch to point 2
+G1 X-39.8700 Y170.8960 F500 ; arch to point 2
+G1 X-35.6120 Y171.6250 F500 ; arch to point 2
+G1 X-33.4580 Y160.7950 F500 ; side move pt 2 to pt 3
+G1 X-37.7290 Y160.0700 F500 ; arch to pt 4
+G1 X-41.6380 Y159.3300 F500 ; arch to pt 4
+G1 X-45.5340 Y158.5170 F500 ; arch to pt 4
+G1 X-49.7570 Y157.5530 F500 ; arch to pt 4
+G1 X-51.9110 Y168.3830 F500 ; move to pt1
+G0 X-52.0050 Y168.4440
+G1 X-47.7150 Y169.4170 F500 ; pad 3-15, offset 0.42
+G1 X-43.8070 Y170.2300 F500 ; arch to point 2
+G1 X-39.8840 Y170.9750 F500 ; arch to point 2
+G1 X-35.5490 Y171.7170 F500 ; arch to point 2
+G1 X-33.3630 Y160.7300 F500 ; side move pt 2 to pt 3
+G1 X-37.7150 Y159.9910 F500 ; arch to pt 4
+G1 X-41.6230 Y159.2520 F500 ; arch to pt 4
+G1 X-45.5160 Y158.4390 F500 ; arch to pt 4
+G1 X-49.8190 Y157.4570 F500 ; arch to pt 4
+G1 X-52.0050 Y168.4440 F500 ; move to pt1
+G0 X-26.5970 Y172.6420
+G1 X-22.5380 Y173.0900 F500 ; pad 3-16, offset 0.1
+G1 X-18.5680 Y173.4550 F500 ; arch to point 2
+G1 X-14.5910 Y173.7500 F500 ; arch to point 2
+G1 X-10.5140 Y173.9790 F500 ; arch to point 2
+G1 X-9.6400 Y163.4540 F500 ; side move pt 2 to pt 3
+G1 X-13.7210 Y163.2300 F500 ; arch to pt 4
+G1 X-17.6940 Y162.9370 F500 ; arch to pt 4
+G1 X-21.6600 Y162.5700 F500 ; arch to pt 4
+G1 X-25.7220 Y162.1170 F500 ; arch to pt 4
+G1 X-26.5970 Y172.6420 F500 ; move to pt1
+G0 X-26.6830 Y172.7130
+G1 X-22.5460 Y173.1700 F500 ; pad 3-16, offset 0.18
+G1 X-18.5740 Y173.5350 F500 ; arch to point 2
+G1 X-14.5970 Y173.8300 F500 ; arch to point 2
+G1 X-10.4410 Y174.0630 F500 ; arch to point 2
+G1 X-9.5530 Y163.3790 F500 ; side move pt 2 to pt 3
+G1 X-13.7160 Y163.1500 F500 ; arch to pt 4
+G1 X-17.6870 Y162.8570 F500 ; arch to pt 4
+G1 X-21.6520 Y162.4910 F500 ; arch to pt 4
+G1 X-25.7950 Y162.0290 F500 ; arch to pt 4
+G1 X-26.6830 Y172.7130 F500 ; move to pt1
+G0 X-26.7690 Y172.7840
+G1 X-22.5540 Y173.2490 F500 ; pad 3-16, offset 0.26
+G1 X-18.5810 Y173.6140 F500 ; arch to point 2
+G1 X-14.6020 Y173.9100 F500 ; arch to point 2
+G1 X-10.3680 Y174.1470 F500 ; arch to point 2
+G1 X-9.4670 Y163.3040 F500 ; side move pt 2 to pt 3
+G1 X-13.7110 Y163.0700 F500 ; arch to pt 4
+G1 X-17.6800 Y162.7780 F500 ; arch to pt 4
+G1 X-21.6440 Y162.4110 F500 ; arch to pt 4
+G1 X-25.8680 Y161.9410 F500 ; arch to pt 4
+G1 X-26.7690 Y172.7840 F500 ; move to pt1
+G0 X-26.8560 Y172.8560
+G1 X-22.5620 Y173.3290 F500 ; pad 3-16, offset 0.34
+G1 X-18.5880 Y173.6940 F500 ; arch to point 2
+G1 X-14.6070 Y173.9900 F500 ; arch to point 2
+G1 X-10.2950 Y174.2320 F500 ; arch to point 2
+G1 X-9.3800 Y163.2280 F500 ; side move pt 2 to pt 3
+G1 X-13.7050 Y162.9910 F500 ; arch to pt 4
+G1 X-17.6740 Y162.6980 F500 ; arch to pt 4
+G1 X-21.6360 Y162.3320 F500 ; arch to pt 4
+G1 X-25.9410 Y161.8510 F500 ; arch to pt 4
+G1 X-26.8560 Y172.8560 F500 ; move to pt1
+G0 X-26.9420 Y172.9270
+G1 X-22.5700 Y173.4080 F500 ; pad 3-16, offset 0.42
+G1 X-18.5940 Y173.7740 F500 ; arch to point 2
+G1 X-14.6130 Y174.0690 F500 ; arch to point 2
+G1 X-10.2210 Y174.3160 F500 ; arch to point 2
+G1 X-9.2940 Y163.1520 F500 ; side move pt 2 to pt 3
+G1 X-13.7010 Y162.9110 F500 ; arch to pt 4
+G1 X-17.6670 Y162.6180 F500 ; arch to pt 4
+G1 X-21.6270 Y162.2520 F500 ; arch to pt 4
+G1 X-26.0140 Y161.7630 F500 ; arch to pt 4
+G1 X-26.9420 Y172.9270 F500 ; move to pt1
+G0 X10.5140 Y173.9790
+G1 X14.5910 Y173.7500 F500 ; pad 1-1, offset 0.1
+G1 X18.5680 Y173.4550 F500 ; arch to point 2
+G1 X22.5380 Y173.0900 F500 ; arch to point 2
+G1 X26.5970 Y172.6420 F500 ; arch to point 2
+G1 X25.7220 Y162.1170 F500 ; side move pt 2 to pt 3
+G1 X21.6600 Y162.5700 F500 ; arch to pt 4
+G1 X17.6940 Y162.9370 F500 ; arch to pt 4
+G1 X13.7210 Y163.2300 F500 ; arch to pt 4
+G1 X9.6400 Y163.4540 F500 ; arch to pt 4
+G1 X10.5140 Y173.9790 F500 ; move to pt1
+G0 X10.4410 Y174.0630
+G1 X14.5970 Y173.8300 F500 ; pad 1-1, offset 0.18
+G1 X18.5740 Y173.5350 F500 ; arch to point 2
+G1 X22.5460 Y173.1700 F500 ; arch to point 2
+G1 X26.6830 Y172.7130 F500 ; arch to point 2
+G1 X25.7950 Y162.0290 F500 ; side move pt 2 to pt 3
+G1 X21.6520 Y162.4910 F500 ; arch to pt 4
+G1 X17.6870 Y162.8570 F500 ; arch to pt 4
+G1 X13.7160 Y163.1500 F500 ; arch to pt 4
+G1 X9.5530 Y163.3790 F500 ; arch to pt 4
+G1 X10.4410 Y174.0630 F500 ; move to pt1
+G0 X10.3680 Y174.1470
+G1 X14.6020 Y173.9100 F500 ; pad 1-1, offset 0.26
+G1 X18.5810 Y173.6140 F500 ; arch to point 2
+G1 X22.5540 Y173.2490 F500 ; arch to point 2
+G1 X26.7690 Y172.7840 F500 ; arch to point 2
+G1 X25.8680 Y161.9410 F500 ; side move pt 2 to pt 3
+G1 X21.6440 Y162.4110 F500 ; arch to pt 4
+G1 X17.6800 Y162.7780 F500 ; arch to pt 4
+G1 X13.7110 Y163.0700 F500 ; arch to pt 4
+G1 X9.4670 Y163.3040 F500 ; arch to pt 4
+G1 X10.3680 Y174.1470 F500 ; move to pt1
+G0 X10.2950 Y174.2320
+G1 X14.6070 Y173.9900 F500 ; pad 1-1, offset 0.34
+G1 X18.5880 Y173.6940 F500 ; arch to point 2
+G1 X22.5620 Y173.3290 F500 ; arch to point 2
+G1 X26.8560 Y172.8560 F500 ; arch to point 2
+G1 X25.9410 Y161.8510 F500 ; side move pt 2 to pt 3
+G1 X21.6360 Y162.3320 F500 ; arch to pt 4
+G1 X17.6740 Y162.6980 F500 ; arch to pt 4
+G1 X13.7050 Y162.9910 F500 ; arch to pt 4
+G1 X9.3800 Y163.2280 F500 ; arch to pt 4
+G1 X10.2950 Y174.2320 F500 ; move to pt1
+G0 X10.2210 Y174.3160
+G1 X14.6130 Y174.0690 F500 ; pad 1-1, offset 0.42
+G1 X18.5940 Y173.7740 F500 ; arch to point 2
+G1 X22.5700 Y173.4080 F500 ; arch to point 2
+G1 X26.9420 Y172.9270 F500 ; arch to point 2
+G1 X26.0140 Y161.7630 F500 ; side move pt 2 to pt 3
+G1 X21.6270 Y162.2520 F500 ; arch to pt 4
+G1 X17.6670 Y162.6180 F500 ; arch to pt 4
+G1 X13.7010 Y162.9110 F500 ; arch to pt 4
+G1 X9.2940 Y163.1520 F500 ; arch to pt 4
+G1 X10.2210 Y174.3160 F500 ; move to pt1
+G0 X35.8020 Y171.3490
+G1 X39.8270 Y170.6600 F500 ; pad 1-2, offset 0.1
+G1 X43.7440 Y169.9170 F500 ; arch to point 2
+G1 X47.6480 Y169.1040 F500 ; arch to point 2
+G1 X51.6300 Y168.2000 F500 ; arch to point 2
+G1 X49.5690 Y157.8420 F500 ; side move pt 2 to pt 3
+G1 X45.5840 Y158.7520 F500 ; arch to pt 4
+G1 X41.6850 Y159.5650 F500 ; arch to pt 4
+G1 X37.7710 Y160.3060 F500 ; arch to pt 4
+G1 X33.7420 Y160.9900 F500 ; arch to pt 4
+G1 X35.8020 Y171.3490 F500 ; move to pt1
+G0 X35.7390 Y171.4410
+G1 X39.8420 Y170.7390 F500 ; pad 1-2, offset 0.18
+G1 X43.7600 Y169.9950 F500 ; arch to point 2
+G1 X47.6640 Y169.1830 F500 ; arch to point 2
+G1 X51.7230 Y168.2610 F500 ; arch to point 2
+G1 X49.6320 Y157.7460 F500 ; side move pt 2 to pt 3
+G1 X45.5680 Y158.6740 F500 ; arch to pt 4
+G1 X41.6700 Y159.4870 F500 ; arch to pt 4
+G1 X37.7570 Y160.2270 F500 ; arch to pt 4
+G1 X33.6470 Y160.9260 F500 ; arch to pt 4
+G1 X35.7390 Y171.4410 F500 ; move to pt1
+G0 X35.6750 Y171.5330
+G1 X39.8550 Y170.8180 F500 ; pad 1-2, offset 0.26
+G1 X43.7750 Y170.0740 F500 ; arch to point 2
+G1 X47.6820 Y169.2610 F500 ; arch to point 2
+G1 X51.8170 Y168.3220 F500 ; arch to point 2
+G1 X49.6940 Y157.6500 F500 ; side move pt 2 to pt 3
+G1 X45.5500 Y158.5960 F500 ; arch to pt 4
+G1 X41.6540 Y159.4080 F500 ; arch to pt 4
+G1 X37.7430 Y160.1490 F500 ; arch to pt 4
+G1 X33.5530 Y160.8610 F500 ; arch to pt 4
+G1 X35.6750 Y171.5330 F500 ; move to pt1
+G0 X35.6120 Y171.6250
+G1 X39.8700 Y170.8960 F500 ; pad 1-2, offset 0.34
+G1 X43.7910 Y170.1520 F500 ; arch to point 2
+G1 X47.6980 Y169.3390 F500 ; arch to point 2
+G1 X51.9110 Y168.3830 F500 ; arch to point 2
+G1 X49.7570 Y157.5530 F500 ; side move pt 2 to pt 3
+G1 X45.5340 Y158.5170 F500 ; arch to pt 4
+G1 X41.6380 Y159.3300 F500 ; arch to pt 4
+G1 X37.7290 Y160.0700 F500 ; arch to pt 4
+G1 X33.4580 Y160.7950 F500 ; arch to pt 4
+G1 X35.6120 Y171.6250 F500 ; move to pt1
+G0 X35.5490 Y171.7170
+G1 X39.8840 Y170.9750 F500 ; pad 1-2, offset 0.42
+G1 X43.8070 Y170.2300 F500 ; arch to point 2
+G1 X47.7150 Y169.4170 F500 ; arch to point 2
+G1 X52.0050 Y168.4440 F500 ; arch to point 2
+G1 X49.8190 Y157.4570 F500 ; side move pt 2 to pt 3
+G1 X45.5160 Y158.4390 F500 ; arch to pt 4
+G1 X41.6230 Y159.2520 F500 ; arch to pt 4
+G1 X37.7150 Y159.9910 F500 ; arch to pt 4
+G1 X33.3630 Y160.7300 F500 ; arch to pt 4
+G1 X35.5490 Y171.7170 F500 ; move to pt1
+G0 X64.3870 Y164.7820
+G1 X68.2880 Y163.5740 F500 ; pad 1-3, offset 0.1
+G1 X72.0750 Y162.3250 F500 ; arch to point 2
+G1 X75.8390 Y161.0110 F500 ; arch to point 2
+G1 X79.6690 Y159.5940 F500 ; arch to point 2
+G1 X76.2740 Y149.5940 F500 ; side move pt 2 to pt 3
+G1 X72.4420 Y151.0160 F500 ; arch to pt 4
+G1 X68.6820 Y152.3320 F500 ; arch to pt 4
+G1 X64.8990 Y153.5770 F500 ; arch to pt 4
+G1 X60.9930 Y154.7810 F500 ; arch to pt 4
+G1 X64.3870 Y164.7820 F500 ; move to pt1
+G0 X64.3370 Y164.8810
+G1 X68.3130 Y163.6500 F500 ; pad 1-3, offset 0.18
+G1 X72.1000 Y162.4010 F500 ; arch to point 2
+G1 X75.8660 Y161.0860 F500 ; arch to point 2
+G1 X79.7700 Y159.6430 F500 ; arch to point 2
+G1 X76.3240 Y149.4910 F500 ; side move pt 2 to pt 3
+G1 X72.4150 Y150.9410 F500 ; arch to pt 4
+G1 X68.6570 Y152.2560 F500 ; arch to pt 4
+G1 X64.8740 Y153.5010 F500 ; arch to pt 4
+G1 X60.8910 Y154.7290 F500 ; arch to pt 4
+G1 X64.3370 Y164.8810 F500 ; move to pt1
+G0 X64.2860 Y164.9810
+G1 X68.3370 Y163.7260 F500 ; pad 1-3, offset 0.26
+G1 X72.1260 Y162.4770 F500 ; arch to point 2
+G1 X75.8930 Y161.1610 F500 ; arch to point 2
+G1 X79.8710 Y159.6910 F500 ; arch to point 2
+G1 X76.3730 Y149.3870 F500 ; side move pt 2 to pt 3
+G1 X72.3880 Y150.8660 F500 ; arch to pt 4
+G1 X68.6310 Y152.1800 F500 ; arch to pt 4
+G1 X64.8500 Y153.4240 F500 ; arch to pt 4
+G1 X60.7880 Y154.6770 F500 ; arch to pt 4
+G1 X64.2860 Y164.9810 F500 ; move to pt1
+G0 X64.2350 Y165.0810
+G1 X68.3610 Y163.8020 F500 ; pad 1-3, offset 0.34
+G1 X72.1520 Y162.5530 F500 ; arch to point 2
+G1 X75.9200 Y161.2370 F500 ; arch to point 2
+G1 X79.9710 Y159.7390 F500 ; arch to point 2
+G1 X76.4220 Y149.2830 F500 ; side move pt 2 to pt 3
+G1 X72.3610 Y150.7900 F500 ; arch to pt 4
+G1 X68.6050 Y152.1040 F500 ; arch to pt 4
+G1 X64.8250 Y153.3480 F500 ; arch to pt 4
+G1 X60.6860 Y154.6250 F500 ; arch to pt 4
+G1 X64.2350 Y165.0810 F500 ; move to pt1
+G0 X64.1850 Y165.1800
+G1 X68.3860 Y163.8780 F500 ; pad 1-3, offset 0.42
+G1 X72.1780 Y162.6280 F500 ; arch to point 2
+G1 X75.9470 Y161.3120 F500 ; arch to point 2
+G1 X80.0720 Y159.7870 F500 ; arch to point 2
+G1 X76.4710 Y149.1790 F500 ; side move pt 2 to pt 3
+G1 X72.3330 Y150.7150 F500 ; arch to pt 4
+G1 X68.5790 Y152.0280 F500 ; arch to pt 4
+G1 X64.8020 Y153.2720 F500 ; arch to pt 4
+G1 X60.5840 Y154.5730 F500 ; arch to pt 4
+G1 X64.1850 Y165.1800 F500 ; move to pt1
+G0 X91.8710 Y154.5400
+G1 X95.5810 Y152.8330 F500 ; pad 1-4, offset 0.1
+G1 X99.1720 Y151.1010 F500 ; arch to point 2
+G1 X102.7330 Y149.3060 F500 ; arch to point 2
+G1 X106.3450 Y147.4020 F500 ; arch to point 2
+G1 X101.6740 Y137.9310 F500 ; side move pt 2 to pt 3
+G1 X98.0600 Y139.8410 F500 ; arch to pt 4
+G1 X94.5040 Y141.6360 F500 ; arch to pt 4
+G1 X90.9160 Y143.3640 F500 ; arch to pt 4
+G1 X87.2000 Y145.0680 F500 ; arch to pt 4
+G1 X91.8710 Y154.5400 F500 ; move to pt1
+G0 X91.8340 Y154.6450
+G1 X95.6150 Y152.9050 F500 ; pad 1-4, offset 0.18
+G1 X99.2080 Y151.1730 F500 ; arch to point 2
+G1 X102.7690 Y149.3780 F500 ; arch to point 2
+G1 X106.4510 Y147.4370 F500 ; arch to point 2
+G1 X101.7090 Y137.8220 F500 ; side move pt 2 to pt 3
+G1 X98.0240 Y139.7700 F500 ; arch to pt 4
+G1 X94.4690 Y141.5640 F500 ; arch to pt 4
+G1 X90.8810 Y143.2920 F500 ; arch to pt 4
+G1 X87.0920 Y145.0300 F500 ; arch to pt 4
+G1 X91.8340 Y154.6450 F500 ; move to pt1
+G0 X91.7970 Y154.7510
+G1 X95.6490 Y152.9780 F500 ; pad 1-4, offset 0.26
+G1 X99.2430 Y151.2450 F500 ; arch to point 2
+G1 X102.8060 Y149.4490 F500 ; arch to point 2
+G1 X106.5570 Y147.4720 F500 ; arch to point 2
+G1 X101.7450 Y137.7130 F500 ; side move pt 2 to pt 3
+G1 X97.9870 Y139.6990 F500 ; arch to pt 4
+G1 X94.4340 Y141.4920 F500 ; arch to pt 4
+G1 X90.8480 Y143.2190 F500 ; arch to pt 4
+G1 X86.9840 Y144.9920 F500 ; arch to pt 4
+G1 X91.7970 Y154.7510 F500 ; move to pt1
+G0 X91.7590 Y154.8560
+G1 X95.6830 Y153.0500 F500 ; pad 1-4, offset 0.34
+G1 X99.2780 Y151.3170 F500 ; arch to point 2
+G1 X102.8420 Y149.5200 F500 ; arch to point 2
+G1 X106.6640 Y147.5060 F500 ; arch to point 2
+G1 X101.7800 Y137.6030 F500 ; side move pt 2 to pt 3
+G1 X97.9500 Y139.6270 F500 ; arch to pt 4
+G1 X94.3980 Y141.4200 F500 ; arch to pt 4
+G1 X90.8130 Y143.1470 F500 ; arch to pt 4
+G1 X86.8760 Y144.9530 F500 ; arch to pt 4
+G1 X91.7590 Y154.8560 F500 ; move to pt1
+G0 X91.7220 Y154.9610
+G1 X95.7180 Y153.1230 F500 ; pad 1-4, offset 0.42
+G1 X99.3140 Y151.3880 F500 ; arch to point 2
+G1 X102.8790 Y149.5910 F500 ; arch to point 2
+G1 X106.7700 Y147.5410 F500 ; arch to point 2
+G1 X101.8150 Y137.4940 F500 ; side move pt 2 to pt 3
+G1 X97.9130 Y139.5570 F500 ; arch to pt 4
+G1 X94.3630 Y141.3490 F500 ; arch to pt 4
+G1 X90.7800 Y143.0740 F500 ; arch to pt 4
+G1 X86.7680 Y144.9150 F500 ; arch to pt 4
+G1 X91.7220 Y154.9610 F500 ; move to pt1
+G0 X117.7830 Y140.7990
+G1 X121.2380 Y138.6220 F500 ; pad 1-5, offset 0.1
+G1 X124.5730 Y136.4360 F500 ; arch to point 2
+G1 X127.8680 Y134.1920 F500 ; arch to point 2
+G1 X131.2010 Y131.8330 F500 ; arch to point 2
+G1 X125.3340 Y123.0520 F500 ; side move pt 2 to pt 3
+G1 X122.0000 Y125.4170 F500 ; arch to pt 4
+G1 X118.7090 Y127.6610 F500 ; arch to pt 4
+G1 X115.3770 Y129.8430 F500 ; arch to pt 4
+G1 X111.9160 Y132.0170 F500 ; arch to pt 4
+G1 X117.7830 Y140.7990 F500 ; move to pt1
+G0 X117.7600 Y140.9080
+G1 X121.2820 Y138.6890 F500 ; pad 1-5, offset 0.18
+G1 X124.6170 Y136.5030 F500 ; arch to point 2
+G1 X127.9140 Y134.2580 F500 ; arch to point 2
+G1 X131.3110 Y131.8530 F500 ; arch to point 2
+G1 X125.3550 Y122.9390 F500 ; side move pt 2 to pt 3
+G1 X121.9550 Y125.3510 F500 ; arch to pt 4
+G1 X118.6650 Y127.5940 F500 ; arch to pt 4
+G1 X115.3330 Y129.7760 F500 ; arch to pt 4
+G1 X111.8040 Y131.9940 F500 ; arch to pt 4
+G1 X117.7600 Y140.9080 F500 ; move to pt1
+G0 X117.7370 Y141.0170
+G1 X121.3250 Y138.7570 F500 ; pad 1-5, offset 0.26
+G1 X124.6620 Y136.5690 F500 ; arch to point 2
+G1 X127.9600 Y134.3230 F500 ; arch to point 2
+G1 X131.4210 Y131.8740 F500 ; arch to point 2
+G1 X125.3760 Y122.8260 F500 ; side move pt 2 to pt 3
+G1 X121.9090 Y125.2860 F500 ; arch to pt 4
+G1 X118.6200 Y127.5280 F500 ; arch to pt 4
+G1 X115.2910 Y129.7080 F500 ; arch to pt 4
+G1 X111.6920 Y131.9700 F500 ; arch to pt 4
+G1 X117.7370 Y141.0170 F500 ; move to pt1
+G0 X117.7140 Y141.1270
+G1 X121.3680 Y138.8240 F500 ; pad 1-5, offset 0.34
+G1 X124.7060 Y136.6360 F500 ; arch to point 2
+G1 X128.0050 Y134.3890 F500 ; arch to point 2
+G1 X131.5310 Y131.8940 F500 ; arch to point 2
+G1 X125.3960 Y122.7130 F500 ; side move pt 2 to pt 3
+G1 X121.8640 Y125.2200 F500 ; arch to pt 4
+G1 X118.5760 Y127.4610 F500 ; arch to pt 4
+G1 X115.2470 Y129.6410 F500 ; arch to pt 4
+G1 X111.5790 Y131.9450 F500 ; arch to pt 4
+G1 X117.7140 Y141.1270 F500 ; move to pt1
+G0 X117.6900 Y141.2360
+G1 X121.4120 Y138.8910 F500 ; pad 1-5, offset 0.42
+G1 X124.7510 Y136.7020 F500 ; arch to point 2
+G1 X128.0500 Y134.4550 F500 ; arch to point 2
+G1 X131.6410 Y131.9140 F500 ; arch to point 2
+G1 X125.4170 Y122.6000 F500 ; side move pt 2 to pt 3
+G1 X121.8180 Y125.1550 F500 ; arch to pt 4
+G1 X118.5310 Y127.3950 F500 ; arch to pt 4
+G1 X115.2040 Y129.5740 F500 ; arch to pt 4
+G1 X111.4670 Y131.9220 F500 ; arch to pt 4
+G1 X117.6900 Y141.2360 F500 ; move to pt1
+G0 X141.6800 Y123.7930
+G1 X144.8210 Y121.1840 F500 ; pad 1-6, offset 0.1
+G1 X147.8420 Y118.5810 F500 ; arch to point 2
+G1 X150.8160 Y115.9260 F500 ; arch to point 2
+G1 X153.8130 Y113.1520 F500 ; arch to point 2
+G1 X146.8490 Y105.2120 F500 ; side move pt 2 to pt 3
+G1 X143.8530 Y107.9920 F500 ; arch to pt 4
+G1 X140.8830 Y110.6460 F500 ; arch to pt 4
+G1 X137.8640 Y113.2450 F500 ; arch to pt 4
+G1 X134.7160 Y115.8520 F500 ; arch to pt 4
+G1 X141.6800 Y123.7930 F500 ; move to pt1
+G0 X141.6710 Y123.9040
+G1 X144.8730 Y121.2450 F500 ; pad 1-6, offset 0.18
+G1 X147.8950 Y118.6410 F500 ; arch to point 2
+G1 X150.8700 Y115.9860 F500 ; arch to point 2
+G1 X153.9240 Y113.1580 F500 ; arch to point 2
+G1 X146.8560 Y105.0970 F500 ; side move pt 2 to pt 3
+G1 X143.8000 Y107.9330 F500 ; arch to pt 4
+G1 X140.8300 Y110.5860 F500 ; arch to pt 4
+G1 X137.8120 Y113.1840 F500 ; arch to pt 4
+G1 X134.6020 Y115.8430 F500 ; arch to pt 4
+G1 X141.6710 Y123.9040 F500 ; move to pt1
+G0 X141.6620 Y124.0150
+G1 X144.9240 Y121.3060 F500 ; pad 1-6, offset 0.26
+G1 X147.9470 Y118.7020 F500 ; arch to point 2
+G1 X150.9240 Y116.0440 F500 ; arch to point 2
+G1 X154.0360 Y113.1640 F500 ; arch to point 2
+G1 X146.8620 Y104.9830 F500 ; side move pt 2 to pt 3
+G1 X143.7460 Y107.8740 F500 ; arch to pt 4
+G1 X140.7780 Y110.5260 F500 ; arch to pt 4
+G1 X137.7610 Y113.1220 F500 ; arch to pt 4
+G1 X134.4880 Y115.8350 F500 ; arch to pt 4
+G1 X141.6620 Y124.0150 F500 ; move to pt1
+G0 X141.6530 Y124.1270
+G1 X144.9760 Y121.3670 F500 ; pad 1-6, offset 0.34
+G1 X148.0000 Y118.7620 F500 ; arch to point 2
+G1 X150.9780 Y116.1040 F500 ; arch to point 2
+G1 X154.1480 Y113.1700 F500 ; arch to point 2
+G1 X146.8670 Y104.8680 F500 ; side move pt 2 to pt 3
+G1 X143.6920 Y107.8150 F500 ; arch to pt 4
+G1 X140.7250 Y110.4660 F500 ; arch to pt 4
+G1 X137.7090 Y113.0620 F500 ; arch to pt 4
+G1 X134.3730 Y115.8250 F500 ; arch to pt 4
+G1 X141.6530 Y124.1270 F500 ; move to pt1
+G0 X141.6450 Y124.2380
+G1 X145.0280 Y121.4280 F500 ; pad 1-6, offset 0.42
+G1 X148.0530 Y118.8220 F500 ; arch to point 2
+G1 X151.0310 Y116.1630 F500 ; arch to point 2
+G1 X154.2590 Y113.1760 F500 ; arch to point 2
+G1 X146.8730 Y104.7530 F500 ; side move pt 2 to pt 3
+G1 X143.6380 Y107.7560 F500 ; arch to pt 4
+G1 X140.6720 Y110.4060 F500 ; arch to pt 4
+G1 X137.6580 Y113.0000 F500 ; arch to pt 4
+G1 X134.2590 Y115.8160 F500 ; arch to pt 4
+G1 X141.6450 Y124.2380 F500 ; move to pt1
+G0 X163.1520 Y103.8130
+G1 X165.9260 Y100.8160 F500 ; pad 1-7, offset 0.1
+G1 X168.5810 Y97.8420 F500 ; arch to point 2
+G1 X171.1840 Y94.8210 F500 ; arch to point 2
+G1 X173.7930 Y91.6800 F500 ; arch to point 2
+G1 X165.8520 Y84.7160 F500 ; side move pt 2 to pt 3
+G1 X163.2450 Y87.8640 F500 ; arch to pt 4
+G1 X160.6460 Y90.8830 F500 ; arch to pt 4
+G1 X157.9920 Y93.8530 F500 ; arch to pt 4
+G1 X155.2120 Y96.8490 F500 ; arch to pt 4
+G1 X163.1520 Y103.8130 F500 ; move to pt1
+G0 X163.1580 Y103.9240
+G1 X165.9860 Y100.8700 F500 ; pad 1-7, offset 0.18
+G1 X168.6410 Y97.8950 F500 ; arch to point 2
+G1 X171.2450 Y94.8730 F500 ; arch to point 2
+G1 X173.9040 Y91.6710 F500 ; arch to point 2
+G1 X165.8430 Y84.6020 F500 ; side move pt 2 to pt 3
+G1 X163.1840 Y87.8120 F500 ; arch to pt 4
+G1 X160.5860 Y90.8300 F500 ; arch to pt 4
+G1 X157.9330 Y93.8000 F500 ; arch to pt 4
+G1 X155.0970 Y96.8560 F500 ; arch to pt 4
+G1 X163.1580 Y103.9240 F500 ; move to pt1
+G0 X163.1640 Y104.0360
+G1 X166.0440 Y100.9240 F500 ; pad 1-7, offset 0.26
+G1 X168.7020 Y97.9470 F500 ; arch to point 2
+G1 X171.3060 Y94.9240 F500 ; arch to point 2
+G1 X174.0150 Y91.6620 F500 ; arch to point 2
+G1 X165.8350 Y84.4880 F500 ; side move pt 2 to pt 3
+G1 X163.1220 Y87.7610 F500 ; arch to pt 4
+G1 X160.5260 Y90.7780 F500 ; arch to pt 4
+G1 X157.8740 Y93.7460 F500 ; arch to pt 4
+G1 X154.9830 Y96.8620 F500 ; arch to pt 4
+G1 X163.1640 Y104.0360 F500 ; move to pt1
+G0 X163.1700 Y104.1480
+G1 X166.1040 Y100.9780 F500 ; pad 1-7, offset 0.34
+G1 X168.7620 Y98.0000 F500 ; arch to point 2
+G1 X171.3670 Y94.9760 F500 ; arch to point 2
+G1 X174.1270 Y91.6530 F500 ; arch to point 2
+G1 X165.8250 Y84.3730 F500 ; side move pt 2 to pt 3
+G1 X163.0620 Y87.7090 F500 ; arch to pt 4
+G1 X160.4660 Y90.7250 F500 ; arch to pt 4
+G1 X157.8150 Y93.6920 F500 ; arch to pt 4
+G1 X154.8680 Y96.8670 F500 ; arch to pt 4
+G1 X163.1700 Y104.1480 F500 ; move to pt1
+G0 X163.1760 Y104.2590
+G1 X166.1630 Y101.0310 F500 ; pad 1-7, offset 0.42
+G1 X168.8220 Y98.0530 F500 ; arch to point 2
+G1 X171.4280 Y95.0280 F500 ; arch to point 2
+G1 X174.2380 Y91.6450 F500 ; arch to point 2
+G1 X165.8160 Y84.2590 F500 ; side move pt 2 to pt 3
+G1 X163.0000 Y87.6580 F500 ; arch to pt 4
+G1 X160.4060 Y90.6720 F500 ; arch to pt 4
+G1 X157.7560 Y93.6380 F500 ; arch to pt 4
+G1 X154.7530 Y96.8730 F500 ; arch to pt 4
+G1 X163.1760 Y104.2590 F500 ; move to pt1
+G0 X181.8330 Y81.2010
+G1 X184.1920 Y77.8680 F500 ; pad 1-8, offset 0.1
+G1 X186.4360 Y74.5730 F500 ; arch to point 2
+G1 X188.6220 Y71.2380 F500 ; arch to point 2
+G1 X190.7990 Y67.7830 F500 ; arch to point 2
+G1 X182.0170 Y61.9160 F500 ; side move pt 2 to pt 3
+G1 X179.8430 Y65.3770 F500 ; arch to pt 4
+G1 X177.6610 Y68.7090 F500 ; arch to pt 4
+G1 X175.4170 Y72.0000 F500 ; arch to pt 4
+G1 X173.0520 Y75.3340 F500 ; arch to pt 4
+G1 X181.8330 Y81.2010 F500 ; move to pt1
+G0 X181.8530 Y81.3110
+G1 X184.2580 Y77.9140 F500 ; pad 1-8, offset 0.18
+G1 X186.5030 Y74.6170 F500 ; arch to point 2
+G1 X188.6890 Y71.2820 F500 ; arch to point 2
+G1 X190.9080 Y67.7600 F500 ; arch to point 2
+G1 X181.9940 Y61.8040 F500 ; side move pt 2 to pt 3
+G1 X179.7760 Y65.3330 F500 ; arch to pt 4
+G1 X177.5940 Y68.6650 F500 ; arch to pt 4
+G1 X175.3510 Y71.9550 F500 ; arch to pt 4
+G1 X172.9390 Y75.3550 F500 ; arch to pt 4
+G1 X181.8530 Y81.3110 F500 ; move to pt1
+G0 X181.8740 Y81.4210
+G1 X184.3230 Y77.9600 F500 ; pad 1-8, offset 0.26
+G1 X186.5690 Y74.6620 F500 ; arch to point 2
+G1 X188.7570 Y71.3250 F500 ; arch to point 2
+G1 X191.0170 Y67.7370 F500 ; arch to point 2
+G1 X181.9700 Y61.6920 F500 ; side move pt 2 to pt 3
+G1 X179.7080 Y65.2910 F500 ; arch to pt 4
+G1 X177.5280 Y68.6200 F500 ; arch to pt 4
+G1 X175.2860 Y71.9090 F500 ; arch to pt 4
+G1 X172.8260 Y75.3760 F500 ; arch to pt 4
+G1 X181.8740 Y81.4210 F500 ; move to pt1
+G0 X181.8940 Y81.5310
+G1 X184.3890 Y78.0050 F500 ; pad 1-8, offset 0.34
+G1 X186.6360 Y74.7060 F500 ; arch to point 2
+G1 X188.8240 Y71.3680 F500 ; arch to point 2
+G1 X191.1270 Y67.7140 F500 ; arch to point 2
+G1 X181.9450 Y61.5790 F500 ; side move pt 2 to pt 3
+G1 X179.6410 Y65.2470 F500 ; arch to pt 4
+G1 X177.4610 Y68.5760 F500 ; arch to pt 4
+G1 X175.2200 Y71.8640 F500 ; arch to pt 4
+G1 X172.7130 Y75.3960 F500 ; arch to pt 4
+G1 X181.8940 Y81.5310 F500 ; move to pt1
+G0 X181.9140 Y81.6410
+G1 X184.4550 Y78.0500 F500 ; pad 1-8, offset 0.42
+G1 X186.7020 Y74.7510 F500 ; arch to point 2
+G1 X188.8910 Y71.4120 F500 ; arch to point 2
+G1 X191.2360 Y67.6900 F500 ; arch to point 2
+G1 X181.9220 Y61.4670 F500 ; side move pt 2 to pt 3
+G1 X179.5740 Y65.2040 F500 ; arch to pt 4
+G1 X177.3950 Y68.5310 F500 ; arch to pt 4
+G1 X175.1550 Y71.8180 F500 ; arch to pt 4
+G1 X172.6000 Y75.4170 F500 ; arch to pt 4
+G1 X181.9140 Y81.6410 F500 ; move to pt1
+G0 X197.4020 Y56.3450
+G1 X199.3060 Y52.7330 F500 ; pad 1-9, offset 0.1
+G1 X201.1010 Y49.1720 F500 ; arch to point 2
+G1 X202.8330 Y45.5810 F500 ; arch to point 2
+G1 X204.5400 Y41.8710 F500 ; arch to point 2
+G1 X195.0680 Y37.2000 F500 ; side move pt 2 to pt 3
+G1 X193.3640 Y40.9160 F500 ; arch to pt 4
+G1 X191.6360 Y44.5040 F500 ; arch to pt 4
+G1 X189.8410 Y48.0600 F500 ; arch to pt 4
+G1 X187.9310 Y51.6740 F500 ; arch to pt 4
+G1 X197.4020 Y56.3450 F500 ; move to pt1
+G0 X197.4370 Y56.4510
+G1 X199.3780 Y52.7690 F500 ; pad 1-9, offset 0.18
+G1 X201.1730 Y49.2080 F500 ; arch to point 2
+G1 X202.9050 Y45.6150 F500 ; arch to point 2
+G1 X204.6450 Y41.8340 F500 ; arch to point 2
+G1 X195.0300 Y37.0920 F500 ; side move pt 2 to pt 3
+G1 X193.2920 Y40.8810 F500 ; arch to pt 4
+G1 X191.5640 Y44.4690 F500 ; arch to pt 4
+G1 X189.7700 Y48.0240 F500 ; arch to pt 4
+G1 X187.8220 Y51.7090 F500 ; arch to pt 4
+G1 X197.4370 Y56.4510 F500 ; move to pt1
+G0 X197.4720 Y56.5570
+G1 X199.4490 Y52.8060 F500 ; pad 1-9, offset 0.26
+G1 X201.2450 Y49.2430 F500 ; arch to point 2
+G1 X202.9780 Y45.6490 F500 ; arch to point 2
+G1 X204.7510 Y41.7970 F500 ; arch to point 2
+G1 X194.9920 Y36.9840 F500 ; side move pt 2 to pt 3
+G1 X193.2190 Y40.8480 F500 ; arch to pt 4
+G1 X191.4920 Y44.4340 F500 ; arch to pt 4
+G1 X189.6990 Y47.9870 F500 ; arch to pt 4
+G1 X187.7130 Y51.7450 F500 ; arch to pt 4
+G1 X197.4720 Y56.5570 F500 ; move to pt1
+G0 X197.5060 Y56.6640
+G1 X199.5200 Y52.8420 F500 ; pad 1-9, offset 0.34
+G1 X201.3170 Y49.2780 F500 ; arch to point 2
+G1 X203.0500 Y45.6830 F500 ; arch to point 2
+G1 X204.8560 Y41.7590 F500 ; arch to point 2
+G1 X194.9530 Y36.8760 F500 ; side move pt 2 to pt 3
+G1 X193.1470 Y40.8130 F500 ; arch to pt 4
+G1 X191.4200 Y44.3980 F500 ; arch to pt 4
+G1 X189.6270 Y47.9500 F500 ; arch to pt 4
+G1 X187.6030 Y51.7800 F500 ; arch to pt 4
+G1 X197.5060 Y56.6640 F500 ; move to pt1
+G0 X197.5410 Y56.7700
+G1 X199.5910 Y52.8790 F500 ; pad 1-9, offset 0.42
+G1 X201.3880 Y49.3140 F500 ; arch to point 2
+G1 X203.1230 Y45.7180 F500 ; arch to point 2
+G1 X204.9610 Y41.7220 F500 ; arch to point 2
+G1 X194.9150 Y36.7680 F500 ; side move pt 2 to pt 3
+G1 X193.0740 Y40.7800 F500 ; arch to pt 4
+G1 X191.3490 Y44.3630 F500 ; arch to pt 4
+G1 X189.5570 Y47.9130 F500 ; arch to pt 4
+G1 X187.4940 Y51.8150 F500 ; arch to pt 4
+G1 X197.5410 Y56.7700 F500 ; move to pt1
+G0 X209.5940 Y29.6690
+G1 X211.0110 Y25.8390 F500 ; pad 1-10, offset 0.1
+G1 X212.3250 Y22.0750 F500 ; arch to point 2
+G1 X213.5740 Y18.2880 F500 ; arch to point 2
+G1 X214.7820 Y14.3870 F500 ; arch to point 2
+G1 X204.7810 Y10.9930 F500 ; side move pt 2 to pt 3
+G1 X203.5770 Y14.8990 F500 ; arch to pt 4
+G1 X202.3320 Y18.6820 F500 ; arch to pt 4
+G1 X201.0160 Y22.4420 F500 ; arch to pt 4
+G1 X199.5940 Y26.2740 F500 ; arch to pt 4
+G1 X209.5940 Y29.6690 F500 ; move to pt1
+G0 X209.6430 Y29.7700
+G1 X211.0860 Y25.8660 F500 ; pad 1-10, offset 0.18
+G1 X212.4010 Y22.1000 F500 ; arch to point 2
+G1 X213.6500 Y18.3130 F500 ; arch to point 2
+G1 X214.8810 Y14.3370 F500 ; arch to point 2
+G1 X204.7290 Y10.8910 F500 ; side move pt 2 to pt 3
+G1 X203.5010 Y14.8740 F500 ; arch to pt 4
+G1 X202.2560 Y18.6570 F500 ; arch to pt 4
+G1 X200.9410 Y22.4150 F500 ; arch to pt 4
+G1 X199.4910 Y26.3240 F500 ; arch to pt 4
+G1 X209.6430 Y29.7700 F500 ; move to pt1
+G0 X209.6910 Y29.8710
+G1 X211.1610 Y25.8930 F500 ; pad 1-10, offset 0.26
+G1 X212.4770 Y22.1260 F500 ; arch to point 2
+G1 X213.7260 Y18.3370 F500 ; arch to point 2
+G1 X214.9810 Y14.2860 F500 ; arch to point 2
+G1 X204.6770 Y10.7880 F500 ; side move pt 2 to pt 3
+G1 X203.4240 Y14.8500 F500 ; arch to pt 4
+G1 X202.1800 Y18.6310 F500 ; arch to pt 4
+G1 X200.8660 Y22.3880 F500 ; arch to pt 4
+G1 X199.3870 Y26.3730 F500 ; arch to pt 4
+G1 X209.6910 Y29.8710 F500 ; move to pt1
+G0 X209.7390 Y29.9710
+G1 X211.2370 Y25.9200 F500 ; pad 1-10, offset 0.34
+G1 X212.5530 Y22.1520 F500 ; arch to point 2
+G1 X213.8020 Y18.3610 F500 ; arch to point 2
+G1 X215.0810 Y14.2350 F500 ; arch to point 2
+G1 X204.6250 Y10.6860 F500 ; side move pt 2 to pt 3
+G1 X203.3480 Y14.8250 F500 ; arch to pt 4
+G1 X202.1040 Y18.6050 F500 ; arch to pt 4
+G1 X200.7900 Y22.3610 F500 ; arch to pt 4
+G1 X199.2830 Y26.4220 F500 ; arch to pt 4
+G1 X209.7390 Y29.9710 F500 ; move to pt1
+G0 X209.7870 Y30.0720
+G1 X211.3120 Y25.9470 F500 ; pad 1-10, offset 0.42
+G1 X212.6280 Y22.1780 F500 ; arch to point 2
+G1 X213.8780 Y18.3860 F500 ; arch to point 2
+G1 X215.1800 Y14.1850 F500 ; arch to point 2
+G1 X204.5730 Y10.5840 F500 ; side move pt 2 to pt 3
+G1 X203.2720 Y14.8020 F500 ; arch to pt 4
+G1 X202.0280 Y18.5790 F500 ; arch to pt 4
+G1 X200.7150 Y22.3330 F500 ; arch to pt 4
+G1 X199.1790 Y26.4710 F500 ; arch to pt 4
+G1 X209.7870 Y30.0720 F500 ; move to pt1
+G0 X218.2000 Y1.6300
+G1 X219.1040 Y-2.3520 F500 ; pad 1-11, offset 0.1
+G1 X219.9170 Y-6.2560 F500 ; arch to point 2
+G1 X220.6600 Y-10.1730 F500 ; arch to point 2
+G1 X221.3490 Y-14.1980 F500 ; arch to point 2
+G1 X210.9900 Y-16.2580 F500 ; side move pt 2 to pt 3
+G1 X210.3060 Y-12.2290 F500 ; arch to pt 4
+G1 X209.5650 Y-8.3150 F500 ; arch to pt 4
+G1 X208.7520 Y-4.4160 F500 ; arch to pt 4
+G1 X207.8420 Y-0.4310 F500 ; arch to pt 4
+G1 X218.2000 Y1.6300 F500 ; move to pt1
+G0 X218.2610 Y1.7230
+G1 X219.1830 Y-2.3360 F500 ; pad 1-11, offset 0.18
+G1 X219.9950 Y-6.2400 F500 ; arch to point 2
+G1 X220.7390 Y-10.1580 F500 ; arch to point 2
+G1 X221.4410 Y-14.2610 F500 ; arch to point 2
+G1 X210.9260 Y-16.3530 F500 ; side move pt 2 to pt 3
+G1 X210.2270 Y-12.2430 F500 ; arch to pt 4
+G1 X209.4870 Y-8.3300 F500 ; arch to pt 4
+G1 X208.6740 Y-4.4320 F500 ; arch to pt 4
+G1 X207.7460 Y-0.3680 F500 ; arch to pt 4
+G1 X218.2610 Y1.7230 F500 ; move to pt1
+G0 X218.3220 Y1.8170
+G1 X219.2610 Y-2.3180 F500 ; pad 1-11, offset 0.26
+G1 X220.0740 Y-6.2250 F500 ; arch to point 2
+G1 X220.8180 Y-10.1450 F500 ; arch to point 2
+G1 X221.5330 Y-14.3250 F500 ; arch to point 2
+G1 X210.8610 Y-16.4470 F500 ; side move pt 2 to pt 3
+G1 X210.1490 Y-12.2570 F500 ; arch to pt 4
+G1 X209.4080 Y-8.3460 F500 ; arch to pt 4
+G1 X208.5960 Y-4.4500 F500 ; arch to pt 4
+G1 X207.6500 Y-0.3060 F500 ; arch to pt 4
+G1 X218.3220 Y1.8170 F500 ; move to pt1
+G0 X218.3830 Y1.9110
+G1 X219.3390 Y-2.3020 F500 ; pad 1-11, offset 0.34
+G1 X220.1520 Y-6.2090 F500 ; arch to point 2
+G1 X220.8960 Y-10.1300 F500 ; arch to point 2
+G1 X221.6250 Y-14.3880 F500 ; arch to point 2
+G1 X210.7950 Y-16.5420 F500 ; side move pt 2 to pt 3
+G1 X210.0700 Y-12.2710 F500 ; arch to pt 4
+G1 X209.3300 Y-8.3620 F500 ; arch to pt 4
+G1 X208.5170 Y-4.4660 F500 ; arch to pt 4
+G1 X207.5530 Y-0.2430 F500 ; arch to pt 4
+G1 X218.3830 Y1.9110 F500 ; move to pt1
+G0 X218.4440 Y2.0050
+G1 X219.4170 Y-2.2850 F500 ; pad 1-11, offset 0.42
+G1 X220.2300 Y-6.1930 F500 ; arch to point 2
+G1 X220.9750 Y-10.1160 F500 ; arch to point 2
+G1 X221.7170 Y-14.4510 F500 ; arch to point 2
+G1 X210.7300 Y-16.6370 F500 ; side move pt 2 to pt 3
+G1 X209.9910 Y-12.2850 F500 ; arch to pt 4
+G1 X209.2520 Y-8.3770 F500 ; arch to pt 4
+G1 X208.4390 Y-4.4840 F500 ; arch to pt 4
+G1 X207.4570 Y-0.1810 F500 ; arch to pt 4
+G1 X218.4440 Y2.0050 F500 ; move to pt1
+G0 X223.0720 Y-27.2930
+G1 X223.4490 Y-31.3590 F500 ; pad 1-12, offset 0.1
+G1 X223.7450 Y-35.3350 F500 ; arch to point 2
+G1 X223.9710 Y-39.3160 F500 ; arch to point 2
+G1 X224.1280 Y-43.3960 F500 ; arch to point 2
+G1 X213.5900 Y-44.0870 F500 ; side move pt 2 to pt 3
+G1 X213.4370 Y-40.0020 F500 ; arch to pt 4
+G1 X213.2140 Y-36.0250 F500 ; arch to pt 4
+G1 X212.9160 Y-32.0530 F500 ; arch to pt 4
+G1 X212.5340 Y-27.9830 F500 ; arch to pt 4
+G1 X223.0720 Y-27.2930 F500 ; move to pt1
+G0 X223.1450 Y-27.2080
+G1 X223.5290 Y-31.3530 F500 ; pad 1-12, offset 0.18
+G1 X223.8250 Y-35.3300 F500 ; arch to point 2
+G1 X224.0510 Y-39.3120 F500 ; arch to point 2
+G1 X224.2110 Y-43.4710 F500 ; arch to point 2
+G1 X213.5130 Y-44.1720 F500 ; side move pt 2 to pt 3
+G1 X213.3570 Y-40.0060 F500 ; arch to pt 4
+G1 X213.1340 Y-36.0300 F500 ; arch to pt 4
+G1 X212.8360 Y-32.0590 F500 ; arch to pt 4
+G1 X212.4470 Y-27.9090 F500 ; arch to pt 4
+G1 X223.1450 Y-27.2080 F500 ; move to pt1
+G0 X223.2180 Y-27.1230
+G1 X223.6090 Y-31.3450 F500 ; pad 1-12, offset 0.26
+G1 X223.9050 Y-35.3250 F500 ; arch to point 2
+G1 X224.1310 Y-39.3080 F500 ; arch to point 2
+G1 X224.2940 Y-43.5460 F500 ; arch to point 2
+G1 X213.4360 Y-44.2570 F500 ; side move pt 2 to pt 3
+G1 X213.2770 Y-40.0100 F500 ; arch to pt 4
+G1 X213.0540 Y-36.0360 F500 ; arch to pt 4
+G1 X212.7570 Y-32.0670 F500 ; arch to pt 4
+G1 X212.3600 Y-27.8350 F500 ; arch to pt 4
+G1 X223.2180 Y-27.1230 F500 ; move to pt1
+G0 X223.2900 Y-27.0380
+G1 X223.6880 Y-31.3390 F500 ; pad 1-12, offset 0.34
+G1 X223.9840 Y-35.3190 F500 ; arch to point 2
+G1 X224.2110 Y-39.3040 F500 ; arch to point 2
+G1 X224.3770 Y-43.6200 F500 ; arch to point 2
+G1 X213.3590 Y-44.3430 F500 ; side move pt 2 to pt 3
+G1 X213.1970 Y-40.0140 F500 ; arch to pt 4
+G1 X212.9740 Y-36.0410 F500 ; arch to pt 4
+G1 X212.6770 Y-32.0730 F500 ; arch to pt 4
+G1 X212.2720 Y-27.7600 F500 ; arch to pt 4
+G1 X223.2900 Y-27.0380 F500 ; move to pt1
+G0 X223.3630 Y-26.9530
+G1 X223.7680 Y-31.3330 F500 ; pad 1-12, offset 0.42
+G1 X224.0640 Y-35.3140 F500 ; arch to point 2
+G1 X224.2900 Y-39.3000 F500 ; arch to point 2
+G1 X224.4600 Y-43.6950 F500 ; arch to point 2
+G1 X213.2820 Y-44.4280 F500 ; side move pt 2 to pt 3
+G1 X213.1170 Y-40.0170 F500 ; arch to pt 4
+G1 X212.8940 Y-36.0460 F500 ; arch to pt 4
+G1 X212.5970 Y-32.0800 F500 ; arch to pt 4
+G1 X212.1850 Y-27.6860 F500 ; arch to pt 4
+G1 X223.3630 Y-26.9530 F500 ; move to pt1
+G0 X224.1280 Y-56.6040
+G1 X223.9710 Y-60.6840 F500 ; pad 1-13, offset 0.1
+G1 X223.7450 Y-64.6650 F500 ; arch to point 2
+G1 X223.4490 Y-68.6410 F500 ; arch to point 2
+G1 X223.0720 Y-72.7070 F500 ; arch to point 2
+G1 X212.5340 Y-72.0170 F500 ; side move pt 2 to pt 3
+G1 X212.9160 Y-67.9470 F500 ; arch to pt 4
+G1 X213.2140 Y-63.9750 F500 ; arch to pt 4
+G1 X213.4370 Y-59.9980 F500 ; arch to pt 4
+G1 X213.5900 Y-55.9130 F500 ; arch to pt 4
+G1 X224.1280 Y-56.6040 F500 ; move to pt1
+G0 X224.2110 Y-56.5290
+G1 X224.0510 Y-60.6880 F500 ; pad 1-13, offset 0.18
+G1 X223.8250 Y-64.6700 F500 ; arch to point 2
+G1 X223.5290 Y-68.6470 F500 ; arch to point 2
+G1 X223.1450 Y-72.7920 F500 ; arch to point 2
+G1 X212.4470 Y-72.0910 F500 ; side move pt 2 to pt 3
+G1 X212.8360 Y-67.9410 F500 ; arch to pt 4
+G1 X213.1340 Y-63.9700 F500 ; arch to pt 4
+G1 X213.3570 Y-59.9940 F500 ; arch to pt 4
+G1 X213.5130 Y-55.8280 F500 ; arch to pt 4
+G1 X224.2110 Y-56.5290 F500 ; move to pt1
+G0 X224.2940 Y-56.4540
+G1 X224.1310 Y-60.6920 F500 ; pad 1-13, offset 0.26
+G1 X223.9050 Y-64.6750 F500 ; arch to point 2
+G1 X223.6090 Y-68.6550 F500 ; arch to point 2
+G1 X223.2180 Y-72.8770 F500 ; arch to point 2
+G1 X212.3600 Y-72.1650 F500 ; side move pt 2 to pt 3
+G1 X212.7570 Y-67.9330 F500 ; arch to pt 4
+G1 X213.0540 Y-63.9640 F500 ; arch to pt 4
+G1 X213.2770 Y-59.9900 F500 ; arch to pt 4
+G1 X213.4360 Y-55.7430 F500 ; arch to pt 4
+G1 X224.2940 Y-56.4540 F500 ; move to pt1
+G0 X224.3770 Y-56.3800
+G1 X224.2110 Y-60.6960 F500 ; pad 1-13, offset 0.34
+G1 X223.9840 Y-64.6810 F500 ; arch to point 2
+G1 X223.6880 Y-68.6610 F500 ; arch to point 2
+G1 X223.2900 Y-72.9620 F500 ; arch to point 2
+G1 X212.2720 Y-72.2400 F500 ; side move pt 2 to pt 3
+G1 X212.6770 Y-67.9270 F500 ; arch to pt 4
+G1 X212.9740 Y-63.9590 F500 ; arch to pt 4
+G1 X213.1970 Y-59.9860 F500 ; arch to pt 4
+G1 X213.3590 Y-55.6570 F500 ; arch to pt 4
+G1 X224.3770 Y-56.3800 F500 ; move to pt1
+G0 X224.4600 Y-56.3050
+G1 X224.2900 Y-60.7000 F500 ; pad 1-13, offset 0.42
+G1 X224.0640 Y-64.6860 F500 ; arch to point 2
+G1 X223.7680 Y-68.6670 F500 ; arch to point 2
+G1 X223.3630 Y-73.0470 F500 ; arch to point 2
+G1 X212.1850 Y-72.3140 F500 ; side move pt 2 to pt 3
+G1 X212.5970 Y-67.9200 F500 ; arch to pt 4
+G1 X212.8940 Y-63.9540 F500 ; arch to pt 4
+G1 X213.1170 Y-59.9830 F500 ; arch to pt 4
+G1 X213.2820 Y-55.5720 F500 ; arch to pt 4
+G1 X224.4600 Y-56.3050 F500 ; move to pt1
+G0 X221.3490 Y-85.8020
+G1 X220.6600 Y-89.8270 F500 ; pad 1-14, offset 0.1
+G1 X219.9170 Y-93.7440 F500 ; arch to point 2
+G1 X219.1040 Y-97.6480 F500 ; arch to point 2
+G1 X218.2000 Y-101.6300 F500 ; arch to point 2
+G1 X207.8420 Y-99.5690 F500 ; side move pt 2 to pt 3
+G1 X208.7520 Y-95.5840 F500 ; arch to pt 4
+G1 X209.5650 Y-91.6850 F500 ; arch to pt 4
+G1 X210.3060 Y-87.7710 F500 ; arch to pt 4
+G1 X210.9900 Y-83.7420 F500 ; arch to pt 4
+G1 X221.3490 Y-85.8020 F500 ; move to pt1
+G0 X221.4410 Y-85.7390
+G1 X220.7390 Y-89.8420 F500 ; pad 1-14, offset 0.18
+G1 X219.9950 Y-93.7600 F500 ; arch to point 2
+G1 X219.1830 Y-97.6640 F500 ; arch to point 2
+G1 X218.2610 Y-101.7230 F500 ; arch to point 2
+G1 X207.7460 Y-99.6320 F500 ; side move pt 2 to pt 3
+G1 X208.6740 Y-95.5680 F500 ; arch to pt 4
+G1 X209.4870 Y-91.6700 F500 ; arch to pt 4
+G1 X210.2270 Y-87.7570 F500 ; arch to pt 4
+G1 X210.9260 Y-83.6470 F500 ; arch to pt 4
+G1 X221.4410 Y-85.7390 F500 ; move to pt1
+G0 X221.5330 Y-85.6750
+G1 X220.8180 Y-89.8550 F500 ; pad 1-14, offset 0.26
+G1 X220.0740 Y-93.7750 F500 ; arch to point 2
+G1 X219.2610 Y-97.6820 F500 ; arch to point 2
+G1 X218.3220 Y-101.8170 F500 ; arch to point 2
+G1 X207.6500 Y-99.6940 F500 ; side move pt 2 to pt 3
+G1 X208.5960 Y-95.5500 F500 ; arch to pt 4
+G1 X209.4080 Y-91.6540 F500 ; arch to pt 4
+G1 X210.1490 Y-87.7430 F500 ; arch to pt 4
+G1 X210.8610 Y-83.5530 F500 ; arch to pt 4
+G1 X221.5330 Y-85.6750 F500 ; move to pt1
+G0 X221.6250 Y-85.6120
+G1 X220.8960 Y-89.8700 F500 ; pad 1-14, offset 0.34
+G1 X220.1520 Y-93.7910 F500 ; arch to point 2
+G1 X219.3390 Y-97.6980 F500 ; arch to point 2
+G1 X218.3830 Y-101.9110 F500 ; arch to point 2
+G1 X207.5530 Y-99.7570 F500 ; side move pt 2 to pt 3
+G1 X208.5170 Y-95.5340 F500 ; arch to pt 4
+G1 X209.3300 Y-91.6380 F500 ; arch to pt 4
+G1 X210.0700 Y-87.7290 F500 ; arch to pt 4
+G1 X210.7950 Y-83.4580 F500 ; arch to pt 4
+G1 X221.6250 Y-85.6120 F500 ; move to pt1
+G0 X221.7170 Y-85.5490
+G1 X220.9750 Y-89.8840 F500 ; pad 1-14, offset 0.42
+G1 X220.2300 Y-93.8070 F500 ; arch to point 2
+G1 X219.4170 Y-97.7150 F500 ; arch to point 2
+G1 X218.4440 Y-102.0050 F500 ; arch to point 2
+G1 X207.4570 Y-99.8190 F500 ; side move pt 2 to pt 3
+G1 X208.4390 Y-95.5160 F500 ; arch to pt 4
+G1 X209.2520 Y-91.6230 F500 ; arch to pt 4
+G1 X209.9910 Y-87.7150 F500 ; arch to pt 4
+G1 X210.7300 Y-83.3630 F500 ; arch to pt 4
+G1 X221.7170 Y-85.5490 F500 ; move to pt1
+G0 X214.7820 Y-114.3870
+G1 X213.5740 Y-118.2880 F500 ; pad 1-15, offset 0.1
+G1 X212.3250 Y-122.0750 F500 ; arch to point 2
+G1 X211.0110 Y-125.8390 F500 ; arch to point 2
+G1 X209.5940 Y-129.6690 F500 ; arch to point 2
+G1 X199.5940 Y-126.2740 F500 ; side move pt 2 to pt 3
+G1 X201.0160 Y-122.4420 F500 ; arch to pt 4
+G1 X202.3320 Y-118.6820 F500 ; arch to pt 4
+G1 X203.5770 Y-114.8990 F500 ; arch to pt 4
+G1 X204.7810 Y-110.9930 F500 ; arch to pt 4
+G1 X214.7820 Y-114.3870 F500 ; move to pt1
+G0 X214.8810 Y-114.3370
+G1 X213.6500 Y-118.3130 F500 ; pad 1-15, offset 0.18
+G1 X212.4010 Y-122.1000 F500 ; arch to point 2
+G1 X211.0860 Y-125.8660 F500 ; arch to point 2
+G1 X209.6430 Y-129.7700 F500 ; arch to point 2
+G1 X199.4910 Y-126.3240 F500 ; side move pt 2 to pt 3
+G1 X200.9410 Y-122.4150 F500 ; arch to pt 4
+G1 X202.2560 Y-118.6570 F500 ; arch to pt 4
+G1 X203.5010 Y-114.8740 F500 ; arch to pt 4
+G1 X204.7290 Y-110.8910 F500 ; arch to pt 4
+G1 X214.8810 Y-114.3370 F500 ; move to pt1
+G0 X214.9810 Y-114.2860
+G1 X213.7260 Y-118.3370 F500 ; pad 1-15, offset 0.26
+G1 X212.4770 Y-122.1260 F500 ; arch to point 2
+G1 X211.1610 Y-125.8930 F500 ; arch to point 2
+G1 X209.6910 Y-129.8710 F500 ; arch to point 2
+G1 X199.3870 Y-126.3730 F500 ; side move pt 2 to pt 3
+G1 X200.8660 Y-122.3880 F500 ; arch to pt 4
+G1 X202.1800 Y-118.6310 F500 ; arch to pt 4
+G1 X203.4240 Y-114.8500 F500 ; arch to pt 4
+G1 X204.6770 Y-110.7880 F500 ; arch to pt 4
+G1 X214.9810 Y-114.2860 F500 ; move to pt1
+G0 X215.0810 Y-114.2350
+G1 X213.8020 Y-118.3610 F500 ; pad 1-15, offset 0.34
+G1 X212.5530 Y-122.1520 F500 ; arch to point 2
+G1 X211.2370 Y-125.9200 F500 ; arch to point 2
+G1 X209.7390 Y-129.9710 F500 ; arch to point 2
+G1 X199.2830 Y-126.4220 F500 ; side move pt 2 to pt 3
+G1 X200.7900 Y-122.3610 F500 ; arch to pt 4
+G1 X202.1040 Y-118.6050 F500 ; arch to pt 4
+G1 X203.3480 Y-114.8250 F500 ; arch to pt 4
+G1 X204.6250 Y-110.6860 F500 ; arch to pt 4
+G1 X215.0810 Y-114.2350 F500 ; move to pt1
+G0 X215.1800 Y-114.1850
+G1 X213.8780 Y-118.3860 F500 ; pad 1-15, offset 0.42
+G1 X212.6280 Y-122.1780 F500 ; arch to point 2
+G1 X211.3120 Y-125.9470 F500 ; arch to point 2
+G1 X209.7870 Y-130.0720 F500 ; arch to point 2
+G1 X199.1790 Y-126.4710 F500 ; side move pt 2 to pt 3
+G1 X200.7150 Y-122.3330 F500 ; arch to pt 4
+G1 X202.0280 Y-118.5790 F500 ; arch to pt 4
+G1 X203.2720 Y-114.8020 F500 ; arch to pt 4
+G1 X204.5730 Y-110.5840 F500 ; arch to pt 4
+G1 X215.1800 Y-114.1850 F500 ; move to pt1
+G0 X206.1120 Y-138.2870
+G1 X204.4710 Y-142.0260 F500 ; pad 1-16, offset 0.1
+G1 X202.8010 Y-145.6470 F500 ; arch to point 2
+G1 X201.0690 Y-149.2390 F500 ; arch to point 2
+G1 X199.2280 Y-152.8840 F500 ; arch to point 2
+G1 X189.6760 Y-148.3790 F500 ; side move pt 2 to pt 3
+G1 X191.5230 Y-144.7320 F500 ; arch to pt 4
+G1 X193.2560 Y-141.1450 F500 ; arch to pt 4
+G1 X194.9210 Y-137.5270 F500 ; arch to pt 4
+G1 X196.5600 Y-133.7820 F500 ; arch to pt 4
+G1 X206.1120 Y-138.2870 F500 ; move to pt1
+G0 X206.2170 Y-138.2480
+G1 X204.5430 Y-142.0600 F500 ; pad 1-16, offset 0.18
+G1 X202.8740 Y-145.6820 F500 ; arch to point 2
+G1 X201.1410 Y-149.2740 F500 ; arch to point 2
+G1 X199.2650 Y-152.9890 F500 ; arch to point 2
+G1 X189.5680 Y-148.4160 F500 ; side move pt 2 to pt 3
+G1 X191.4510 Y-144.6970 F500 ; arch to pt 4
+G1 X193.1830 Y-141.1110 F500 ; arch to pt 4
+G1 X194.8490 Y-137.4940 F500 ; arch to pt 4
+G1 X196.5200 Y-133.6750 F500 ; arch to pt 4
+G1 X206.2170 Y-138.2480 F500 ; move to pt1
+G0 X206.3220 Y-138.2090
+G1 X204.6170 Y-142.0920 F500 ; pad 1-16, offset 0.26
+G1 X202.9460 Y-145.7160 F500 ; arch to point 2
+G1 X201.2130 Y-149.3090 F500 ; arch to point 2
+G1 X199.3010 Y-153.0950 F500 ; arch to point 2
+G1 X189.4600 Y-148.4530 F500 ; side move pt 2 to pt 3
+G1 X191.3800 Y-144.6610 F500 ; arch to pt 4
+G1 X193.1110 Y-141.0770 F500 ; arch to pt 4
+G1 X194.7750 Y-137.4620 F500 ; arch to pt 4
+G1 X196.4800 Y-133.5680 F500 ; arch to pt 4
+G1 X206.3220 Y-138.2090 F500 ; move to pt1
+G0 X206.4260 Y-138.1700
+G1 X204.6890 Y-142.1250 F500 ; pad 1-16, offset 0.34
+G1 X203.0190 Y-145.7500 F500 ; arch to point 2
+G1 X201.2840 Y-149.3450 F500 ; arch to point 2
+G1 X199.3380 Y-153.2000 F500 ; arch to point 2
+G1 X189.3510 Y-148.4900 F500 ; side move pt 2 to pt 3
+G1 X191.3080 Y-144.6260 F500 ; arch to pt 4
+G1 X193.0390 Y-141.0430 F500 ; arch to pt 4
+G1 X194.7030 Y-137.4280 F500 ; arch to pt 4
+G1 X196.4390 Y-133.4600 F500 ; arch to pt 4
+G1 X206.4260 Y-138.1700 F500 ; move to pt1
+G0 X206.5310 Y-138.1310
+G1 X204.7620 Y-142.1580 F500 ; pad 1-16, offset 0.42
+G1 X203.0910 Y-145.7840 F500 ; arch to point 2
+G1 X201.3560 Y-149.3800 F500 ; arch to point 2
+G1 X199.3740 Y-153.3060 F500 ; arch to point 2
+G1 X189.2420 Y-148.5280 F500 ; side move pt 2 to pt 3
+G1 X191.2360 Y-144.5900 F500 ; arch to pt 4
+G1 X192.9660 Y-141.0090 F500 ; arch to pt 4
+G1 X194.6290 Y-137.3960 F500 ; arch to pt 4
+G1 X196.3990 Y-133.3530 F500 ; arch to pt 4
+G1 X206.5310 Y-138.1310 F500 ; move to pt1
+M5
+G0 X0 Y0 Z0
