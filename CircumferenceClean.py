@@ -2437,7 +2437,7 @@ class CircumferenceClean:
             # BOTH top and bottom use OUTER diameter for reference points
             # (Inner diameter is only for cleaning passes, not alignment)
             radius = self.outer_diameter / 2
-            
+
             if self.current_position == "top":
                 print(
                     f"Using outer diameter: {self.outer_diameter} mm (radius: {radius} mm)"
