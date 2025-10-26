@@ -1391,10 +1391,13 @@ class CircumferenceClean:
         button_frame = ttk.Frame(ref_frame)
         button_frame.pack(fill="x", pady=(0, 5))
         ttk.Button(button_frame, text="Goto", command=self.goto_position, width=8).pack(
-            side="left", padx=(0, 10)
+            side="left", padx=(0, 5)
         )
         ttk.Button(
             button_frame, text="Set", command=self.capture_position, width=8
+        ).pack(side="left", padx=(0, 5))
+        ttk.Button(
+            button_frame, text="Manual Entry", command=self.manual_entry_position, width=12
         ).pack(side="left")
 
         # Create treeview for table
@@ -2380,6 +2383,82 @@ class CircumferenceClean:
         print(
             f"Captured position for point {point_id}: X={actual_x:.2f}, Y={actual_y:.2f}"
         )
+
+    def manual_entry_position(self):
+        """Manually enter actual position for selected reference point (for offline testing)"""
+        # Initialize actual points storage if not exists
+        if not hasattr(self, "actual_points"):
+            self.actual_points = {"top": {}, "bottom": {}}
+
+        # Get selected item
+        selection = self.ref_tree.selection()
+        if not selection:
+            messagebox.showwarning("Warning", "Please select a reference point!")
+            return
+
+        item = self.ref_tree.item(selection[0])
+        values = list(item["values"])
+        point_id = values[0]
+        
+        # Get expected values as defaults
+        expected_x = values[1]
+        expected_y = values[2]
+
+        # Create input dialog
+        dialog = tk.Toplevel(self.root)
+        dialog.title(f"Manual Entry - {point_id}")
+        dialog.geometry("300x150")
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        # X coordinate
+        ttk.Label(dialog, text=f"Enter Actual Position for {point_id}:").pack(pady=(10, 5))
+        
+        x_frame = ttk.Frame(dialog)
+        x_frame.pack(pady=5)
+        ttk.Label(x_frame, text="X:").pack(side="left", padx=(0, 5))
+        x_var = tk.StringVar(value=expected_x)
+        x_entry = ttk.Entry(x_frame, textvariable=x_var, width=15)
+        x_entry.pack(side="left")
+        
+        y_frame = ttk.Frame(dialog)
+        y_frame.pack(pady=5)
+        ttk.Label(y_frame, text="Y:").pack(side="left", padx=(0, 5))
+        y_var = tk.StringVar(value=expected_y)
+        y_entry = ttk.Entry(y_frame, textvariable=y_var, width=15)
+        y_entry.pack(side="left")
+
+        def save_values():
+            try:
+                actual_x = float(x_var.get())
+                actual_y = float(y_var.get())
+                
+                # Store actual position
+                if self.current_position == "top":
+                    self.actual_points["top"][point_id] = {"x": actual_x, "y": actual_y}
+                else:
+                    self.actual_points["bottom"][point_id] = {"x": actual_x, "y": actual_y}
+
+                # Update table display
+                values[3] = f"{actual_x:.2f}"
+                values[4] = f"{actual_y:.2f}"
+                self.ref_tree.item(selection[0], values=values)
+                
+                print(f"Manually entered position for {point_id}: X={actual_x:.2f}, Y={actual_y:.2f}")
+                
+                dialog.destroy()
+            except ValueError:
+                messagebox.showerror("Error", "Please enter valid numbers!")
+
+        # Buttons
+        button_frame = ttk.Frame(dialog)
+        button_frame.pack(pady=(10, 5))
+        ttk.Button(button_frame, text="Save", command=save_values, width=10).pack(side="left", padx=5)
+        ttk.Button(button_frame, text="Cancel", command=dialog.destroy, width=10).pack(side="left", padx=5)
+        
+        # Focus on X entry
+        x_entry.focus()
+        x_entry.select_range(0, tk.END)
 
     def goto_position(self):
         """Move to selected reference point"""
