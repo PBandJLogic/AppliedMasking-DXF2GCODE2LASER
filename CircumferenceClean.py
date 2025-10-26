@@ -2274,6 +2274,15 @@ class CircumferenceClean:
             messagebox.showwarning("Warning", "Please connect to GRBL first!")
             return
 
+        # Query current position to ensure we have fresh data
+        self.send_gcode("?")
+        
+        # Give a moment for the response to come back
+        # Use after() to wait for position update
+        self.root.after(50, self._complete_capture_position)
+    
+    def _complete_capture_position(self):
+        """Complete the position capture after position query response"""
         # Initialize actual points storage if not exists
         if not hasattr(self, "actual_points"):
             self.actual_points = {"top": {}, "bottom": {}}
@@ -2291,6 +2300,17 @@ class CircumferenceClean:
         # Store actual position using correct wpos variable
         actual_x = self.wpos["x"]
         actual_y = self.wpos["y"]
+        
+        # Warn if position seems invalid (still at origin)
+        if actual_x == 0.0 and actual_y == 0.0:
+            response = messagebox.askyesno(
+                "Confirm Position",
+                "Current position is (0.00, 0.00).\n\n"
+                "This might be incorrect if you haven't received position updates from GRBL.\n\n"
+                "Capture this position anyway?",
+            )
+            if not response:
+                return
 
         if self.current_position == "top":
             self.actual_points["top"][point_id] = {"x": actual_x, "y": actual_y}
@@ -2748,13 +2768,13 @@ Status: {'✓ Excellent' if max_error <= 0.05 else '✓ Good' if max_error <= 0.
                 # Update all displays and plots
                 # 1. Update Geometry tab plot
                 self.update_geometry_plot()
-                
+
                 # 2. Update Laser Control tab reference points table
                 self.update_reference_display()
-                
+
                 # 3. Update Laser Control tab plot (G-code toolpath visualization)
                 self.update_plot()
-                
+
                 # 4. Regenerate G-code with new parameters
                 self.update_gcode_from_geometry()
 
