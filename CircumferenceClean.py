@@ -1397,7 +1397,10 @@ class CircumferenceClean:
             button_frame, text="Set", command=self.capture_position, width=8
         ).pack(side="left", padx=(0, 5))
         ttk.Button(
-            button_frame, text="Manual Entry", command=self.manual_entry_position, width=12
+            button_frame,
+            text="Manual Entry",
+            command=self.manual_entry_position,
+            width=12,
         ).pack(side="left")
 
         # Create treeview for table
@@ -2399,7 +2402,7 @@ class CircumferenceClean:
         item = self.ref_tree.item(selection[0])
         values = list(item["values"])
         point_id = values[0]
-        
+
         # Get expected values as defaults
         expected_x = values[1]
         expected_y = values[2]
@@ -2412,15 +2415,17 @@ class CircumferenceClean:
         dialog.grab_set()
 
         # X coordinate
-        ttk.Label(dialog, text=f"Enter Actual Position for {point_id}:").pack(pady=(10, 5))
-        
+        ttk.Label(dialog, text=f"Enter Actual Position for {point_id}:").pack(
+            pady=(10, 5)
+        )
+
         x_frame = ttk.Frame(dialog)
         x_frame.pack(pady=5)
         ttk.Label(x_frame, text="X:").pack(side="left", padx=(0, 5))
         x_var = tk.StringVar(value=expected_x)
         x_entry = ttk.Entry(x_frame, textvariable=x_var, width=15)
         x_entry.pack(side="left")
-        
+
         y_frame = ttk.Frame(dialog)
         y_frame.pack(pady=5)
         ttk.Label(y_frame, text="Y:").pack(side="left", padx=(0, 5))
@@ -2432,20 +2437,25 @@ class CircumferenceClean:
             try:
                 actual_x = float(x_var.get())
                 actual_y = float(y_var.get())
-                
+
                 # Store actual position
                 if self.current_position == "top":
                     self.actual_points["top"][point_id] = {"x": actual_x, "y": actual_y}
                 else:
-                    self.actual_points["bottom"][point_id] = {"x": actual_x, "y": actual_y}
+                    self.actual_points["bottom"][point_id] = {
+                        "x": actual_x,
+                        "y": actual_y,
+                    }
 
                 # Update table display
                 values[3] = f"{actual_x:.2f}"
                 values[4] = f"{actual_y:.2f}"
                 self.ref_tree.item(selection[0], values=values)
-                
-                print(f"Manually entered position for {point_id}: X={actual_x:.2f}, Y={actual_y:.2f}")
-                
+
+                print(
+                    f"Manually entered position for {point_id}: X={actual_x:.2f}, Y={actual_y:.2f}"
+                )
+
                 dialog.destroy()
             except ValueError:
                 messagebox.showerror("Error", "Please enter valid numbers!")
@@ -2453,9 +2463,13 @@ class CircumferenceClean:
         # Buttons
         button_frame = ttk.Frame(dialog)
         button_frame.pack(pady=(10, 5))
-        ttk.Button(button_frame, text="Save", command=save_values, width=10).pack(side="left", padx=5)
-        ttk.Button(button_frame, text="Cancel", command=dialog.destroy, width=10).pack(side="left", padx=5)
-        
+        ttk.Button(button_frame, text="Save", command=save_values, width=10).pack(
+            side="left", padx=5
+        )
+        ttk.Button(button_frame, text="Cancel", command=dialog.destroy, width=10).pack(
+            side="left", padx=5
+        )
+
         # Focus on X entry
         x_entry.focus()
         x_entry.select_range(0, tk.END)
@@ -2537,6 +2551,26 @@ class CircumferenceClean:
                 f"Fitted center: ({self.fitted_center[0]:.4f}, {self.fitted_center[1]:.4f}) mm"
             )
 
+            # Store reference point pairs (expected vs actual) for display
+            # Build pairs from the actual_points dictionary with corresponding expected points
+            if self.current_position == "top":
+                expected_points = self.top_reference_points
+            else:
+                expected_points = self.bottom_reference_points
+            
+            self.last_fit_point_pairs = []
+            for point_id, coords in actual_dict.items():
+                # Extract point number from ID (e.g., "Pt1" -> 1)
+                point_num = int(point_id.replace("Pt", "")) - 1
+                if point_num < len(expected_points):
+                    exp_x, exp_y = expected_points[point_num]
+                    act_x, act_y = coords["x"], coords["y"]
+                    self.last_fit_point_pairs.append({
+                        "id": point_id,
+                        "expected": (exp_x, exp_y),
+                        "actual": (act_x, act_y)
+                    })
+
             # Update circle center based on fitted center
             if self.current_position == "top":
                 self.top_center = list(self.fitted_center)
@@ -2610,7 +2644,7 @@ class CircumferenceClean:
         return fitted_center, errors
 
     def display_calculation_results(self):
-        """Display calculation results"""
+        """Display calculation results with point comparison table"""
         self.calc_text.delete(1.0, tk.END)
 
         results = f"""Circle Fitting Results
@@ -2619,11 +2653,27 @@ class CircumferenceClean:
 Fitted Center: ({self.fitted_center[0]:.4f}, {self.fitted_center[1]:.4f}) mm
 Radius: {self.fitted_radius:.4f} mm
 
-Point Errors:
 """
 
+        # Add table of expected vs actual points
+        if hasattr(self, "last_fit_point_pairs") and self.last_fit_point_pairs:
+            results += "Reference Points Used:\n"
+            results += "-" * 70 + "\n"
+            results += f"{'Point':<8} {'Expected X':>12} {'Expected Y':>12} {'Actual X':>12} {'Actual Y':>12}\n"
+            results += "-" * 70 + "\n"
+            
+            # Display each point pair
+            for pair in self.last_fit_point_pairs:
+                point_id = pair["id"]
+                exp_x, exp_y = pair["expected"]
+                act_x, act_y = pair["actual"]
+                results += f"{point_id:<8} {exp_x:>12.4f} {exp_y:>12.4f} {act_x:>12.4f} {act_y:>12.4f}\n"
+            
+            results += "-" * 70 + "\n\n"
+
+        results += "Point Errors:\n"
         for i, error in enumerate(self.circle_errors):
-            status = "⚠ HIGH ERROR" if abs(error) > 0.1 else ""
+            status = " ⚠ HIGH ERROR" if abs(error) > 0.1 else ""
             results += f"Point {i+1}: {error:+.4f} mm{status}\n"
 
         rms_error = np.sqrt(np.mean(self.circle_errors**2))
