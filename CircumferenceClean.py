@@ -2745,11 +2745,17 @@ Status: {'✓ Excellent' if max_error <= 0.05 else '✓ Good' if max_error <= 0.
                 if hasattr(self, "feed_rate_var"):
                     self.feed_rate_var.set(str(self.feed_rate))
 
-                # Update reference points display and plot
+                # Update all displays and plots
+                # 1. Update Geometry tab plot
+                self.update_geometry_plot()
+                
+                # 2. Update Laser Control tab reference points table
                 self.update_reference_display()
+                
+                # 3. Update Laser Control tab plot (G-code toolpath visualization)
                 self.update_plot()
                 
-                # Regenerate G-code with new parameters
+                # 4. Regenerate G-code with new parameters
                 self.update_gcode_from_geometry()
 
                 messagebox.showinfo(
