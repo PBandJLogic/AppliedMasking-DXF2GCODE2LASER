@@ -880,9 +880,9 @@ class CircumferenceClean:
         plot_paned = ttk.PanedWindow(plot_frame, orient="vertical")
         plot_paned.pack(fill="both", expand=True)
 
-        # Top pane - plot
+        # Top pane - plot (1/3 of space)
         plot_top_frame = ttk.Frame(plot_paned)
-        plot_paned.add(plot_top_frame, weight=3)
+        plot_paned.add(plot_top_frame, weight=1)
 
         # Create toolbar first (before the plot)
         toolbar_frame = ttk.Frame(plot_top_frame)
@@ -932,9 +932,9 @@ class CircumferenceClean:
             self.ax, horizOn=True, vertOn=True, color="gray", linewidth=1
         )
 
-        # Bottom pane - G-code execute and communication log
+        # Bottom pane - G-code execute and communication log (2/3 of space)
         bottom_frame = ttk.Frame(plot_paned)
-        plot_paned.add(bottom_frame, weight=1)
+        plot_paned.add(bottom_frame, weight=2)
 
         # G-code execute field
         gcode_frame = ttk.LabelFrame(bottom_frame, text="G-code Execute", padding=5)
@@ -1996,10 +1996,17 @@ class CircumferenceClean:
                 text=f"X: {self.mpos['x']:6.2f}  Y: {self.mpos['y']:6.2f}  Z: {self.mpos['z']:6.2f}"
             )
 
-        # Update laser marker position on plot
+        # Update laser marker position on plot (only if on Laser Control tab)
         if hasattr(self, "laser_marker") and hasattr(self, "canvas"):
-            self.laser_marker.set_data([self.wpos["x"]], [self.wpos["y"]])
-            self.canvas.draw_idle()
+            try:
+                # Check if we're on the Laser Control tab
+                selected_tab = self.notebook.index(self.notebook.select())
+                if selected_tab == 1:  # Laser Control tab is index 1
+                    self.laser_marker.set_data([self.wpos["x"]], [self.wpos["y"]])
+                    # Use draw() instead of draw_idle() for immediate update
+                    self.canvas.draw()
+            except:
+                pass
 
     def update_position_display_text(self):
         """Update position display text on the plot"""
@@ -2621,21 +2628,17 @@ Status: {'✓ Excellent' if max_error <= 0.05 else '✓ Good' if max_error <= 0.
             "inner_diameter": self.inner_diameter,
             "outer_cleaning_offsets": self.outer_cleaning_offsets,
             "inner_cleaning_offsets": self.inner_cleaning_offsets,
-            
             # Center points
             "top_center": self.top_center,
             "bottom_center": self.bottom_center,
-            
             # Reference angles (stored instead of computed points)
             "top_reference_angles": self.top_reference_angles,
             "bottom_reference_angles": self.bottom_reference_angles,
-            
             # Cleaning arc angles
             "top_start_angle": self.top_start_angle,
             "top_end_angle": self.top_end_angle,
             "bottom_start_angle": self.bottom_start_angle,
             "bottom_end_angle": self.bottom_end_angle,
-            
             # Laser parameters
             "laser_power": self.laser_power,
             "laser_power_max": self.laser_power_max,
@@ -2673,11 +2676,11 @@ Status: {'✓ Excellent' if max_error <= 0.05 else '✓ Good' if max_error <= 0.
                 self.inner_cleaning_offsets = config.get(
                     "inner_cleaning_offsets", [0, -1, -2, -3]
                 )
-                
+
                 # Update center points
                 self.top_center = config.get("top_center", [0, -50])
                 self.bottom_center = config.get("bottom_center", [0, 50])
-                
+
                 # Update reference angles
                 self.top_reference_angles = config.get(
                     "top_reference_angles", [-30, 0, 45, 90, 135, 180, 210]
@@ -2685,16 +2688,16 @@ Status: {'✓ Excellent' if max_error <= 0.05 else '✓ Good' if max_error <= 0.
                 self.bottom_reference_angles = config.get(
                     "bottom_reference_angles", [150, 180, 225, 270, 315, 0, 30]
                 )
-                
+
                 # Recompute reference points from angles
                 self._compute_reference_points_from_angles()
-                
+
                 # Update cleaning arc angles
                 self.top_start_angle = config.get("top_start_angle", 0)
                 self.top_end_angle = config.get("top_end_angle", 180)
                 self.bottom_start_angle = config.get("bottom_start_angle", 0)
                 self.bottom_end_angle = config.get("bottom_end_angle", -180)
-                
+
                 # Update laser parameters
                 self.laser_power = config.get("laser_power", 100)
                 self.laser_power_max = config.get("laser_power_max", 10000)
@@ -2716,7 +2719,7 @@ Status: {'✓ Excellent' if max_error <= 0.05 else '✓ Good' if max_error <= 0.
                 self.bottom_ref_angles_var.set(
                     ", ".join(map(str, self.bottom_reference_angles))
                 )
-                
+
                 # Update UI - Laser tab
                 if hasattr(self, "laser_power_var"):
                     self.laser_power_var.set(str(self.laser_power))
@@ -2730,8 +2733,10 @@ Status: {'✓ Excellent' if max_error <= 0.05 else '✓ Good' if max_error <= 0.
                 # Update reference points display and plot
                 self.update_reference_display()
                 self.update_plot()
-                
-                messagebox.showinfo("Success", f"Configuration loaded from:\n{filename}")
+
+                messagebox.showinfo(
+                    "Success", f"Configuration loaded from:\n{filename}"
+                )
 
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to load configuration: {str(e)}")
@@ -2795,7 +2800,7 @@ Status: {'✓ Excellent' if max_error <= 0.05 else '✓ Good' if max_error <= 0.
         bottom_preamble += "G21 ; Set units to millimeters\nG90 ; Absolute positioning\nG54 ; Use work coordinate system\nG0 X0 Y0 Z0 ; Go to zero position\n"
         bottom_preamble += f"M4 S{scaled_power} ; laser on\n"
 
-        postscript = "M5 ; Turn off laser\nG0 X0 Y375 ; Send to unload position\n"
+        postscript = "M5 ; Turn off laser\nG0 X0 Y0 ; Send to unload position\n"
 
         # Generate cleaning G-code for top
         top_cleaning = self.generate_top_cleaning_gcode()
