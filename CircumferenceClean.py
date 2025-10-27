@@ -1179,7 +1179,13 @@ class CircumferenceClean:
             command=lambda: self.auto_origin("bottom"),
             width=10,
         )
-        self.auto_bottom_origin_button.pack(side="left")
+        self.auto_bottom_origin_button.pack(side="left", padx=(0, 5))
+
+        # Laser ON/OFF button in same row as origin buttons
+        self.laser_button = ttk.Button(
+            origin_frame, text="Laser OFF", command=self.toggle_laser, width=8
+        )
+        self.laser_button.pack(side="left")
 
         # Create main frame to hold jog buttons and controls side-by-side
         jog_main_frame = ttk.Frame(jog_frame)
@@ -1192,12 +1198,6 @@ class CircumferenceClean:
         # Step size and laser control (right side)
         right_controls_frame = ttk.Frame(jog_main_frame)
         right_controls_frame.pack(side="left")
-
-        # Laser ON/OFF button on top
-        self.laser_button = ttk.Button(
-            right_controls_frame, text="Laser OFF", command=self.toggle_laser, width=8
-        )
-        self.laser_button.pack(pady=(0, 5))
 
         # Laser power level input
         power_frame = ttk.Frame(right_controls_frame)
