@@ -1376,12 +1376,6 @@ class CircumferenceClean:
             z_frame, text="Z-", command=lambda: self.jog_move_z(-1), width=button_width
         ).pack(side="left", padx=2)
 
-        # Position display
-        pos_frame = ttk.Frame(jog_frame)
-        pos_frame.pack(fill="x", pady=(10, 2))
-        self.position_label = ttk.Label(pos_frame, text="Position: X0.00 Y0.00 Z0.00")
-        self.position_label.pack(anchor="w")
-
     def create_reference_table(self, parent):
         """Create reference points table"""
         ref_frame = ttk.LabelFrame(parent, text="Reference Points", padding=5)
@@ -2557,7 +2551,7 @@ class CircumferenceClean:
                 expected_points = self.top_reference_points
             else:
                 expected_points = self.bottom_reference_points
-            
+
             self.last_fit_point_pairs = []
             for point_id, coords in actual_dict.items():
                 # Extract point number from ID (e.g., "Pt1" -> 1)
@@ -2565,11 +2559,13 @@ class CircumferenceClean:
                 if point_num < len(expected_points):
                     exp_x, exp_y = expected_points[point_num]
                     act_x, act_y = coords["x"], coords["y"]
-                    self.last_fit_point_pairs.append({
-                        "id": point_id,
-                        "expected": (exp_x, exp_y),
-                        "actual": (act_x, act_y)
-                    })
+                    self.last_fit_point_pairs.append(
+                        {
+                            "id": point_id,
+                            "expected": (exp_x, exp_y),
+                            "actual": (act_x, act_y),
+                        }
+                    )
 
             # Update circle center based on fitted center
             if self.current_position == "top":
@@ -2661,14 +2657,14 @@ Radius: {self.fitted_radius:.4f} mm
             results += "-" * 70 + "\n"
             results += f"{'Point':<8} {'Expected X':>12} {'Expected Y':>12} {'Actual X':>12} {'Actual Y':>12}\n"
             results += "-" * 70 + "\n"
-            
+
             # Display each point pair
             for pair in self.last_fit_point_pairs:
                 point_id = pair["id"]
                 exp_x, exp_y = pair["expected"]
                 act_x, act_y = pair["actual"]
                 results += f"{point_id:<8} {exp_x:>12.4f} {exp_y:>12.4f} {act_x:>12.4f} {act_y:>12.4f}\n"
-            
+
             results += "-" * 70 + "\n\n"
 
         results += "Point Errors:\n"
