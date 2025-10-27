@@ -1085,7 +1085,7 @@ class CircumferenceClean:
             text="Disconnect",
             command=self.disconnect_grbl,
             state="disabled",
-            width=8,
+            width=12,
         )
         self.disconnect_button.pack(side="left")
 
@@ -1132,17 +1132,22 @@ class CircumferenceClean:
         control_row.pack(fill="x", pady=(5, 0))
 
         self.home_button = ttk.Button(
-            control_row, text="Home", command=self.home_machine, width=6
+            control_row, text="Home", command=self.home_machine, width=7
         )
         self.home_button.pack(side="left", padx=(0, 5))
 
         self.clear_errors_button = ttk.Button(
-            control_row, text="Clear Errors", command=self.clear_errors, width=8
+            control_row, text="Clear Errors", command=self.clear_errors, width=10
         )
         self.clear_errors_button.pack(side="left", padx=(0, 5))
 
+        self.resume_button = ttk.Button(
+            control_row, text="Resume", command=self.resume_grbl, width=12
+        )
+        self.resume_button.pack(side="left", padx=(0, 5))
+
         self.soft_reset_button = ttk.Button(
-            control_row, text="Reboot GRBL", command=self.reboot_grbl, width=8
+            control_row, text="Reboot GRBL", command=self.reboot_grbl, width=12
         )
         self.soft_reset_button.pack(side="left")
 
@@ -1161,7 +1166,7 @@ class CircumferenceClean:
             origin_frame,
             text="Set Origin",
             command=self.set_work_origin,
-            width=8,
+            width=10,
         )
         self.set_origin_button.pack(side="left", padx=(0, 5))
 
@@ -1169,7 +1174,7 @@ class CircumferenceClean:
             origin_frame,
             text="Top Origin",
             command=lambda: self.auto_origin("top"),
-            width=8,
+            width=12,
         )
         self.auto_top_origin_button.pack(side="left", padx=(0, 5))
 
@@ -1177,13 +1182,13 @@ class CircumferenceClean:
             origin_frame,
             text="Bottom Origin",
             command=lambda: self.auto_origin("bottom"),
-            width=10,
+            width=14,
         )
         self.auto_bottom_origin_button.pack(side="left", padx=(0, 5))
 
         # Laser ON/OFF button in same row as origin buttons
         self.laser_button = ttk.Button(
-            origin_frame, text="Laser OFF", command=self.toggle_laser, width=8
+            origin_frame, text="Laser OFF", command=self.toggle_laser, width=10
         )
         self.laser_button.pack(side="left")
 
@@ -1333,7 +1338,7 @@ class CircumferenceClean:
         ).grid(row=1, column=0, padx=2, pady=2, sticky="ew")
 
         ttk.Button(
-            jog_buttons_frame, text="⌂ Origin", command=self.go_home, width=button_width
+            jog_buttons_frame, text="⌂Orig", command=self.go_home, width=button_width
         ).grid(row=1, column=1, padx=2, pady=2, sticky="ew")
 
         ttk.Button(
@@ -1743,9 +1748,6 @@ class CircumferenceClean:
             self.grbl_state = "Connecting"
             self.update_state_display()
 
-            # Send wake-up command
-            self.send_gcode("$X")
-
             # Start reader thread
             self.serial_reader_thread = threading.Thread(
                 target=self.serial_reader, daemon=True
@@ -1861,9 +1863,21 @@ class CircumferenceClean:
     def send_gcode(self, command):
         """Send G-code command to GRBL"""
         if self.serial_connection and self.is_connected:
+            # Check GRBL state before sending command
+            if self.grbl_state in ["Hold", "Error", "Alarm"]:
+                messagebox.showwarning(
+                    "GRBL Not Ready",
+                    f"GRBL is in '{self.grbl_state}' state and cannot accept commands.\n\n"
+                    f"Please use the 'Resume' button to continue from Hold state,\n"
+                    f"or 'Clear Errors' button to clear Error/Alarm state."
+                )
+                return False
+            
             self.serial_connection.write(f"{command}\n".encode())
             # Log sent command
             self.log_comm_message(f"> {command}", "sent")
+            return True
+        return False
 
     def serial_reader(self):
         """Read responses from GRBL"""
@@ -1945,6 +1959,12 @@ class CircumferenceClean:
         # Handle "ok" responses - command completed
         if line.strip().lower() == "ok":
             self.handle_grbl_ok()
+            return
+
+        # Handle GRBL system responses (like $X)
+        if line.strip() == "$X":
+            print(f"GRBL sent unlock command: {line}")
+            # This is GRBL clearing alarms - continue execution
             return
 
         # Handle error responses
@@ -2141,6 +2161,19 @@ class CircumferenceClean:
             # Send commands to go to origin
             self.send_gcode("G90")  # Absolute positioning mode
             self.send_gcode("G0 X0 Y0 Z0")  # Rapid move to origin
+            
+            # If laser is on, restore laser power and feedrate after the move
+            if self.laser_on:
+                # Get current targeting power and feedrate
+                power = float(self.targeting_power_var.get())
+                max_power = float(self.laser_power_max_var.get())
+                feedrate = float(self.feedrate_var.get())
+                
+                scaled_power = int((power / 100.0) * max_power)
+                
+                # Restore laser power and feedrate
+                self.send_gcode(f"M3 S{scaled_power}")
+                self.send_gcode(f"G1 F{feedrate}")
 
     def home_machine(self):
         """Send machine to home position (only if homing is enabled)"""
@@ -2166,6 +2199,19 @@ class CircumferenceClean:
         # Send commands to clear errors and reset
         self.send_gcode("$X")  # Clear alarms and unlock
         messagebox.showinfo("Info", "Clear errors command sent to GRBL")
+
+    def resume_grbl(self):
+        """Resume GRBL from Hold state by sending resume command (~)"""
+        if not self.is_connected:
+            messagebox.showwarning("Warning", "Please connect to GRBL first!")
+            return
+
+        try:
+            # Send resume command (~)
+            self.send_gcode("~")
+            messagebox.showinfo("Info", "Resume command sent to GRBL")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to send resume command: {e}")
 
     def reboot_grbl(self):
         """Reboot GRBL by sending Ctrl-X (soft reset)"""
@@ -2485,8 +2531,24 @@ class CircumferenceClean:
         try:
             x = float(values[1])  # Expected X
             y = float(values[2])  # Expected Y
+            
+            # Move to reference point
             command = f"G0 X{x:.3f} Y{y:.3f}"
             self.send_gcode(command)
+            
+            # If laser is on, restore laser power and feedrate after the move
+            if self.laser_on:
+                # Get current targeting power and feedrate
+                power = float(self.targeting_power_var.get())
+                max_power = float(self.laser_power_max_var.get())
+                feedrate = float(self.feedrate_var.get())
+                
+                scaled_power = int((power / 100.0) * max_power)
+                
+                # Restore laser power and feedrate
+                self.send_gcode(f"M3 S{scaled_power}")
+                self.send_gcode(f"G1 F{feedrate}")
+                
         except ValueError:
             messagebox.showerror("Error", "Invalid coordinates!")
 
@@ -2689,6 +2751,16 @@ Status: {'✓ Excellent' if max_error <= 0.05 else '✓ Good' if max_error <= 0.
             messagebox.showwarning("Warning", "Please connect to GRBL first!")
             return
 
+        # Check GRBL state before starting execution
+        if self.grbl_state in ["Hold", "Error", "Alarm"]:
+            messagebox.showwarning(
+                "GRBL Not Ready",
+                f"GRBL is in '{self.grbl_state}' state and cannot accept commands.\n\n"
+                f"Please use the 'Resume' button to continue from Hold state,\n"
+                f"or 'Clear Errors' button to clear Error/Alarm state before running cleaning."
+            )
+            return
+
         # Check if G-code widgets exist
         if not hasattr(self, "top_preamble_widget") or not hasattr(
             self, "top_cleaning_widget"
@@ -2715,11 +2787,15 @@ Status: {'✓ Excellent' if max_error <= 0.05 else '✓ Good' if max_error <= 0.
         if postscript:
             combined_gcode.extend(postscript.split("\n"))
 
-        # Filter out empty lines and comments
+        # Filter out empty lines, comments, and GRBL system commands
         filtered_gcode = []
         for line in combined_gcode:
             line = line.strip()
-            if line and not line.startswith(";"):
+            # Remove inline comments
+            if ';' in line:
+                line = line.split(';')[0].strip()
+            # Skip empty lines, comment-only lines, and GRBL system commands
+            if line and not line.startswith(";") and not line.startswith("$"):
                 filtered_gcode.append(line)
 
         if not filtered_gcode:
@@ -2739,6 +2815,13 @@ Status: {'✓ Excellent' if max_error <= 0.05 else '✓ Good' if max_error <= 0.
             self.execution_status_label.config(text="Running", foreground="orange")
 
         print(f"Starting execution of {len(filtered_gcode)} G-code commands")
+        
+        # Debug: Show what commands will be executed
+        print(f"Filtered G-code commands to execute:")
+        for i, cmd in enumerate(filtered_gcode[:10]):  # Show first 10
+            print(f"  {i}: {cmd}")
+        if len(filtered_gcode) > 10:
+            print(f"  ... and {len(filtered_gcode) - 10} more commands")
 
         # Start streaming
         self.stream_next_commands()
@@ -2769,6 +2852,19 @@ Status: {'✓ Excellent' if max_error <= 0.05 else '✓ Good' if max_error <= 0.
     def send_gcode_buffered(self, command):
         """Send G-code command with buffer tracking"""
         if not self.serial_connection or not self.is_connected:
+            return False
+
+        # Check GRBL state before sending command
+        if self.grbl_state in ["Hold", "Error", "Alarm"]:
+            print(f"Command rejected - GRBL in {self.grbl_state} state: {command}")
+            # Stop execution if GRBL is not ready
+            self.stop_execution()
+            messagebox.showwarning(
+                "GRBL Not Ready",
+                f"GRBL is in '{self.grbl_state}' state and cannot accept commands.\n\n"
+                f"Execution stopped. Please use the 'Resume' button to continue from Hold state,\n"
+                f"or 'Clear Errors' button to clear Error/Alarm state."
+            )
             return False
 
         try:
@@ -2888,6 +2984,13 @@ Status: {'✓ Excellent' if max_error <= 0.05 else '✓ Good' if max_error <= 0.
             "laser_power_max": self.laser_power_max,
             "targeting_power": self.targeting_power,
             "feed_rate": self.feed_rate,
+            # G-code sections
+            "top_preamble": self.top_preamble_widget.get("1.0", tk.END).strip() if hasattr(self, "top_preamble_widget") else "",
+            "top_cleaning": self.top_cleaning_widget.get("1.0", tk.END).strip() if hasattr(self, "top_cleaning_widget") else "",
+            "top_postscript": self.top_postscript_widget.get("1.0", tk.END).strip() if hasattr(self, "top_postscript_widget") else "",
+            "bottom_preamble": self.bottom_preamble_widget.get("1.0", tk.END).strip() if hasattr(self, "bottom_preamble_widget") else "",
+            "bottom_cleaning": self.bottom_cleaning_widget.get("1.0", tk.END).strip() if hasattr(self, "bottom_cleaning_widget") else "",
+            "bottom_postscript": self.bottom_postscript_widget.get("1.0", tk.END).strip() if hasattr(self, "bottom_postscript_widget") else "",
         }
 
         filename = filedialog.asksaveasfilename(
@@ -2971,8 +3074,28 @@ Status: {'✓ Excellent' if max_error <= 0.05 else '✓ Good' if max_error <= 0.
                     self.laser_power_max_var.set(str(self.laser_power_max))
                 if hasattr(self, "targeting_power_var"):
                     self.targeting_power_var.set(str(self.targeting_power))
-                if hasattr(self, "feed_rate_var"):
-                    self.feed_rate_var.set(str(self.feed_rate))
+                if hasattr(self, "feedrate_var"):
+                    self.feedrate_var.set(str(self.feed_rate))
+
+                # Update G-code sections
+                if hasattr(self, "top_preamble_widget"):
+                    self.top_preamble_widget.delete("1.0", tk.END)
+                    self.top_preamble_widget.insert("1.0", config.get("top_preamble", ""))
+                if hasattr(self, "top_cleaning_widget"):
+                    self.top_cleaning_widget.delete("1.0", tk.END)
+                    self.top_cleaning_widget.insert("1.0", config.get("top_cleaning", ""))
+                if hasattr(self, "top_postscript_widget"):
+                    self.top_postscript_widget.delete("1.0", tk.END)
+                    self.top_postscript_widget.insert("1.0", config.get("top_postscript", ""))
+                if hasattr(self, "bottom_preamble_widget"):
+                    self.bottom_preamble_widget.delete("1.0", tk.END)
+                    self.bottom_preamble_widget.insert("1.0", config.get("bottom_preamble", ""))
+                if hasattr(self, "bottom_cleaning_widget"):
+                    self.bottom_cleaning_widget.delete("1.0", tk.END)
+                    self.bottom_cleaning_widget.insert("1.0", config.get("bottom_cleaning", ""))
+                if hasattr(self, "bottom_postscript_widget"):
+                    self.bottom_postscript_widget.delete("1.0", tk.END)
+                    self.bottom_postscript_widget.insert("1.0", config.get("bottom_postscript", ""))
 
                 # Update all displays and plots
                 # 1. Update Geometry tab plot
