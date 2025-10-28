@@ -12,7 +12,7 @@ Features:
 - Interactive GUI with laser jogging controls and position capture
 """
 
-VERSION = 1.0
+VERSION = 2.2
 
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
@@ -1738,8 +1738,14 @@ class CircumferenceClean:
     def complete_connection(self):
         """Complete the connection after GRBL initializes"""
         if self.serial_connection and self.serial_connection.is_open:
-            # Flush any startup messages
+            # Comprehensive buffer flushing
             self.serial_connection.reset_input_buffer()
+            self.serial_connection.reset_output_buffer()
+
+            # Clear application buffers
+            self.command_queue.clear()
+            self.buffer_size = 0
+            self.gcode_buffer.clear()
 
             self.is_connected = True
             self.connect_button.config(state="disabled")
@@ -1860,6 +1866,25 @@ class CircumferenceClean:
             # Schedule next query in 100ms
             self.root.after(100, self.query_status)
 
+    def flush_all_buffers(self):
+        """Comprehensive buffer flushing to remove garbage"""
+        try:
+            if self.serial_connection and self.serial_connection.is_open:
+                # Flush serial buffers
+                self.serial_connection.reset_input_buffer()
+                self.serial_connection.reset_output_buffer()
+
+                # Clear application buffers
+                self.command_queue.clear()
+                self.buffer_size = 0
+                self.gcode_buffer.clear()
+
+                print("All buffers flushed")
+                return True
+        except Exception as e:
+            print(f"Buffer flush failed: {e}")
+            return False
+
     def send_gcode(self, command):
         """Send G-code command to GRBL"""
         if self.serial_connection and self.is_connected:
@@ -1869,10 +1894,10 @@ class CircumferenceClean:
                     "GRBL Not Ready",
                     f"GRBL is in '{self.grbl_state}' state and cannot accept commands.\n\n"
                     f"Please use the 'Resume' button to continue from Hold state,\n"
-                    f"or 'Clear Errors' button to clear Error/Alarm state."
+                    f"or 'Clear Errors' button to clear Error/Alarm state.",
                 )
                 return False
-            
+
             self.serial_connection.write(f"{command}\n".encode())
             # Log sent command
             self.log_comm_message(f"> {command}", "sent")
@@ -2148,32 +2173,22 @@ class CircumferenceClean:
             messagebox.showwarning("Warning", "Please connect to GRBL first!")
             return
 
-        # Confirm with user
-        response = messagebox.askyesno(
-            "Go to Origin",
-            "Move to work coordinate origin (0, 0, 0)?\n\n"
-            "This will execute:\n"
-            "G90 (absolute positioning)\n"
-            "G0 X0 Y0 Z0 (rapid move to origin)",
-        )
+        # Send commands to go to origin
+        self.send_gcode("G90")  # Absolute positioning mode
+        self.send_gcode("G0 X0 Y0 Z0")  # Rapid move to origin
 
-        if response:
-            # Send commands to go to origin
-            self.send_gcode("G90")  # Absolute positioning mode
-            self.send_gcode("G0 X0 Y0 Z0")  # Rapid move to origin
-            
-            # If laser is on, restore laser power and feedrate after the move
-            if self.laser_on:
-                # Get current targeting power and feedrate
-                power = float(self.targeting_power_var.get())
-                max_power = float(self.laser_power_max_var.get())
-                feedrate = float(self.feedrate_var.get())
-                
-                scaled_power = int((power / 100.0) * max_power)
-                
-                # Restore laser power and feedrate
-                self.send_gcode(f"M3 S{scaled_power}")
-                self.send_gcode(f"G1 F{feedrate}")
+        # If laser is on, restore laser power and feedrate after the move
+        if self.laser_on:
+            # Get current targeting power and feedrate
+            power = float(self.targeting_power_var.get())
+            max_power = float(self.laser_power_max_var.get())
+            feedrate = float(self.feedrate_var.get())
+
+            scaled_power = int((power / 100.0) * max_power)
+
+            # Restore laser power and feedrate
+            self.send_gcode(f"M3 S{scaled_power}")
+            self.send_gcode(f"G1 F{feedrate}")
 
     def home_machine(self):
         """Send machine to home position (only if homing is enabled)"""
@@ -2196,9 +2211,35 @@ class CircumferenceClean:
             messagebox.showwarning("Warning", "Please connect to GRBL first!")
             return
 
-        # Send commands to clear errors and reset
-        self.send_gcode("$X")  # Clear alarms and unlock
-        messagebox.showinfo("Info", "Clear errors command sent to GRBL")
+        try:
+            # Comprehensive buffer flushing to remove garbage
+            self.flush_all_buffers()
+
+            # Send soft reset to clear buffers
+            if self.serial_connection:
+                self.serial_connection.write(b"\x18")  # Ctrl-X soft reset
+                self.log_comm_message("> Ctrl-X (Soft Reset)", "sent")
+
+            # Wait a moment for reset to take effect
+            self.root.after(100, self._send_unlock_command)
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to clear errors: {e}")
+
+    def _send_unlock_command(self):
+        """Send unlock command after soft reset"""
+        try:
+            if self.serial_connection and self.is_connected:
+                # Send unlock command directly (bypass state check)
+                self.serial_connection.write(b"$X\n")
+                self.log_comm_message("> $X (Unlock)", "sent")
+
+                # Clear any remaining buffers
+                self.command_queue.clear()
+                self.buffer_size = 0
+
+        except Exception as e:
+            print(f"Failed to send unlock command: {e}")
 
     def resume_grbl(self):
         """Resume GRBL from Hold state by sending resume command (~)"""
@@ -2227,12 +2268,23 @@ class CircumferenceClean:
         )
 
         if response:
-            if self.serial_connection:
-                self.serial_connection.write(b"\x18")  # Ctrl-X soft reset
-            messagebox.showinfo(
-                "Info",
-                "Soft reset sent. Please wait a few seconds, then reconnect to GRBL.",
-            )
+            try:
+                # Clear command queue and buffers first
+                self.command_queue.clear()
+                self.buffer_size = 0
+
+                # Send soft reset to reboot GRBL
+                if self.serial_connection:
+                    self.serial_connection.write(b"\x18")  # Ctrl-X soft reset
+                    self.log_comm_message("> Ctrl-X (Soft Reset)", "sent")
+
+                messagebox.showinfo(
+                    "Info",
+                    "Soft reset sent. Please wait a few seconds, then reconnect to GRBL.",
+                )
+
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to reboot GRBL: {e}")
 
     def set_work_origin(self):
         """Set the current position as the work coordinate origin (0,0,0)"""
@@ -2529,26 +2581,37 @@ class CircumferenceClean:
         values = item["values"]
 
         try:
-            x = float(values[1])  # Expected X
-            y = float(values[2])  # Expected Y
-            
+            # Check if actual values are captured (not 0.0)
+            actual_x = float(values[3])  # Actual X
+            actual_y = float(values[4])  # Actual Y
+
+            # Use actual values if they exist (not 0.0), otherwise use expected values
+            if actual_x != 0.0 or actual_y != 0.0:
+                x = actual_x
+                y = actual_y
+                position_type = "actual"
+            else:
+                x = float(values[1])  # Expected X
+                y = float(values[2])  # Expected Y
+                position_type = "expected"
+
             # Move to reference point
             command = f"G0 X{x:.3f} Y{y:.3f}"
             self.send_gcode(command)
-            
+
             # If laser is on, restore laser power and feedrate after the move
             if self.laser_on:
                 # Get current targeting power and feedrate
                 power = float(self.targeting_power_var.get())
                 max_power = float(self.laser_power_max_var.get())
                 feedrate = float(self.feedrate_var.get())
-                
+
                 scaled_power = int((power / 100.0) * max_power)
-                
+
                 # Restore laser power and feedrate
                 self.send_gcode(f"M3 S{scaled_power}")
                 self.send_gcode(f"G1 F{feedrate}")
-                
+
         except ValueError:
             messagebox.showerror("Error", "Invalid coordinates!")
 
@@ -2587,15 +2650,12 @@ class CircumferenceClean:
             # (Inner diameter is only for cleaning passes, not alignment)
             radius = self.outer_diameter / 2
 
+            print(
+                f"Using outer diameter: {self.outer_diameter} mm (radius: {radius} mm)"
+            )
             if self.current_position == "top":
-                print(
-                    f"Using outer diameter: {self.outer_diameter} mm (radius: {radius} mm)"
-                )
                 print(f"Expected center: {self.top_center}")
             else:
-                print(
-                    f"Using outer diameter: {self.outer_diameter} mm (radius: {radius} mm)"
-                )
                 print(f"Expected center: {self.bottom_center}")
 
             self.fitted_center, self.circle_errors = self.fit_circle_fixed_radius(
@@ -2647,7 +2707,7 @@ class CircumferenceClean:
             # Update plot
             self.update_plot()
 
-            messagebox.showinfo("Success", "G-code adjusted with fitted circle center!")
+            # G-code adjusted with fitted circle center
 
         except Exception as e:
             messagebox.showerror("Error", f"Circle fitting failed: {str(e)}")
@@ -2730,9 +2790,20 @@ Radius: {self.fitted_radius:.4f} mm
             results += "-" * 70 + "\n\n"
 
         results += "Point Errors:\n"
-        for i, error in enumerate(self.circle_errors):
-            status = " ⚠ HIGH ERROR" if abs(error) > 0.1 else ""
-            results += f"Point {i+1}: {error:+.4f} mm{status}\n"
+        if hasattr(self, "last_fit_point_pairs") and self.last_fit_point_pairs:
+            for i, error in enumerate(self.circle_errors):
+                if i < len(self.last_fit_point_pairs):
+                    point_id = self.last_fit_point_pairs[i]["id"]
+                    status = " ⚠ HIGH ERROR" if abs(error) > 0.1 else ""
+                    results += f"{point_id}: {error:+.4f} mm{status}\n"
+                else:
+                    status = " ⚠ HIGH ERROR" if abs(error) > 0.1 else ""
+                    results += f"Point {i+1}: {error:+.4f} mm{status}\n"
+        else:
+            # Fallback to generic numbering if last_fit_point_pairs is not available
+            for i, error in enumerate(self.circle_errors):
+                status = " ⚠ HIGH ERROR" if abs(error) > 0.1 else ""
+                results += f"Point {i+1}: {error:+.4f} mm{status}\n"
 
         rms_error = np.sqrt(np.mean(self.circle_errors**2))
         max_error = np.max(np.abs(self.circle_errors))
@@ -2757,7 +2828,7 @@ Status: {'✓ Excellent' if max_error <= 0.05 else '✓ Good' if max_error <= 0.
                 "GRBL Not Ready",
                 f"GRBL is in '{self.grbl_state}' state and cannot accept commands.\n\n"
                 f"Please use the 'Resume' button to continue from Hold state,\n"
-                f"or 'Clear Errors' button to clear Error/Alarm state before running cleaning."
+                f"or 'Clear Errors' button to clear Error/Alarm state before running cleaning.",
             )
             return
 
@@ -2792,8 +2863,8 @@ Status: {'✓ Excellent' if max_error <= 0.05 else '✓ Good' if max_error <= 0.
         for line in combined_gcode:
             line = line.strip()
             # Remove inline comments
-            if ';' in line:
-                line = line.split(';')[0].strip()
+            if ";" in line:
+                line = line.split(";")[0].strip()
             # Skip empty lines, comment-only lines, and GRBL system commands
             if line and not line.startswith(";") and not line.startswith("$"):
                 filtered_gcode.append(line)
@@ -2815,7 +2886,7 @@ Status: {'✓ Excellent' if max_error <= 0.05 else '✓ Good' if max_error <= 0.
             self.execution_status_label.config(text="Running", foreground="orange")
 
         print(f"Starting execution of {len(filtered_gcode)} G-code commands")
-        
+
         # Debug: Show what commands will be executed
         print(f"Filtered G-code commands to execute:")
         for i, cmd in enumerate(filtered_gcode[:10]):  # Show first 10
@@ -2863,7 +2934,7 @@ Status: {'✓ Excellent' if max_error <= 0.05 else '✓ Good' if max_error <= 0.
                 "GRBL Not Ready",
                 f"GRBL is in '{self.grbl_state}' state and cannot accept commands.\n\n"
                 f"Execution stopped. Please use the 'Resume' button to continue from Hold state,\n"
-                f"or 'Clear Errors' button to clear Error/Alarm state."
+                f"or 'Clear Errors' button to clear Error/Alarm state.",
             )
             return False
 
@@ -2924,7 +2995,6 @@ Status: {'✓ Excellent' if max_error <= 0.05 else '✓ Good' if max_error <= 0.
             self.execution_status_label.config(text="Complete", foreground="green")
 
         print("Execution complete!")
-        messagebox.showinfo("Complete", "G-code execution completed successfully!")
 
     def stop_execution(self):
         """Stop G-code execution"""
@@ -2985,12 +3055,36 @@ Status: {'✓ Excellent' if max_error <= 0.05 else '✓ Good' if max_error <= 0.
             "targeting_power": self.targeting_power,
             "feed_rate": self.feed_rate,
             # G-code sections
-            "top_preamble": self.top_preamble_widget.get("1.0", tk.END).strip() if hasattr(self, "top_preamble_widget") else "",
-            "top_cleaning": self.top_cleaning_widget.get("1.0", tk.END).strip() if hasattr(self, "top_cleaning_widget") else "",
-            "top_postscript": self.top_postscript_widget.get("1.0", tk.END).strip() if hasattr(self, "top_postscript_widget") else "",
-            "bottom_preamble": self.bottom_preamble_widget.get("1.0", tk.END).strip() if hasattr(self, "bottom_preamble_widget") else "",
-            "bottom_cleaning": self.bottom_cleaning_widget.get("1.0", tk.END).strip() if hasattr(self, "bottom_cleaning_widget") else "",
-            "bottom_postscript": self.bottom_postscript_widget.get("1.0", tk.END).strip() if hasattr(self, "bottom_postscript_widget") else "",
+            "top_preamble": (
+                self.top_preamble_widget.get("1.0", tk.END).strip()
+                if hasattr(self, "top_preamble_widget")
+                else ""
+            ),
+            "top_cleaning": (
+                self.top_cleaning_widget.get("1.0", tk.END).strip()
+                if hasattr(self, "top_cleaning_widget")
+                else ""
+            ),
+            "top_postscript": (
+                self.top_postscript_widget.get("1.0", tk.END).strip()
+                if hasattr(self, "top_postscript_widget")
+                else ""
+            ),
+            "bottom_preamble": (
+                self.bottom_preamble_widget.get("1.0", tk.END).strip()
+                if hasattr(self, "bottom_preamble_widget")
+                else ""
+            ),
+            "bottom_cleaning": (
+                self.bottom_cleaning_widget.get("1.0", tk.END).strip()
+                if hasattr(self, "bottom_cleaning_widget")
+                else ""
+            ),
+            "bottom_postscript": (
+                self.bottom_postscript_widget.get("1.0", tk.END).strip()
+                if hasattr(self, "bottom_postscript_widget")
+                else ""
+            ),
         }
 
         filename = filedialog.asksaveasfilename(
@@ -3080,22 +3174,34 @@ Status: {'✓ Excellent' if max_error <= 0.05 else '✓ Good' if max_error <= 0.
                 # Update G-code sections
                 if hasattr(self, "top_preamble_widget"):
                     self.top_preamble_widget.delete("1.0", tk.END)
-                    self.top_preamble_widget.insert("1.0", config.get("top_preamble", ""))
+                    self.top_preamble_widget.insert(
+                        "1.0", config.get("top_preamble", "")
+                    )
                 if hasattr(self, "top_cleaning_widget"):
                     self.top_cleaning_widget.delete("1.0", tk.END)
-                    self.top_cleaning_widget.insert("1.0", config.get("top_cleaning", ""))
+                    self.top_cleaning_widget.insert(
+                        "1.0", config.get("top_cleaning", "")
+                    )
                 if hasattr(self, "top_postscript_widget"):
                     self.top_postscript_widget.delete("1.0", tk.END)
-                    self.top_postscript_widget.insert("1.0", config.get("top_postscript", ""))
+                    self.top_postscript_widget.insert(
+                        "1.0", config.get("top_postscript", "")
+                    )
                 if hasattr(self, "bottom_preamble_widget"):
                     self.bottom_preamble_widget.delete("1.0", tk.END)
-                    self.bottom_preamble_widget.insert("1.0", config.get("bottom_preamble", ""))
+                    self.bottom_preamble_widget.insert(
+                        "1.0", config.get("bottom_preamble", "")
+                    )
                 if hasattr(self, "bottom_cleaning_widget"):
                     self.bottom_cleaning_widget.delete("1.0", tk.END)
-                    self.bottom_cleaning_widget.insert("1.0", config.get("bottom_cleaning", ""))
+                    self.bottom_cleaning_widget.insert(
+                        "1.0", config.get("bottom_cleaning", "")
+                    )
                 if hasattr(self, "bottom_postscript_widget"):
                     self.bottom_postscript_widget.delete("1.0", tk.END)
-                    self.bottom_postscript_widget.insert("1.0", config.get("bottom_postscript", ""))
+                    self.bottom_postscript_widget.insert(
+                        "1.0", config.get("bottom_postscript", "")
+                    )
 
                 # Update all displays and plots
                 # 1. Update Geometry tab plot
@@ -3291,6 +3397,7 @@ Status: {'✓ Excellent' if max_error <= 0.05 else '✓ Good' if max_error <= 0.
         end_rad = np.radians(self.top_end_angle)
 
         # Outer passes - alternating CCW/CW
+        lines.append(f"; Outer Cleaning Passes")
         for i, offset in enumerate(self.outer_cleaning_offsets):
             clean_radius = outer_radius + offset
             # if an even pass go start to end, if an odd pass go end to start
@@ -3329,6 +3436,7 @@ Status: {'✓ Excellent' if max_error <= 0.05 else '✓ Good' if max_error <= 0.
                 )
 
         # Inner passes - alternating CCW/CW
+        lines.append(f"; Inner Cleaning Passes")
         for i, offset in enumerate(self.inner_cleaning_offsets):
             clean_radius = inner_radius + offset
             if i % 2 == 0:
@@ -3382,6 +3490,7 @@ Status: {'✓ Excellent' if max_error <= 0.05 else '✓ Good' if max_error <= 0.
         end_rad = np.radians(self.bottom_end_angle)
 
         # Outer passes - first pass CW
+        lines.append(f"; Outer Cleaning Passes")
         for i, offset in enumerate(self.outer_cleaning_offsets):
             clean_radius = outer_radius + offset
             if i % 2 == 0:
@@ -3418,6 +3527,7 @@ Status: {'✓ Excellent' if max_error <= 0.05 else '✓ Good' if max_error <= 0.
                 )
 
         # Inner passes - alternating CW/CCW
+        lines.append(f"; Inner Cleaning Passes")
         for i, offset in enumerate(self.inner_cleaning_offsets):
             clean_radius = inner_radius + offset
             if i % 2 == 0:
